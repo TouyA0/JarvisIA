@@ -1,0 +1,77 @@
+bouton {
+  "version": 1,
+  "modes": [
+    {
+      "id": "normal",
+      "name": "Mode Normal",
+      "triggers": ["mode normal", "retour normal", "désactive le mode", "mode par défaut"],
+      "description": "Mode standard — comportement par défaut de Jarvis.",
+      "system_prompt_addition": "",
+      "apps_to_open": [],
+      "apps_to_close": [],
+      "response_style": "standard",
+      "notification_level": "normal",
+      "focus_topics": []
+    },
+    {
+      "id": "travail",
+      "name": "Mode Travail",
+      "triggers": ["mode travail", "passe en mode travail", "on travaille", "lance le mode travail"],
+      "description": "Focus total. Notifications réduites, apps de productivité, réponses ultra-concises.",
+      "system_prompt_addition": "L'utilisateur est en mode TRAVAIL. Priorité absolue à l'efficacité. Réponses encore plus courtes. Éviter tout sujet distrayant. Si l'utilisateur demande quelque chose hors travail, le signaler poliment.",
+      "apps_to_open": [],
+      "apps_to_close": [],
+      "response_style": "ultra_short",
+      "notification_level": "low",
+      "focus_topics": ["code", "informatique", "université", "tâches", "productivité"]
+    },
+    {
+      "id": "detente",
+      "name": "Mode Détente",
+      "triggers": ["mode détente", "mode relax", "passe en mode détente", "on se détend", "mode repos"],
+      "description": "Ambiance décontractée. Jarvis peut être un peu plus bavard, sujets légers bienvenus.",
+      "system_prompt_addition": "L'utilisateur est en mode DÉTENTE. Ambiance décontractée. Vous pouvez être légèrement plus détendu dans le ton, tout en restant Jarvis. Les sujets de loisirs (jeux vidéo, films, musique) sont les bienvenus.",
+      "apps_to_open": [],
+      "apps_to_close": [],
+      "response_style": "relaxed",
+      "notification_level": "normal",
+      "focus_topics": ["jeux vidéo", "Sea of Stars", "Switch", "détente", "loisirs"]
+    },
+    {
+      "id": "repas",
+      "name": "Mode Repas",
+      "triggers": ["mode repas", "je mange", "c'est l'heure du repas", "on mange", "pause repas"],
+      "description": "Interruptions minimales pendant le repas. Jarvis répond seulement si vraiment nécessaire.",
+      "system_prompt_addition": "L'utilisateur est en MODE REPAS. Il mange. Répondre uniquement si la question est urgente ou directe. Réponses très courtes. Ne pas initier de tâches longues.",
+      "apps_to_open": [],
+      "apps_to_close": [],
+      "response_style": "minimal",
+      "notification_level": "silent",
+      "focus_topics": []
+    },
+    {
+      "id": "theologie",
+      "name": "Mode Théologie",
+      "triggers": ["mode théologie", "mode foi", "on étudie la théologie", "passe en mode théologie", "mode prière"],
+      "description": "Étude et réflexion théologique catholique. Jarvis adapte ses réponses au contexte spirituel.",
+      "system_prompt_addition": "L'utilisateur est en MODE THÉOLOGIE. Il étudie ou réfléchit à la théologie catholique. Contexte : In-Théo à distance, projet ICT Toulouse. Adapte tes réponses avec respect et précision sur les sujets religieux. Les références à la tradition catholique, la liturgie, la patristique sont les bienvenues. Rester factuel et respectueux.",
+      "apps_to_open": [],
+      "apps_to_close": [],
+      "response_style": "reflective",
+      "notification_level": "low",
+      "focus_topics": ["théologie", "catholicisme", "liturgie", "Bible", "saints", "In-Théo", "ICT"]
+    },
+    {
+      "id": "projet",
+      "name": "Mode Projet",
+      "triggers": ["mode projet", "on travaille sur jarvis", "mode développement", "passe en mode projet", "mode dev"],
+      "description": "Développement de Jarvis lui-même. Contexte technique poussé, focus code et architecture.",
+      "system_prompt_addition": "L'utilisateur est en MODE PROJET (développement de Jarvis). Il travaille sur son propre code. Stack : Python, TensorFlow Lite, Anthropic Claude, PyAudio, Speaches/Whisper/Piper. Être très précis techniquement. Suggérer des améliorations concrètes si pertinent. Ne pas hésiter à mentionner des edge cases.",
+      "apps_to_open": [],
+      "apps_to_close": [],
+      "response_style": "technical",
+      "notification_level": "normal",
+      "focus_topics": ["python", "code", "architecture", "jarvis", "IA", "machine learning"]
+    }
+  ]
+}

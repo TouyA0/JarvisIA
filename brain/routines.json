@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "routines": [
+    {
+      "id": "matin",
+      "name": "Routine Matin",
+      "triggers": ["routine matin", "bonjour jarvis", "commence la journée", "lance la routine du matin"],
+      "description": "Séquence de démarrage de journée.",
+      "steps": [
+        { "action": "speak", "text": "Bonjour, Monsieur. Voici votre résumé matinal." },
+        { "action": "speak_time", "text": "Il est {heure}, Monsieur." },
+        { "action": "set_mode", "mode_id": "travail" }
+      ]
+    },
+    {
+      "id": "soir",
+      "name": "Routine Soir",
+      "triggers": ["routine soir", "fin de journée", "la journée est terminée"],
+      "description": "Séquence de fin de journée.",
+      "steps": [
+        { "action": "speak", "text": "Bonne soirée, Monsieur. La journée s'achève." },
+        { "action": "set_mode", "mode_id": "detente" }
+      ]
+    }
+  ]
+}

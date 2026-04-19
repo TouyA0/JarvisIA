@@ -1,0 +1,17 @@
+{
+  "prenom": "Quentin",
+  "age": "19 ans",
+  "localisation": "Toulouse (Ramonville), France",
+  "etudes": "licence informatique (L1), Java et OCaml notamment",
+  "objectif_pro": "cybersécurité, vise master SSIR Paul Sabatier Toulouse",
+  "formation_theo": "In-Théo à distance + projet ICT Toulouse baccalauréat canonique cycle C (soirs et samedis)",
+  "interets_principaux": "théologie catholique, cybersécurité, lecture, jeux vidéo, Iron Man/Marvel",
+  "pratique_religieuse": "catholique pratiquant, liturgie des heures, chapelet divine miséricorde",
+  "lectures_theo": "très nombreuses, patristique, dogmatique, spiritualité, démonologie",
+  "lectures_fiction": "Harry Potter, Scholomance (terminée en 6 jours), La Passe-Miroir en cours",
+  "jeux": "Sea of Stars, Switch OLED",
+  "setup_pc": "Windows 11 Pro, Ryzen 7 7700X, 32GB RAM, RX 6800 XT 16GB, 2.73TB HDD",
+  "github": "https://github.com/TouyA0 (username: TouyA0)",
+  "projet_jarvis": "assistant IA vocal local avec Ollama, Speaches, Whisper, qwen2.5:7b",
+  "preferences_reponses": "réponses très courtes, directes, style Jarvis Iron Man, appeler Monsieur"
+}

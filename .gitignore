@@ -1,0 +1,24 @@
+# Environnement
+.env
+
+#features
+/docs
+
+# Python
+__pycache__/
+*.pyc
+
+# Dossiers inutiles / lourds
+samples_jarvis/
+samples_negatifs/
+
+# Modèles (optionnel si lourd)
+*.onnx
+*.tflite
+
+# VS Code (optionnel)
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

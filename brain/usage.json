@@ -1,0 +1,19 @@
+{
+  "current_month": "2026-04",
+  "current": {
+    "input_tokens": 12973,
+    "output_tokens": 86,
+    "cache_write_tokens": 0,
+    "cache_read_tokens": 0,
+    "cost_usd": 0.013403,
+    "calls": 2
+  },
+  "last_call": {
+    "cost_usd": 0.006769,
+    "input_tokens": 6609,
+    "output_tokens": 32,
+    "cache_read_tokens": 0,
+    "timestamp": 1776620639.5106244
+  },
+  "history": []
+}

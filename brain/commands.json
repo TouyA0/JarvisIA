@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "commands": [
+    {
+      "id": "notion_calendar",
+      "triggers": [
+        "notion calendar",
+        "notions calendar",
+        "notion calendars",
+        "notions calendars",
+        "ouvre mon agenda",
+        "lance mon agenda",
+        "mon agenda",
+        "mon calendrier",
+        "ouvre l'agenda",
+        "lance l'agenda",
+        "ouvre notion calendar",
+        "lance notion calendar"
+      ],
+      "action": {
+        "type": "powershell",
+        "cmd": "Start-Process \"shell:AppsFolder\\com.electron.notion-calendar-web\""
+      },
+      "response": "Notion Calendar est ouvert, Monsieur."
+    },
+    {
+      "id": "volume_max",
+      "triggers": ["volume au maximum", "volume à fond", "met le volume à fond", "monte le son au max"],
+      "action": {
+        "type": "powershell",
+        "cmd": "$obj = New-Object -ComObject WScript.Shell; for($i=0;$i -lt 50;$i++){$obj.SendKeys([char]175)}"
+      },
+      "response": "Volume au maximum, Monsieur."
+    },
+    {
+      "id": "volume_zero",
+      "triggers": ["coupe le son", "mute", "sourdine", "coupe l'audio", "silence audio", "met le son à zéro"],
+      "action": {
+        "type": "powershell",
+        "cmd": "$obj = New-Object -ComObject WScript.Shell; for($i=0;$i -lt 50;$i++){$obj.SendKeys([char]174)}"
+      },
+      "response": "Son coupé, Monsieur."
+    },
+    {
+      "id": "media_pause",
+      "triggers": ["pause la musique", "pause le son", "mets en pause", "pause lecture"],
+      "action": {
+        "type": "powershell",
+        "cmd": "$obj = New-Object -ComObject WScript.Shell; $obj.SendKeys([char]179)"
+      },
+      "response": "Lecture en pause, Monsieur."
+    },
+    {
+      "id": "media_suivant",
+      "triggers": ["musique suivante", "chanson suivante", "titre suivant", "piste suivante", "next"],
+      "action": {
+        "type": "powershell",
+        "cmd": "$obj = New-Object -ComObject WScript.Shell; $obj.SendKeys([char]176)"
+      },
+      "response": "Piste suivante, Monsieur."
+    },
+    {
+      "id": "media_precedent",
+      "triggers": ["musique précédente", "chanson précédente", "titre précédent", "piste précédente"],
+      "action": {
+        "type": "powershell",
+        "cmd": "$obj = New-Object -ComObject WScript.Shell; $obj.SendKeys([char]177)"
+      },
+      "response": "Piste précédente, Monsieur."
+    },
+    {
+      "id": "verrouille",
+      "triggers": ["verrouille", "verrouille l'écran", "verrouille le pc", "lock screen", "barre le pc"],
+      "action": {
+        "type": "powershell",
+        "cmd": "rundll32.exe user32.dll,LockWorkStation"
+      },
+      "response": "Le poste est verrouillé, Monsieur."
+    },
+    {
+      "id": "sleep",
+      "triggers": ["mode veille", "mets en veille", "veille pc", "sleep pc"],
+      "action": {
+        "type": "powershell",
+        "cmd": "Add-Type -Assembly System.Windows.Forms; [System.Windows.Forms.Application]::SetSuspendState('Suspend', $false, $false)"
+      },
+      "response": "Mise en veille, Monsieur."
+    },
+    {
+      "id": "restart",
+      "triggers": ["redémarre le pc", "redémarrage", "restart", "redémarre l'ordinateur"],
+      "action": {
+        "type": "powershell",
+        "cmd": "Restart-Computer -Force"
+      },
+      "response": "Redémarrage en cours, Monsieur."
+    },
+    {
+      "id": "shutdown",
+      "triggers": ["éteins le pc", "arrête le pc", "shutdown", "éteindre l'ordinateur", "arrête l'ordinateur"],
+      "action": {
+        "type": "powershell",
+        "cmd": "Stop-Computer -Force"
+      },
+      "response": "Arrêt en cours, Monsieur."
+    },
+    {
+      "id": "corbeille",
+      "triggers": ["vide la corbeille", "vider la corbeille", "nettoie la corbeille"],
+      "action": {
+        "type": "powershell",
+        "cmd": "Clear-RecycleBin -Force -ErrorAction SilentlyContinue"
+      },
+      "response": "La corbeille est vidée, Monsieur."
+    }
+  ]
+}
