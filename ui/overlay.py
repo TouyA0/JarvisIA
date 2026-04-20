@@ -1,31 +1,45 @@
 """
-Floating overlay Jarvis — HUD style
+Floating overlay Jarvis — HUD style (PyQt6)
 - Alt + drag pour déplacer
-- Auto-hide 3s après retour en veille (15s depuis le tray)
+- Edge-hide : glisse sur le bord droit, réapparaît au survol
 - Pin pour garder visible en permanence
-- Sélecteur de mode cliquable (badge en haut à droite)
-- Pause / Mute TTS / Send
+- Sélecteur de mode cliquable
+- Mute coupe écoute ET réponse audio (mode textuel pur)
 """
-import tkinter as tk
-import threading
-import queue
+from __future__ import annotations
+import sys
 import math
 import random
+import queue
+import threading
 import json
 import pathlib
+import time
 
-_ROOT = pathlib.Path(__file__).parent.parent
+from PyQt6.QtWidgets import (
+    QApplication, QWidget, QLabel, QLineEdit, QPushButton,
+    QHBoxLayout, QVBoxLayout, QMenu,
+)
+from PyQt6.QtCore import (
+    Qt, QTimer, QPropertyAnimation, QEasingCurve,
+    QPoint, QPointF, QObject, pyqtSignal,
+)
+from PyQt6.QtGui import (
+    QPainter, QColor, QPen, QBrush, QPainterPath, QFont, QCursor,
+)
+
+_ROOT      = pathlib.Path(__file__).parent.parent
 MODES_FILE = _ROOT / "brain" / "modes" / "modes.json"
 
-# Palette HUD
-BG        = "#0a0e1a"
-BG_INPUT  = "#141a2a"
-BG_HOVER  = "#1a2535"
-FG_TITLE  = "#4dd0e1"
-FG_DIM    = "#7a8899"
-FG_TEXT   = "#e0e6ed"
-FG_WARN   = "#ff9800"
-FG_PAUSE  = "#e53935"
+# ── Palette ───────────────────────────────────────────────────────────────────
+_BG    = "#0a0e1a"
+_BG2   = "#141a2a"
+_BG3   = "#1a2535"
+_CYAN  = "#4dd0e1"
+_DIM   = "#7a8899"
+_TEXT  = "#e0e6ed"
+_WARN  = "#ff9800"
+_RED   = "#e53935"
 
 STATE_COLORS = {
     "idle":       "#1f4468",
@@ -48,13 +62,15 @@ SOURCE_BADGES = {
 }
 
 USD_TO_EUR = 0.92
+PEEK_PX    = 8       # px visibles au bord droit en mode edge-hidden
+ANIM_MS    = 30      # intervalle animation (ms)
+SLIDE_MS   = 250     # durée animation glissement
 
-# Tokens spéciaux dans la queue pour contrôler Jarvis depuis l'overlay
 TOKEN_PAUSE  = "__PAUSE__"
 TOKEN_RESUME = "__RESUME__"
 
 
-def _fmt_money(usd):
+def _fmt_money(usd: float | None) -> str:
     if usd is None:
         return "—"
     eur = usd * USD_TO_EUR
@@ -64,473 +80,641 @@ def _fmt_money(usd):
         return f"{eur * 100:.1f}c€"
     return f"{eur:.2f}€"
 
-def _load_modes():
+
+def _load_modes() -> list:
     try:
-        with open(MODES_FILE, 'r', encoding='utf-8') as f:
+        with open(MODES_FILE, encoding="utf-8") as f:
             return json.load(f).get("modes", [])
     except Exception:
         return []
 
 
-class JarvisOverlay:
+# ── Thread-safe signal bridge ─────────────────────────────────────────────────
+class _Signals(QObject):
+    do_set_state      = pyqtSignal(str)
+    do_set_mode       = pyqtSignal(str)
+    do_set_transcript = pyqtSignal(str)
+    do_set_response   = pyqtSignal(str)
+    do_set_source     = pyqtSignal(str)
+    do_set_cost       = pyqtSignal(float, float, int)
+    do_set_paused     = pyqtSignal(bool)
+    do_show           = pyqtSignal(int)
 
-    HIDE_AFTER_IDLE  = 3_000   # ms après retour en veille
-    HIDE_AFTER_TRAY  = 15_000  # ms après clic sur le tray
 
-    def __init__(self):
-        self.root = None
-        self._ready = threading.Event()
+# ── Animation canvas (custom QPainter) ───────────────────────────────────────
+class _AnimCanvas(QWidget):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setFixedHeight(62)
+        self._state      = "idle"
+        self._phase      = 0.0
+        self._wave_amps  = [0.0] * 24
 
-        # État Jarvis
-        self.state          = "idle"
-        self.mode_name      = "Normal"
-        self._paused        = False
-        self._mute_tts      = False
-        self._pinned        = False
-        self._mouse_inside  = False
+    def set_state(self, s: str) -> None:
+        self._state = s
 
-        # Animation
-        self._anim_phase  = 0.0
-        self._wave_amps   = [0.0] * 30
+    def tick(self, phase: float) -> None:
+        self._phase = phase
+        self.update()
 
-        # Auto-hide
-        self._hide_timer_id = None
+    def paintEvent(self, _e) -> None:  # noqa: N802
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.fillRect(self.rect(), QColor(0, 0, 0, 0))
 
-        # Coût
-        self._last_cost_usd  = 0.0
-        self._month_cost_usd = 0.0
-        self._month_calls    = 0
-        self._current_source = None
-
-        # File d'entrée (texte + tokens de contrôle)
-        self._input_queue = queue.Queue()
-
-        # Callbacks définis par jarvis.py
-        self.on_mode_change = None   # callable(mode_id)
-
-        self._started    = False
-        self._start_lock = threading.Lock()
-
-    # ------------------------------------------------------------------ lifecycle
-
-    def start(self):
-        with self._start_lock:
-            if self._started:
-                return
-            self._started = True
-        t = threading.Thread(target=self._run, daemon=True)
-        t.start()
-        self._ready.wait(timeout=4.0)
-
-    def _run(self):
-        try:
-            self.root = tk.Tk()
-            self._build_window()
-            self._build_ui()
-            self._animate()
-            self._ready.set()
-            self.root.mainloop()
-        except Exception as e:
-            print(f"[overlay] Erreur: {e}")
-            self._ready.set()
-
-    def _build_window(self):
-        r = self.root
-        r.title("Jarvis")
-        r.overrideredirect(True)
-        r.attributes("-topmost", True)
-        r.attributes("-alpha", 0.92)
-        r.configure(bg=BG)
-
-        sw, sh = r.winfo_screenwidth(), r.winfo_screenheight()
-        r.geometry(f"360x265+{sw - 400}+{int(sh * 0.38)}")
-
-        # Départ caché — s'affiche au premier événement
-        r.withdraw()
-
-        # Suivi survol pour annuler l'auto-hide
-        r.bind("<Enter>", self._on_enter)
-        r.bind("<Leave>", self._on_leave)
-
-    def _build_ui(self):
-        r = self.root
-
-        # ── Barre de titre ──────────────────────────────────────────────
-        bar = tk.Frame(r, bg=BG)
-        bar.pack(fill="x", padx=2, pady=(5, 0))
-
-        self.title_lbl = tk.Label(bar, text="J.A.R.V.I.S.",
-                                   fg=FG_TITLE, bg=BG,
-                                   font=("Consolas", 11, "bold"))
-        self.title_lbl.pack(side="left", padx=8)
-
-        # Bouton Pin
-        self.pin_btn = tk.Label(bar, text="⊙", fg=FG_DIM, bg=BG,
-                                 font=("Consolas", 13), cursor="hand2")
-        self.pin_btn.pack(side="right", padx=(0, 8))
-        self.pin_btn.bind("<Button-1>", self._toggle_pin)
-
-        # Badge mode cliquable
-        self.mode_btn = tk.Label(bar,
-                                  text=f"{self.mode_name.upper()} ▾",
-                                  fg=FG_DIM, bg=BG,
-                                  font=("Consolas", 8, "bold"),
-                                  cursor="hand2")
-        self.mode_btn.pack(side="right", padx=(0, 6))
-        self.mode_btn.bind("<Button-1>", self._show_mode_menu)
-
-        # Alt + drag sur toute la barre
-        for w in (bar, self.title_lbl):
-            w.bind("<Alt-ButtonPress-1>", self._drag_start)
-            w.bind("<Alt-B1-Motion>",     self._drag_move)
-
-        # ── Canvas animation ─────────────────────────────────────────────
-        self.canvas = tk.Canvas(r, bg=BG, height=62,
-                                 highlightthickness=0, bd=0)
-        self.canvas.pack(fill="x", padx=12, pady=(6, 2))
-
-        # ── Label état ───────────────────────────────────────────────────
-        self.status_lbl = tk.Label(r, text=STATE_LABELS["idle"],
-                                    fg=FG_TITLE, bg=BG,
-                                    font=("Consolas", 10))
-        self.status_lbl.pack(pady=(2, 4))
-
-        # ── Transcription utilisateur ─────────────────────────────────────
-        self.user_lbl = tk.Label(r, text="", fg=FG_DIM, bg=BG,
-                                  font=("Consolas", 8),
-                                  wraplength=336, justify="left", anchor="w")
-        self.user_lbl.pack(fill="x", padx=12)
-
-        # ── Réponse Jarvis + badge source ─────────────────────────────────
-        resp_frame = tk.Frame(r, bg=BG)
-        resp_frame.pack(fill="x", padx=12, pady=(2, 2))
-
-        self.source_lbl = tk.Label(resp_frame, text="", fg=FG_DIM, bg=BG,
-                                    font=("Consolas", 11, "bold"),
-                                    width=2, anchor="n")
-        self.source_lbl.pack(side="left", padx=(0, 4), anchor="n")
-
-        self.jarvis_lbl = tk.Label(resp_frame, text="", fg=FG_TEXT, bg=BG,
-                                    font=("Consolas", 9), wraplength=310,
-                                    justify="left", anchor="w")
-        self.jarvis_lbl.pack(side="left", fill="x", expand=True)
-
-        # ── Footer coût ───────────────────────────────────────────────────
-        self.cost_lbl = tk.Label(r, text="", fg=FG_DIM, bg=BG,
-                                  font=("Consolas", 8), anchor="w")
-        self.cost_lbl.pack(fill="x", padx=12, pady=(0, 2))
-
-        # ── Barre du bas ──────────────────────────────────────────────────
-        bottom = tk.Frame(r, bg=BG)
-        bottom.pack(side="bottom", fill="x", padx=10, pady=8)
-
-        # Champ texte
-        self.entry = tk.Entry(bottom, bg=BG_INPUT, fg=FG_TEXT,
-                               insertbackground=FG_TITLE, relief="flat",
-                               font=("Consolas", 10))
-        self.entry.pack(side="left", fill="x", expand=True, ipady=5)
-        self.entry.bind("<Return>", self._on_send)
-
-        # Envoyer ▶
-        self.send_btn = tk.Button(bottom, text="▶", width=2, relief="flat",
-                                   bg=BG_INPUT, fg=FG_TITLE,
-                                   activebackground=BG_HOVER,
-                                   font=("Consolas", 10, "bold"),
-                                   cursor="hand2", command=self._on_send)
-        self.send_btn.pack(side="left", padx=(4, 0))
-
-        # Pause ⏸
-        self.pause_btn = tk.Button(bottom, text="⏸", width=2, relief="flat",
-                                    bg=BG_INPUT, fg=FG_DIM,
-                                    activebackground=BG_HOVER,
-                                    font=("Consolas", 10),
-                                    cursor="hand2", command=self._toggle_pause)
-        self.pause_btn.pack(side="left", padx=(4, 0))
-
-        # Mute TTS ♪
-        self.mute_btn = tk.Button(bottom, text="♪", width=2, relief="flat",
-                                   bg=BG_INPUT, fg=FG_TITLE,
-                                   activebackground=BG_HOVER,
-                                   font=("Consolas", 10),
-                                   cursor="hand2", command=self._toggle_mute)
-        self.mute_btn.pack(side="left", padx=(4, 0))
-
-    # ------------------------------------------------------------------ drag (Alt seulement)
-
-    def _drag_start(self, e):
-        self._drag_dx = e.x_root - self.root.winfo_x()
-        self._drag_dy = e.y_root - self.root.winfo_y()
-
-    def _drag_move(self, e):
-        self.root.geometry(
-            f"+{e.x_root - self._drag_dx}+{e.y_root - self._drag_dy}")
-
-    # ------------------------------------------------------------------ survol
-
-    def _on_enter(self, e):
-        self._mouse_inside = True
-        self._cancel_hide()
-
-    def _on_leave(self, e):
-        self._mouse_inside = False
-        if not self._pinned and self.state == "idle":
-            self._schedule_hide(self.HIDE_AFTER_IDLE)
-
-    # ------------------------------------------------------------------ auto-hide
-
-    def show(self, duration_ms=None):
-        """Thread-safe. Affiche l'overlay pour duration_ms ms (défaut = HIDE_AFTER_IDLE)."""
-        d = duration_ms
-        self._ui_call(lambda: self._show_internal(d))
-
-    def _show_internal(self, duration_ms=None):
-        self.root.deiconify()
-        self.root.lift()
-        if not self._pinned:
-            self._schedule_hide(
-                duration_ms if duration_ms is not None else self.HIDE_AFTER_IDLE)
-
-    def _schedule_hide(self, delay_ms):
-        self._cancel_hide()
-        self._hide_timer_id = self.root.after(delay_ms, self._check_and_hide)
-
-    def _cancel_hide(self):
-        if self._hide_timer_id is not None:
-            try:
-                self.root.after_cancel(self._hide_timer_id)
-            except Exception:
-                pass
-            self._hide_timer_id = None
-
-    def _check_and_hide(self):
-        self._hide_timer_id = None
-        if not self._pinned and not self._mouse_inside:
-            self.root.withdraw()
-
-    # ------------------------------------------------------------------ pin
-
-    def _toggle_pin(self, e=None):
-        self._pinned = not self._pinned
-        if self._pinned:
-            self._cancel_hide()
-            self.pin_btn.config(text="⊕", fg=FG_TITLE)
-        else:
-            self.pin_btn.config(text="⊙", fg=FG_DIM)
-            if self.state == "idle":
-                self._schedule_hide(self.HIDE_AFTER_IDLE)
-
-    # ------------------------------------------------------------------ pause
-
-    def _toggle_pause(self):
-        if self._paused:
-            # Reprendre
-            self._paused = False
-            self.pause_btn.config(text="⏸", fg=FG_DIM)
-            self._input_queue.put(TOKEN_RESUME)
-        else:
-            # Mettre en pause
-            self._paused = True
-            self.pause_btn.config(text="▶", fg=FG_WARN)
-            self.status_lbl.config(text="En pause.", fg=FG_PAUSE)
-            self._input_queue.put(TOKEN_PAUSE)
-
-    def set_paused(self, paused: bool):
-        """Synchronise le bouton depuis jarvis.py (ex : pause vocale)."""
-        self._paused = paused
-        self._ui_call(lambda: self._sync_pause_btn())
-
-    def _sync_pause_btn(self):
-        if self._paused:
-            self.pause_btn.config(text="▶", fg=FG_WARN)
-            self.status_lbl.config(text="En pause.", fg=FG_PAUSE)
-        else:
-            self.pause_btn.config(text="⏸", fg=FG_DIM)
-
-    # ------------------------------------------------------------------ mute TTS
-
-    def _toggle_mute(self):
-        self._mute_tts = not self._mute_tts
-        self.mute_btn.config(
-            text="♪" if not self._mute_tts else "∅",
-            fg=FG_TITLE if not self._mute_tts else FG_PAUSE)
-
-    def is_muted(self):
-        return self._mute_tts
-
-    # ------------------------------------------------------------------ sélecteur de mode
-
-    def _show_mode_menu(self, event):
-        modes = _load_modes()
-        if not modes:
-            return
-        menu = tk.Menu(self.root, tearoff=0,
-                       bg=BG_INPUT, fg=FG_TEXT,
-                       activebackground="#1f3a5c", activeforeground=FG_TEXT,
-                       relief="flat", font=("Consolas", 9),
-                       bd=0)
-        for mode in modes:
-            mode_id   = mode["id"]
-            mode_name = mode["name"].replace("Mode ", "")
-            def _cb(mid=mode_id, mname=mode_name):
-                self.set_mode(mname)
-                if self.on_mode_change:
-                    threading.Thread(
-                        target=self.on_mode_change, args=(mid,),
-                        daemon=True).start()
-            active = (mode_name.lower() == self.mode_name.lower())
-            label = f"{'▶ ' if active else '   '}{mode['name']}"
-            menu.add_command(label=label, command=_cb)
-        try:
-            menu.tk_popup(event.x_root, event.y_root)
-        finally:
-            menu.grab_release()
-
-    # ------------------------------------------------------------------ input texte
-
-    def _on_send(self, event=None):
-        text = self.entry.get().strip()
-        if not text:
-            return
-        self.entry.delete(0, tk.END)
-        self._input_queue.put(text)
-        # Garder l'overlay visible pendant le traitement
-        self._cancel_hide()
-        self._show_internal()
-
-    # ------------------------------------------------------------------ animation
-
-    def _animate(self):
-        if not self.root:
-            return
-        self._anim_phase += 0.18
-        self.canvas.delete("all")
-        w  = self.canvas.winfo_width() or 336
-        h  = 62
-        cx, cy = w / 2, h / 2
-        color = STATE_COLORS.get(self.state, FG_TITLE)
-        s = self.state
+        w, h = self.width(), self.height()
+        cx, cy = w / 2.0, h / 2.0
+        col = QColor(STATE_COLORS.get(self._state, _CYAN))
+        ph  = self._phase
+        s   = self._state
 
         if s == "idle":
-            pulse    = (math.sin(self._anim_phase * 0.6) + 1) / 2
-            r_outer  = 10 + pulse * 5
-            r_inner  = 5  + pulse * 2
-            self.canvas.create_oval(cx - r_outer, cy - r_outer,
-                                     cx + r_outer, cy + r_outer,
-                                     outline=color, width=1)
-            self.canvas.create_oval(cx - r_inner, cy - r_inner,
-                                     cx + r_inner, cy + r_inner,
-                                     fill=color, outline="")
+            pulse  = (math.sin(ph * 0.6) + 1) / 2
+            r_out  = 10 + pulse * 5
+            r_in   = 5  + pulse * 2
+            p.setPen(QPen(col, 1))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawEllipse(QPointF(cx, cy), r_out, r_out)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(col))
+            p.drawEllipse(QPointF(cx, cy), r_in, r_in)
 
         elif s == "listening":
             n, bw, gap = 24, 6, 3
-            start_x = cx - (n * (bw + gap) - gap) / 2
+            sx = cx - (n * (bw + gap) - gap) / 2
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(col))
             for i in range(n):
-                target = (abs(math.sin(self._anim_phase * 1.2 + i * 0.45))
-                          * random.uniform(0.3, 1.0) * 22)
+                target = abs(math.sin(ph * 1.2 + i * 0.45)) * random.uniform(0.3, 1.0) * 22
                 self._wave_amps[i] = self._wave_amps[i] * 0.6 + target * 0.4
-                bh = max(2, self._wave_amps[i])
-                x = start_x + i * (bw + gap)
-                self.canvas.create_rectangle(x, cy - bh, x + bw, cy + bh,
-                                              fill=color, outline="")
+                bh = max(2.0, self._wave_amps[i])
+                x  = sx + i * (bw + gap)
+                p.drawRect(int(x), int(cy - bh), bw, int(bh * 2))
 
         elif s == "processing":
             for i in range(8):
-                angle = self._anim_phase * 2 + i * math.pi / 4
+                angle = ph * 2 + i * math.pi / 4
                 x = cx + math.cos(angle) * 16
                 y = cy + math.sin(angle) * 16
                 r = 2 + (i + 1) / 8 * 2
-                self.canvas.create_oval(x - r, y - r, x + r, y + r,
-                                         fill=color, outline="")
+                c = QColor(col)
+                c.setAlpha(int(50 + (i + 1) / 8 * 205))
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(QBrush(c))
+                p.drawEllipse(QPointF(x, y), r, r)
 
         elif s == "speaking":
-            pts = []
+            pen = QPen(col, 2)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            p.setPen(pen)
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            path = QPainterPath()
             for i in range(50):
                 x   = cx - 140 + i * (280 / 49)
-                amp = (math.sin(self._anim_phase * 1.5 + i * 0.35)
-                       * math.sin(self._anim_phase * 0.6 + i * 0.12) * 18)
-                pts.extend([x, cy + amp])
-            self.canvas.create_line(pts, fill=color, width=2, smooth=True)
+                amp = (math.sin(ph * 1.5 + i * 0.35)
+                       * math.sin(ph * 0.6 + i * 0.12) * 18)
+                if i == 0:
+                    path.moveTo(x, cy + amp)
+                else:
+                    path.lineTo(x, cy + amp)
+            p.drawPath(path)
 
         elif s == "error":
-            blink = (math.sin(self._anim_phase * 4) + 1) / 2
+            blink = (math.sin(ph * 4) + 1) / 2
             r = 10 + blink * 4
-            self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r,
-                                     fill=color, outline="")
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(col))
+            p.drawEllipse(QPointF(cx, cy), r, r)
 
-        self.root.after(30, self._animate)
+        p.end()
 
-    # ------------------------------------------------------------------ API publique (thread-safe)
 
-    def _ui_call(self, fn):
-        if not self.root:
+# ── Main HUD window ───────────────────────────────────────────────────────────
+class _JarvisWindow(QWidget):
+
+    W = 360
+    H = 265
+
+    HIDE_IDLE_MS = 3_000
+    HIDE_TRAY_MS = 15_000
+
+    def __init__(
+        self,
+        signals: _Signals,
+        input_queue: queue.Queue,
+        overlay_ref: "JarvisOverlay",
+    ) -> None:
+        super().__init__()
+        self._sig          = signals
+        self._input_queue  = input_queue
+        self._overlay_ref  = overlay_ref
+
+        self._state        = "idle"
+        self._mode_name    = "Normal"
+        self._pinned       = False
+        self._mouse_inside = False
+        self._muted        = False
+        self._paused       = False
+        self._edge_hidden  = False
+        self._anim_phase   = 0.0
+        self._last_cost    = 0.0
+        self._month_cost   = 0.0
+        self._month_calls  = 0
+        self._cur_source: str | None = None
+        self._drag_offset: QPoint | None = None
+
+        self._setup_window()
+        self._build_ui()
+        self._connect_signals()
+        self._start_timers()
+
+    # ── Window setup ──────────────────────────────────────────────────────────
+
+    def _setup_window(self) -> None:
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.Tool
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setFixedSize(self.W, self.H)
+
+        scr = QApplication.primaryScreen().geometry()
+        self._screen_w = scr.width()
+        self._normal_x = scr.width() - self.W - 40
+        self._normal_y = int(scr.height() * 0.38)
+        self.move(self._normal_x, self._normal_y)
+        self.hide()
+
+        self._slide = QPropertyAnimation(self, b"pos")
+        self._slide.setDuration(SLIDE_MS)
+        self._slide.setEasingCurve(QEasingCurve.Type.InOutCubic)
+
+        self._hide_timer = QTimer(self)
+        self._hide_timer.setSingleShot(True)
+        self._hide_timer.timeout.connect(self._check_and_hide)
+
+    def paintEvent(self, _e) -> None:  # noqa: N802
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        bg = QColor(_BG)
+        bg.setAlpha(235)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(bg))
+        p.drawRoundedRect(self.rect(), 12, 12)
+        p.setPen(QPen(QColor(77, 208, 225, 35), 1))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRoundedRect(self.rect().adjusted(0, 0, -1, -1), 12, 12)
+        p.end()
+
+    # ── UI builder ────────────────────────────────────────────────────────────
+
+    def _ibtn(self, text: str, color: str) -> QPushButton:
+        btn = QPushButton(text)
+        btn.setFont(QFont("Consolas", 10))
+        btn.setFixedWidth(28)
+        btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        btn.setStyleSheet(self._ibtn_css(color))
+        return btn
+
+    @staticmethod
+    def _ibtn_css(color: str) -> str:
+        return (
+            f"QPushButton {{ background:{_BG2}; color:{color}; border:none;"
+            f" border-radius:4px; padding:4px 2px; }}"
+            f"QPushButton:hover {{ background:{_BG3}; }}"
+        )
+
+    def _build_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 7, 10, 9)
+        layout.setSpacing(3)
+
+        fn = QFont("Consolas", 9)
+
+        # ── Title bar ─────────────────────────────────────────────────────────
+        bar = QHBoxLayout()
+        bar.setSpacing(4)
+
+        title = QLabel("J.A.R.V.I.S.")
+        title.setFont(QFont("Consolas", 11, QFont.Weight.Bold))
+        title.setStyleSheet(f"color:{_CYAN}; background:transparent;")
+        bar.addWidget(title)
+        bar.addStretch()
+
+        self._mode_btn = QPushButton("NORMAL ▾")
+        self._mode_btn.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
+        self._mode_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self._mode_btn.setStyleSheet(
+            f"QPushButton {{ background:transparent; color:{_DIM}; border:none; padding:2px 4px; }}"
+            f"QPushButton:hover {{ background:{_BG3}; border-radius:3px; }}"
+        )
+        self._mode_btn.clicked.connect(self._show_mode_menu)
+        bar.addWidget(self._mode_btn)
+
+        self._pin_btn = QPushButton("⊙")
+        self._pin_btn.setFont(QFont("Consolas", 13))
+        self._pin_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self._pin_btn.setStyleSheet(
+            f"QPushButton {{ background:transparent; color:{_DIM}; border:none; padding:2px 4px; }}"
+            f"QPushButton:hover {{ background:{_BG3}; border-radius:3px; }}"
+        )
+        self._pin_btn.clicked.connect(self._toggle_pin)
+        bar.addWidget(self._pin_btn)
+
+        layout.addLayout(bar)
+
+        # ── Animation canvas ──────────────────────────────────────────────────
+        self._canvas = _AnimCanvas(self)
+        self._canvas.setStyleSheet("background:transparent;")
+        layout.addWidget(self._canvas)
+
+        # ── Status ────────────────────────────────────────────────────────────
+        self._status_lbl = QLabel(STATE_LABELS["idle"])
+        self._status_lbl.setFont(QFont("Consolas", 10))
+        self._status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._status_lbl.setStyleSheet(f"color:{_CYAN}; background:transparent;")
+        layout.addWidget(self._status_lbl)
+
+        # ── User transcript ───────────────────────────────────────────────────
+        self._user_lbl = QLabel("")
+        self._user_lbl.setFont(fn)
+        self._user_lbl.setWordWrap(True)
+        self._user_lbl.setStyleSheet(f"color:{_DIM}; background:transparent;")
+        layout.addWidget(self._user_lbl)
+
+        # ── Response + source badge ───────────────────────────────────────────
+        resp = QHBoxLayout()
+        resp.setSpacing(4)
+        resp.setContentsMargins(0, 2, 0, 2)
+
+        self._source_lbl = QLabel("")
+        self._source_lbl.setFont(QFont("Consolas", 11, QFont.Weight.Bold))
+        self._source_lbl.setFixedWidth(18)
+        self._source_lbl.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+        self._source_lbl.setStyleSheet(f"color:{_DIM}; background:transparent;")
+        resp.addWidget(self._source_lbl)
+
+        self._resp_lbl = QLabel("")
+        self._resp_lbl.setFont(fn)
+        self._resp_lbl.setWordWrap(True)
+        self._resp_lbl.setStyleSheet(f"color:{_TEXT}; background:transparent;")
+        resp.addWidget(self._resp_lbl, 1)
+        layout.addLayout(resp)
+
+        layout.addStretch()
+
+        # ── Cost footer ───────────────────────────────────────────────────────
+        self._cost_lbl = QLabel("")
+        self._cost_lbl.setFont(QFont("Consolas", 8))
+        self._cost_lbl.setStyleSheet(f"color:{_DIM}; background:transparent;")
+        layout.addWidget(self._cost_lbl)
+
+        # ── Bottom bar ────────────────────────────────────────────────────────
+        bottom = QHBoxLayout()
+        bottom.setSpacing(4)
+        bottom.setContentsMargins(0, 4, 0, 0)
+
+        self._entry = QLineEdit()
+        self._entry.setFont(fn)
+        self._entry.setPlaceholderText("Écrire à Jarvis…")
+        self._entry.setStyleSheet(
+            f"QLineEdit {{ background:{_BG2}; color:{_TEXT}; border:none;"
+            f" border-radius:4px; padding:4px 6px; }}"
+        )
+        self._entry.returnPressed.connect(self._on_send)
+        bottom.addWidget(self._entry, 1)
+
+        self._send_btn  = self._ibtn("▶", _CYAN)
+        self._pause_btn = self._ibtn("⏸", _DIM)
+        self._mute_btn  = self._ibtn("♪", _CYAN)
+        self._send_btn.clicked.connect(self._on_send)
+        self._pause_btn.clicked.connect(self._toggle_pause)
+        self._mute_btn.clicked.connect(self._toggle_mute)
+        bottom.addWidget(self._send_btn)
+        bottom.addWidget(self._pause_btn)
+        bottom.addWidget(self._mute_btn)
+
+        layout.addLayout(bottom)
+
+    # ── Signal connections ────────────────────────────────────────────────────
+
+    def _connect_signals(self) -> None:
+        s = self._sig
+        s.do_set_state.connect(self._on_set_state)
+        s.do_set_mode.connect(self._on_set_mode)
+        s.do_set_transcript.connect(self._on_set_transcript)
+        s.do_set_response.connect(self._on_set_response)
+        s.do_set_source.connect(self._on_set_source)
+        s.do_set_cost.connect(self._on_set_cost)
+        s.do_set_paused.connect(self._on_set_paused)
+        s.do_show.connect(self._on_show)
+
+    # ── Timers ────────────────────────────────────────────────────────────────
+
+    def _start_timers(self) -> None:
+        t = QTimer(self)
+        t.setInterval(ANIM_MS)
+        t.timeout.connect(self._tick)
+        t.start()
+
+    def _tick(self) -> None:
+        self._anim_phase += 0.18
+        self._canvas.tick(self._anim_phase)
+
+    # ── Drag (Alt + left-click) ───────────────────────────────────────────────
+
+    def mousePressEvent(self, e) -> None:
+        if (e.modifiers() & Qt.KeyboardModifier.AltModifier
+                and e.button() == Qt.MouseButton.LeftButton):
+            self._drag_offset = e.pos()
+
+    def mouseMoveEvent(self, e) -> None:
+        if self._drag_offset is not None:
+            new_pos = e.globalPosition().toPoint() - self._drag_offset
+            self._normal_x = new_pos.x()
+            self._normal_y = new_pos.y()
+            self.move(new_pos)
+            self._edge_hidden = False
+
+    def mouseReleaseEvent(self, _e) -> None:
+        self._drag_offset = None
+
+    # ── Hover / edge-hide ─────────────────────────────────────────────────────
+
+    def enterEvent(self, _e) -> None:
+        self._mouse_inside = True
+        self._hide_timer.stop()
+        if self._edge_hidden:
+            self._expand_from_edge()
+
+    def leaveEvent(self, _e) -> None:
+        self._mouse_inside = False
+        if not self._pinned and self._state == "idle":
+            self._schedule_hide(self.HIDE_IDLE_MS)
+
+    def _schedule_hide(self, ms: int) -> None:
+        self._hide_timer.stop()
+        self._hide_timer.start(ms)
+
+    def _check_and_hide(self) -> None:
+        if not self._pinned and not self._mouse_inside:
+            self._collapse_to_edge()
+
+    def _collapse_to_edge(self) -> None:
+        if self._edge_hidden:
             return
-        try:
-            self.root.after(0, fn)
-        except Exception:
-            pass
+        self._edge_hidden = True
+        target = QPoint(self._screen_w - PEEK_PX, self.y())
+        self._slide.stop()
+        self._slide.setStartValue(self.pos())
+        self._slide.setEndValue(target)
+        self._slide.start()
 
-    def set_state(self, state):
-        if state not in STATE_COLORS:
-            return
-        self.state = state
-        color = STATE_COLORS[state]
-        label = STATE_LABELS.get(state, "")
-        self._ui_call(lambda: self.status_lbl.config(text=label, fg=color))
+    def _expand_from_edge(self) -> None:
+        self._edge_hidden = False
+        target = QPoint(self._normal_x, self._normal_y)
+        self._slide.stop()
+        self._slide.setStartValue(self.pos())
+        self._slide.setEndValue(target)
+        self._slide.start()
 
-        if state in ("listening", "processing", "speaking"):
+    # ── Visibility ────────────────────────────────────────────────────────────
+
+    def _on_show(self, duration_ms: int) -> None:
+        if not self.isVisible():
             self.show()
+        if self._edge_hidden:
+            self._expand_from_edge()
+        self._hide_timer.stop()
+        if not self._pinned and duration_ms > 0:
+            self._schedule_hide(duration_ms)
+
+    # ── Pin ───────────────────────────────────────────────────────────────────
+
+    def _toggle_pin(self) -> None:
+        self._pinned = not self._pinned
+        if self._pinned:
+            self._hide_timer.stop()
+            self._pin_btn.setText("⊕")
+            self._pin_btn.setStyleSheet(
+                self._pin_btn.styleSheet().replace(_DIM, _CYAN)
+            )
+        else:
+            self._pin_btn.setText("⊙")
+            self._pin_btn.setStyleSheet(
+                self._pin_btn.styleSheet().replace(_CYAN, _DIM)
+            )
+            if self._state == "idle":
+                self._schedule_hide(self.HIDE_IDLE_MS)
+
+    # ── Pause ─────────────────────────────────────────────────────────────────
+
+    def _toggle_pause(self) -> None:
+        self._paused = not self._paused
+        self._sync_pause_btn()
+        self._input_queue.put(TOKEN_PAUSE if self._paused else TOKEN_RESUME)
+
+    def _on_set_paused(self, val: bool) -> None:
+        self._paused = val
+        self._sync_pause_btn()
+
+    def _sync_pause_btn(self) -> None:
+        if self._paused:
+            self._pause_btn.setText("▶")
+            self._pause_btn.setStyleSheet(self._ibtn_css(_WARN))
+            self._status_lbl.setText("En pause.")
+            self._status_lbl.setStyleSheet(f"color:{_RED}; background:transparent;")
+        else:
+            self._pause_btn.setText("⏸")
+            self._pause_btn.setStyleSheet(self._ibtn_css(_DIM))
+
+    # ── Mute (écoute + audio) ─────────────────────────────────────────────────
+
+    def _toggle_mute(self) -> None:
+        self._muted = not self._muted
+        if self._muted:
+            self._mute_btn.setText("∅")
+            self._mute_btn.setStyleSheet(self._ibtn_css(_RED))
+        else:
+            self._mute_btn.setText("♪")
+            self._mute_btn.setStyleSheet(self._ibtn_css(_CYAN))
+
+    # ── Mode selector ─────────────────────────────────────────────────────────
+
+    def _show_mode_menu(self) -> None:
+        modes = _load_modes()
+        if not modes:
+            return
+        menu = QMenu(self)
+        menu.setStyleSheet(
+            f"QMenu {{ background:{_BG2}; color:{_TEXT}; border:1px solid {_BG3};"
+            f" font-family:Consolas; font-size:9pt; }}"
+            f"QMenu::item:selected {{ background:#1f3a5c; }}"
+        )
+        for mode in modes:
+            mid   = mode["id"]
+            mname = mode["name"].replace("Mode ", "")
+            active = mname.lower() == self._mode_name.lower()
+            action = menu.addAction(f"{'▶ ' if active else '   '}{mode['name']}")
+            action.setData((mid, mname))
+
+        pos    = self._mode_btn.mapToGlobal(self._mode_btn.rect().bottomLeft())
+        chosen = menu.exec(pos)
+        if chosen:
+            mid, mname = chosen.data()
+            self._on_set_mode(mname)
+            cb = self._overlay_ref.on_mode_change
+            if cb:
+                threading.Thread(target=cb, args=(mid,), daemon=True).start()
+
+    # ── Text input ────────────────────────────────────────────────────────────
+
+    def _on_send(self) -> None:
+        text = self._entry.text().strip()
+        if not text:
+            return
+        self._entry.clear()
+        self._input_queue.put(text)
+        self._hide_timer.stop()
+        self._on_show(0)
+
+    # ── Signal handlers (Qt main thread) ─────────────────────────────────────
+
+    def _on_set_state(self, state: str) -> None:
+        self._state = state
+        self._canvas.set_state(state)
+        color = STATE_COLORS.get(state, _CYAN)
+        if not self._paused:
+            self._status_lbl.setText(STATE_LABELS.get(state, ""))
+            self._status_lbl.setStyleSheet(
+                f"color:{color}; background:transparent;"
+            )
+        if state in ("listening", "processing", "speaking"):
+            self._on_show(0)
+            self._hide_timer.stop()
         elif state == "idle" and not self._pinned:
-            self._ui_call(lambda: self._schedule_hide(self.HIDE_AFTER_IDLE))
+            self._schedule_hide(self.HIDE_IDLE_MS)
 
-    def set_mode(self, mode_name):
-        self.mode_name = mode_name or "Normal"
-        n = self.mode_name.upper()
-        self._ui_call(lambda: self.mode_btn.config(text=f"{n} ▾"))
+    def _on_set_mode(self, name: str) -> None:
+        self._mode_name = name or "Normal"
+        self._mode_btn.setText(f"{self._mode_name.upper()} ▾")
 
-    def set_transcript(self, text):
-        display = f"> {text}" if text else ""
-        self._ui_call(lambda: self.user_lbl.config(text=display))
+    def _on_set_transcript(self, text: str) -> None:
+        self._user_lbl.setText(f"> {text}" if text else "")
 
-    def set_response(self, text):
-        self._ui_call(lambda: self.jarvis_lbl.config(text=text or ""))
+    def _on_set_response(self, text: str) -> None:
+        self._resp_lbl.setText(text or "")
         self._refresh_footer()
 
-    def set_source(self, source):
-        self._current_source = source
+    def _on_set_source(self, source: str) -> None:
+        self._cur_source = source
         badge = SOURCE_BADGES.get(source)
         if badge:
             sym, col = badge
-            self._ui_call(lambda: self.source_lbl.config(text=sym, fg=col))
+            self._source_lbl.setText(sym)
+            self._source_lbl.setStyleSheet(
+                f"color:{col}; background:transparent;"
+            )
         else:
-            self._ui_call(lambda: self.source_lbl.config(text=""))
+            self._source_lbl.setText("")
         self._refresh_footer()
 
-    def set_cost(self, last_usd, month_usd, month_calls):
-        self._last_cost_usd  = last_usd
-        self._month_cost_usd = month_usd
-        self._month_calls    = month_calls
+    def _on_set_cost(self, last_usd: float, month_usd: float, calls: int) -> None:
+        self._last_cost   = last_usd
+        self._month_cost  = month_usd
+        self._month_calls = calls
         self._refresh_footer()
 
-    def _refresh_footer(self):
-        src = self._current_source
+    def _refresh_footer(self) -> None:
+        src = self._cur_source
         if src == "ai":
-            prefix, color = f"⚡ IA · {_fmt_money(self._last_cost_usd)}", FG_WARN
+            prefix, col = f"⚡ IA · {_fmt_money(self._last_cost)}", _WARN
         elif src == "cache":
-            prefix, color = "● cache · 0ms", "#4dd0e1"
+            prefix, col = "● cache · 0ms", _CYAN
         elif src == "direct":
-            prefix, color = "◆ local · 0ms", "#ab9ff2"
+            prefix, col = "◆ local · 0ms", "#ab9ff2"
         else:
-            prefix, color = "", FG_DIM
-
-        month = (f"   Mois : {_fmt_money(self._month_cost_usd)}"
-                 f" · {self._month_calls} appels"
-                 if self._month_calls > 0 else "")
+            prefix, col = "", _DIM
+        month = (
+            f"   Mois : {_fmt_money(self._month_cost)} · {self._month_calls} appels"
+            if self._month_calls > 0 else ""
+        )
         text = (prefix + month) if prefix else month.strip()
-        self._ui_call(lambda: self.cost_lbl.config(
-            text=text, fg=color if prefix else FG_DIM))
+        self._cost_lbl.setText(text)
+        self._cost_lbl.setStyleSheet(
+            f"color:{col if prefix else _DIM}; background:transparent;"
+        )
+
+
+# ── Public API (unchanged pour jarvis.py) ─────────────────────────────────────
+class JarvisOverlay:
+    """
+    Façade thread-safe exposée à jarvis.py.
+    Même API qu'avant ; PyQt6 tourne sur le thread principal via exec().
+    """
+
+    HIDE_AFTER_IDLE = _JarvisWindow.HIDE_IDLE_MS
+    HIDE_AFTER_TRAY = _JarvisWindow.HIDE_TRAY_MS
+
+    def __init__(self) -> None:
+        self._app: QApplication | None = None
+        self._win: _JarvisWindow | None = None
+        self._sig: _Signals | None = None
+        self._input_queue: queue.Queue = queue.Queue()
+        self.on_mode_change = None  # callable(mode_id) — défini par jarvis.py
+
+    def start(self) -> None:
+        """Crée QApplication + fenêtre. Appeler depuis le thread principal."""
+        self._app = QApplication.instance() or QApplication(sys.argv)
+        self._sig = _Signals()
+        self._win = _JarvisWindow(self._sig, self._input_queue, self)
+
+    def exec(self) -> None:
+        """Lance la boucle Qt. Bloque jusqu'à la fermeture. Thread principal."""
+        if self._app:
+            self._app.exec()
+
+    # ── Thread-safe setters ───────────────────────────────────────────────────
+
+    def show(self, duration_ms: int | None = None) -> None:
+        if self._sig:
+            self._sig.do_show.emit(
+                duration_ms if duration_ms is not None else self.HIDE_AFTER_IDLE
+            )
+
+    def set_state(self, state: str) -> None:
+        if self._sig:
+            self._sig.do_set_state.emit(state)
+
+    def set_mode(self, name: str) -> None:
+        if self._sig:
+            self._sig.do_set_mode.emit(name or "Normal")
+
+    def set_transcript(self, text: str) -> None:
+        if self._sig:
+            self._sig.do_set_transcript.emit(text or "")
+
+    def set_response(self, text: str) -> None:
+        if self._sig:
+            self._sig.do_set_response.emit(text or "")
+
+    def set_source(self, source: str) -> None:
+        if self._sig:
+            self._sig.do_set_source.emit(source or "")
+
+    def set_cost(self, last_usd: float, month_usd: float, calls: int) -> None:
+        if self._sig:
+            self._sig.do_set_cost.emit(last_usd, month_usd, calls)
+
+    def set_paused(self, paused: bool) -> None:
+        if self._sig:
+            self._sig.do_set_paused.emit(paused)
+
+    def is_muted(self) -> bool:
+        return self._win._muted if self._win else False
 
     def get_text_input_nowait(self):
-        """Retourne le prochain token de la queue (texte ou TOKEN_PAUSE/TOKEN_RESUME), ou None."""
         try:
             return self._input_queue.get_nowait()
         except queue.Empty:

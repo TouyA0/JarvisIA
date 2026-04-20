@@ -1889,6 +1889,11 @@ def listen_for_wake_word_tflite(stream):
             flush_audio_buffer(stream)
             return typed
 
+        # Mode mute : écoute micro suspendue, seule la saisie texte est active
+        if overlay.is_muted():
+            time.sleep(0.05)
+            continue
+
         chunk = np.frombuffer(stream.read(chunk_size, exception_on_overflow=False), dtype=np.int16)
         ring_buffer.extend(chunk.tolist())
         score_counter += 1
@@ -2144,5 +2149,8 @@ if __name__ == "__main__":
     # Lancer l'icône taskbar dans un thread séparé
     tray_thread = threading.Thread(target=setup_tray, daemon=True)
     tray_thread.start()
-    # Lancer la boucle principale
-    main_loop()
+    # PyQt6 exige que sa boucle tourne sur le thread principal :
+    # on déplace main_loop dans un thread dédié.
+    jarvis_thread = threading.Thread(target=main_loop, daemon=True)
+    jarvis_thread.start()
+    overlay.exec()  # boucle Qt — bloque jusqu'à fermeture
