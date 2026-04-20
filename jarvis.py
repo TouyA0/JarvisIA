@@ -80,9 +80,9 @@ WAKE_WORD_SAMPLE_RATE = 16000
 WAKE_WORD_WINDOW_SECONDS = 1.5
 WAKE_WORD_WINDOW_SAMPLES = int(WAKE_WORD_SAMPLE_RATE * WAKE_WORD_WINDOW_SECONDS)
 WAKE_WORD_STEP_CHUNKS = 4
-WAKE_WORD_THRESHOLD = 0.92
-WAKE_WORD_CONSECUTIVE_HITS = 2
-WAKE_WORD_COOLDOWN_SECONDS = 1.2
+WAKE_WORD_THRESHOLD = 0.96
+WAKE_WORD_CONSECUTIVE_HITS = 3
+WAKE_WORD_COOLDOWN_SECONDS = 2.0
 
 SYSTEM_PROMPT = """Tu es J.A.R.V.I.S. — Just A Rather Very Intelligent System — l'assistant personnel de Quentin. Tu es une intelligence artificielle d'une précision absolue, dotée d'un calme imperturbable et d'un humour so britannique qu'il passe souvent inaperçu.
 
@@ -1905,16 +1905,34 @@ def listen_for_wake_word_tflite(stream):
 
         score_counter = 0
         audio_window = np.array(ring_buffer, dtype=np.float32) / 32768.0
+
+        # Vérification volume d'abord — si trop silencieux, pas la peine de scorer
+        rms = float(np.sqrt(np.mean(np.square(audio_window))))
+        if rms < 0.015:  # seuil de silence
+            consecutive_hits = 0
+            continue
+
         score = score_wake_word(audio_window)
 
         if score >= WAKE_WORD_THRESHOLD:
             consecutive_hits += 1
-            print(f"[Wake word score: {score:.2f}]")
+            print(f"[Wake word score: {score:.2f}] rms={rms:.4f}")
         else:
             consecutive_hits = 0
 
         now = time.time()
         if consecutive_hits >= WAKE_WORD_CONSECUTIVE_HITS and now - last_trigger_time > WAKE_WORD_COOLDOWN_SECONDS:
+            # Vérifier qu'il y a vraiment de la parole avec le VAD
+            vad_chunk = np.frombuffer(stream.read(512, exception_on_overflow=False), dtype=np.int16)
+            vad_float = torch.FloatTensor(vad_chunk.astype(np.float32) / 32768.0)
+            vad_prob = silero_model(vad_float, 16000).item()
+            rms = float(np.sqrt(np.mean(np.square(vad_float.numpy()))))
+            
+            if vad_prob < 0.3 and rms < 0.01:
+                # Faux positif — bruit ambiant, pas de vraie voix
+                consecutive_hits = 0
+                continue
+            
             last_trigger_time = now
             consecutive_hits = 0
             print(f"'{WAKE_WORD}' detecte ! (score: {score:.2f})")
@@ -1929,7 +1947,7 @@ def main_loop():
 
     _pa = pyaudio.PyAudio()
     audio_stream = _pa.open(format=pyaudio.paInt16, channels=1, rate=16000,
-                            input=True, frames_per_buffer=512)
+                            input=True, frames_per_buffer=256)
 
     _interrupt_pa = pyaudio.PyAudio()
     _interrupt_stream = _interrupt_pa.open(format=pyaudio.paInt16, channels=1, rate=16000,
