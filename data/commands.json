@@ -25,7 +25,12 @@
     },
     {
       "id": "volume_max",
-      "triggers": ["volume au maximum", "volume à fond", "met le volume à fond", "monte le son au max"],
+      "triggers": [
+        "volume au maximum",
+        "volume à fond",
+        "met le volume à fond",
+        "monte le son au max"
+      ],
       "action": {
         "type": "powershell",
         "cmd": "$obj = New-Object -ComObject WScript.Shell; for($i=0;$i -lt 50;$i++){$obj.SendKeys([char]175)}"
@@ -34,7 +39,14 @@
     },
     {
       "id": "volume_zero",
-      "triggers": ["coupe le son", "mute", "sourdine", "coupe l'audio", "silence audio", "met le son à zéro"],
+      "triggers": [
+        "coupe le son",
+        "mute",
+        "sourdine",
+        "coupe l'audio",
+        "silence audio",
+        "met le son à zéro"
+      ],
       "action": {
         "type": "powershell",
         "cmd": "$obj = New-Object -ComObject WScript.Shell; for($i=0;$i -lt 50;$i++){$obj.SendKeys([char]174)}"
@@ -43,7 +55,12 @@
     },
     {
       "id": "media_pause",
-      "triggers": ["pause la musique", "pause le son", "mets en pause", "pause lecture"],
+      "triggers": [
+        "pause la musique",
+        "pause le son",
+        "mets en pause",
+        "pause lecture"
+      ],
       "action": {
         "type": "powershell",
         "cmd": "$obj = New-Object -ComObject WScript.Shell; $obj.SendKeys([char]179)"
@@ -52,7 +69,13 @@
     },
     {
       "id": "media_suivant",
-      "triggers": ["musique suivante", "chanson suivante", "titre suivant", "piste suivante", "next"],
+      "triggers": [
+        "musique suivante",
+        "chanson suivante",
+        "titre suivant",
+        "piste suivante",
+        "next"
+      ],
       "action": {
         "type": "powershell",
         "cmd": "$obj = New-Object -ComObject WScript.Shell; $obj.SendKeys([char]176)"
@@ -61,7 +84,12 @@
     },
     {
       "id": "media_precedent",
-      "triggers": ["musique précédente", "chanson précédente", "titre précédent", "piste précédente"],
+      "triggers": [
+        "musique précédente",
+        "chanson précédente",
+        "titre précédent",
+        "piste précédente"
+      ],
       "action": {
         "type": "powershell",
         "cmd": "$obj = New-Object -ComObject WScript.Shell; $obj.SendKeys([char]177)"
@@ -70,7 +98,13 @@
     },
     {
       "id": "verrouille",
-      "triggers": ["verrouille", "verrouille l'écran", "verrouille le pc", "lock screen", "barre le pc"],
+      "triggers": [
+        "verrouille",
+        "verrouille l'écran",
+        "verrouille le pc",
+        "lock screen",
+        "barre le pc"
+      ],
       "action": {
         "type": "powershell",
         "cmd": "rundll32.exe user32.dll,LockWorkStation"
@@ -79,7 +113,12 @@
     },
     {
       "id": "sleep",
-      "triggers": ["mode veille", "mets en veille", "veille pc", "sleep pc"],
+      "triggers": [
+        "mode veille",
+        "mets en veille",
+        "veille pc",
+        "sleep pc"
+      ],
       "action": {
         "type": "powershell",
         "cmd": "Add-Type -Assembly System.Windows.Forms; [System.Windows.Forms.Application]::SetSuspendState('Suspend', $false, $false)"
@@ -88,7 +127,12 @@
     },
     {
       "id": "restart",
-      "triggers": ["redémarre le pc", "redémarrage", "restart", "redémarre l'ordinateur"],
+      "triggers": [
+        "redémarre le pc",
+        "redémarrage",
+        "restart",
+        "redémarre l'ordinateur"
+      ],
       "action": {
         "type": "powershell",
         "cmd": "Restart-Computer -Force"
@@ -97,7 +141,13 @@
     },
     {
       "id": "shutdown",
-      "triggers": ["éteins le pc", "arrête le pc", "shutdown", "éteindre l'ordinateur", "arrête l'ordinateur"],
+      "triggers": [
+        "éteins le pc",
+        "arrête le pc",
+        "shutdown",
+        "éteindre l'ordinateur",
+        "arrête l'ordinateur"
+      ],
       "action": {
         "type": "powershell",
         "cmd": "Stop-Computer -Force"
@@ -106,12 +156,44 @@
     },
     {
       "id": "corbeille",
-      "triggers": ["vide la corbeille", "vider la corbeille", "nettoie la corbeille"],
+      "triggers": [
+        "vide la corbeille",
+        "vider la corbeille",
+        "nettoie la corbeille"
+      ],
       "action": {
         "type": "powershell",
         "cmd": "Clear-RecycleBin -Force -ErrorAction SilentlyContinue"
       },
       "response": "La corbeille est vidée, Monsieur."
+    },
+    {
+      "id": "learned_1786531585",
+      "triggers": [
+        "ouvre le blocnot",
+        "ouvre bloc-notes",
+        "lance le blocnot",
+        "ouvre le bloc-notes",
+        "lance bloc-notes"
+      ],
+      "action": {
+        "type": "powershell",
+        "cmd": "Start-Process \"shell:AppsFolder\\Microsoft.WindowsNotepad_8wekyb3d8bbwe!App\""
+      },
+      "response": "Bloc-notes ouvert, Monsieur."
+    },
+    {
+      "id": "learned_1786531828",
+      "triggers": [
+        "lance la vidéo limonade indienne",
+        "mets la limonade indienne",
+        "ouvre limonade indienne sur youtube"
+      ],
+      "action": {
+        "type": "powershell",
+        "cmd": "Start-Process 'https://youtube.com/watch?v=5xWSbltj-fQ'"
+      },
+      "response": "C'est lancé, Monsieur."
     }
   ]
 }

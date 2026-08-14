@@ -1,0 +1,40 @@
+# Jarvis v2 — dépendances runtime (Python 3.12, Windows)
+# Installation : pip install -r requirements.txt
+
+# --- Cerveau ---
+# anthropic pilote le PC (tool-use + vision) et sert de repli conversationnel.
+# requests parle aussi à Ollama en local (voir OLLAMA_* dans .env) et à
+# Open-Meteo pour la météo — aucun package supplémentaire n'est nécessaire,
+# juste que `ollama serve` tourne avec le modèle configuré déjà tiré.
+anthropic==0.96.0
+requests==2.31.0
+
+# --- Audio : capture, lecture, décodage ---
+PyAudio==0.2.14
+sounddevice==0.5.5
+pydub==0.25.1            # nécessite ffmpeg dans le PATH pour décoder le MP3 du TTS
+soundfile==0.13.1
+
+# --- Détection de parole (Silero VAD) ---
+# torch est utilisé UNIQUEMENT pour le VAD (~1 Mo de modèle).
+# Sur AMD/Windows il n'y a pas de backend GPU : l'install CPU suffit et évite ~2 Go.
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+torch==2.11.0
+
+# --- Wake word ---
+# TensorFlow n'est importé que pour tf.lite.Interpreter (~500 Mo, +2-3s au démarrage).
+# À remplacer par `tflite-runtime` ou `onnxruntime` quand possible.
+tensorflow==2.21.0
+librosa==0.11.0
+numpy==2.4.4
+
+# --- Interface (HUD PyQt6 ; tray = QSystemTrayIcon natif, pystray supprimé) ---
+PyQt6==6.11.0
+Pillow==10.2.0           # requis par pyautogui.screenshot + redimensionnement vision
+psutil==5.9.8            # diagnostics système réels du HUD
+
+# --- Contrôle du PC ---
+PyAutoGUI==0.9.54
+
+# --- Entraînement du wake word uniquement (wakeword/entrainer.py) ---
+scikit-learn==1.8.0

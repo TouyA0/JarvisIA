@@ -12,6 +12,6 @@
   "jeux": "Sea of Stars, Switch OLED",
   "setup_pc": "Windows 11 Pro, Ryzen 7 7700X, 32GB RAM, RX 6800 XT 16GB, 2.73TB HDD",
   "github": "https://github.com/TouyA0 (username: TouyA0)",
-  "projet_jarvis": "assistant IA vocal local avec Ollama, Speaches, Whisper, qwen2.5:7b",
+  "projet_jarvis": "assistant vocal Jarvis : wake word TFLite local, STT Whisper et TTS Piper via Speaches en local, conversation via un modele local Ollama (qwen3:14b sur GPU AMD, ROCm), pilotage du PC via l'API Claude",
   "preferences_reponses": "réponses très courtes, directes, style Jarvis Iron Man, appeler Monsieur"
 }

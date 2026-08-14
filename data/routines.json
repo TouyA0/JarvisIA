@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "routines": [
     {
       "id": "matin",
@@ -8,7 +8,8 @@
       "description": "Séquence de démarrage de journée.",
       "steps": [
         { "action": "speak", "text": "Bonjour, Monsieur. Voici votre résumé matinal." },
-        { "action": "speak_time", "text": "Il est {heure}, Monsieur." },
+        { "action": "speak_time", "text": "Il est {heure}." },
+        { "action": "speak_weather" },
         { "action": "set_mode", "mode_id": "travail" }
       ]
     },

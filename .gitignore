@@ -1,24 +1,29 @@
-# Environnement
+# Secrets
 .env
-
-#features
-/docs
 
 # Python
 __pycache__/
 *.pyc
 
-# Dossiers inutiles / lourds
-samples_jarvis/
-samples_negatifs/
+# Sorties de rendu du HUD (preview design)
+agents/desktop/build_preview/
+
+# Données personnelles générées à l'usage
+data/logs/
+data/notes/
+data/usage.json
+data/memory.json
+data/current_mode.json
+
+# Audio d'entraînement wake word (volumineux)
+agents/desktop/wakeword/samples_jarvis/
+agents/desktop/wakeword/samples_negatifs/
 
 # Modèles (optionnel si lourd)
 *.onnx
 *.tflite
 
-# VS Code (optionnel)
+# VS Code / OS
 .vscode/
-
-# OS
 .DS_Store
 Thumbs.db

@@ -80,6 +80,7 @@ class _Signals(QObject):
     do_set_paused     = pyqtSignal(bool)
     do_show           = pyqtSignal(int)
     do_update_diag    = pyqtSignal(int, int, int, int, str, str)
+    do_set_model_label = pyqtSignal(str)
 
 
 # ── Arc Reactor canvas ────────────────────────────────────────────────────────
@@ -216,7 +217,7 @@ class _DiagPanel(QWidget):
         self._mem    = 0
         self._lat    = 0
         self._tokens = 0
-        self._model  = "haiku-4.5"
+        self._model  = "—"
         self._uptime = "00:00:00"
         self._start  = time.time()
         self._state  = "idle"
@@ -719,7 +720,9 @@ class _JarvisWindow(QWidget):
             cpu = random.randint(5, 30)
             mem = random.randint(30, 60)
         lat = random.randint(8, 30) if self._state == "idle" else random.randint(50, 200)
-        self._diag.update_diag(cpu, mem, lat, self._tokens_total, "haiku-4.5")
+        # Le nom du modèle n'est pas simulé : on repasse la dernière valeur
+        # connue (fixée par set_model_label) pour ne pas l'écraser à chaque tick.
+        self._diag.update_diag(cpu, mem, lat, self._tokens_total, self._diag._model)
         self._diag.set_state(self._state)
 
     # ── Drag ──────────────────────────────────────────────────────────────────
@@ -873,6 +876,7 @@ class _JarvisWindow(QWidget):
         s.do_set_paused.connect(self._on_set_paused)
         s.do_show.connect(self._on_show)
         s.do_update_diag.connect(self._on_update_diag)
+        s.do_set_model_label.connect(self._on_set_model_label)
 
     def _on_set_state(self, state):
         self._state = state
@@ -950,6 +954,10 @@ class _JarvisWindow(QWidget):
         self._tokens_total = tokens
         self._diag.update_diag(cpu, mem, lat, tokens, model, uptime)
 
+    def _on_set_model_label(self, name):
+        self._diag._model = name or "—"
+        self._diag.update()
+
 
 # ── Public API ────────────────────────────────────────────────────────────────
 class JarvisOverlay:
@@ -999,9 +1007,15 @@ class JarvisOverlay:
     def set_paused(self, paused):
         if self._sig: self._sig.do_set_paused.emit(paused)
 
-    def update_diagnostics(self, cpu=0, mem=0, lat=0, tokens=0, model="haiku-4.5", uptime=""):
+    def update_diagnostics(self, cpu=0, mem=0, lat=0, tokens=0, model="—", uptime=""):
         if self._sig:
             self._sig.do_update_diag.emit(cpu, mem, lat, tokens, model, uptime)
+
+    def set_model_label(self, name):
+        """Affiche quel cerveau a répondu au dernier tour (ex: 'qwen3:14b',
+        'claude-haiku-4.5'), sans toucher aux autres diagnostics."""
+        if self._sig:
+            self._sig.do_set_model_label.emit(name or "—")
 
     def is_muted(self):
         return self._win._muted if self._win else False
