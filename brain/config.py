@@ -71,6 +71,16 @@ HAIKU_PRICES = {
 # tête de phrase transcrite — pas un réglage audio ici, juste du texte.
 WAKE_WORD = "jarvis"
 
+# ── Voix (Phase 9 — voix dans le navigateur) ─────────────────────────────────
+# Mêmes valeurs que agents/desktop/config.py : même conteneur Speaches, pas de
+# nouvelle dépendance. Utilisé par brain/speech.py pour la Console web.
+SPEACHES_STT_URL = os.getenv("SPEACHES_STT_URL", "http://localhost:8000/v1/audio/transcriptions")
+SPEACHES_TTS_URL = os.getenv("SPEACHES_TTS_URL", "http://localhost:8000/v1/audio/speech")
+STT_MODEL = os.getenv("STT_MODEL", "Systran/faster-whisper-small")
+TTS_MODEL = os.getenv("TTS_MODEL", "speaches-ai/piper-fr_FR-siwis-medium")
+TTS_VOICE = os.getenv("TTS_VOICE", "siwis")
+SPEECH_REQUEST_TIMEOUT = 20
+
 # ── Réseau ────────────────────────────────────────────────────────────────────
 HOST = os.getenv("BRAIN_HOST", "0.0.0.0")
 PORT = int(os.getenv("BRAIN_PORT", "8420"))

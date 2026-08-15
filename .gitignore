@@ -29,6 +29,11 @@ agents/desktop/wakeword/samples_negatifs/
 # Web (web/)
 web/node_modules/
 web/dist/
+# Runtime tiers copié depuis node_modules/onnxruntime-web/dist — pas du
+# code projet, à recopier après npm install (voir docs/ROADMAP_MULTIDEVICE.md,
+# Phase 9) plutôt que de versionner un binaire de 13 Mo qui ne change que si
+# la dépendance change de version.
+web/public/ort/
 
 # VS Code / OS
 .vscode/

@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useChat } from "../lib/useChat.js";
+import { useVoice } from "../lib/useVoice.js";
 import Frame from "./Frame.jsx";
 
 const dot = (color, size = 7) => ({
@@ -11,7 +12,7 @@ const dot = (color, size = 7) => ({
   flex: "none",
 });
 
-function Topbar({ status }) {
+function Topbar({ status, voice }) {
   const online = status === "online";
   return (
     <div
@@ -32,6 +33,11 @@ function Topbar({ status }) {
         <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--faint)" }}>
           {online ? "en écoute" : status === "connecting" ? "connexion…" : "hors ligne"}
         </span>
+        {voice.armed && (
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--cyan)" }}>
+            · écoute vocale active
+          </span>
+        )}
       </div>
       <div
         style={{
@@ -183,7 +189,64 @@ function Hub({ question, answer, busy }) {
   );
 }
 
-function CommandBar({ status, busy, onSend }) {
+const VOICE_STATUS_LABELS = {
+  idle: "Micro — cliquer pour armer l'écoute vocale",
+  listening: "Écoute vocale active — dites « Jarvis »",
+  listening_command: "Jarvis vous écoute…",
+  transcribing: "Transcription…",
+  speaking: "Jarvis parle…",
+};
+
+// Visible en clair (pas juste un tooltip au survol) : ce que le micro
+// entend réellement, pour répondre à « je sais pas s'il comprend ce que
+// je dis » — sans ça, la fenêtre d'écoute armée est une boîte noire.
+function VoiceStatusBar({ voice }) {
+  if (!voice.armed) return null;
+  return (
+    <div
+      style={{
+        padding: "10px 22px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
+        fontSize: 12,
+        background: "var(--bg-2)",
+        borderTop: "1px solid var(--stroke-soft)",
+      }}
+    >
+      <span
+        style={{
+          fontFamily: "var(--font-mono)",
+          color: voice.wakeWordHeard ? "var(--online)" : "var(--cyan)",
+          fontWeight: 600,
+        }}
+      >
+        {voice.wakeWordHeard ? "✓ « Jarvis » détecté" : VOICE_STATUS_LABELS[voice.status]}
+        {voice.status === "listening" && (
+          <span style={{ color: "var(--faint)", fontWeight: 400 }}>
+            {" "}· score {voice.lastScore.toFixed(2)}
+          </span>
+        )}
+      </span>
+      {voice.lastTranscript && (
+        <span
+          style={{
+            color: "var(--faint)",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            maxWidth: "60%",
+          }}
+        >
+          entendu : « {voice.lastTranscript} »
+        </span>
+      )}
+    </div>
+  );
+}
+
+function CommandBar({ status, busy, onSend, voice }) {
   const [value, setValue] = useState("");
 
   function submit() {
@@ -205,13 +268,15 @@ function CommandBar({ status, busy, onSend }) {
         background: "var(--bg-2)",
       }}
     >
-      <div
+      <button
+        onClick={() => (voice.armed ? voice.disarm() : voice.arm())}
+        title={VOICE_STATUS_LABELS[voice.status] || "Micro"}
         style={{
           position: "relative",
           width: 40,
           height: 40,
           borderRadius: "50%",
-          background: "var(--cyan-dim)",
+          background: voice.armed ? "var(--cyan)" : "var(--cyan-dim)",
           border: "1px solid var(--stroke)",
           display: "flex",
           alignItems: "flex-end",
@@ -220,9 +285,10 @@ function CommandBar({ status, busy, onSend }) {
           paddingBottom: 13,
           boxShadow: "0 0 22px -6px var(--glow)",
           flex: "none",
-          opacity: 0.5,
+          cursor: "pointer",
+          animation: voice.status === "listening_command" || voice.status === "transcribing"
+            ? "breathe 1.2s ease-in-out infinite" : "none",
         }}
-        title="Micro — pas encore branché (Phase 3)"
       >
         {[0, 1, 2].map((i) => (
           <span
@@ -231,11 +297,11 @@ function CommandBar({ status, busy, onSend }) {
               width: 3,
               height: [12, 17, 10][i],
               borderRadius: 3,
-              background: "var(--cyan)",
+              background: voice.armed ? "var(--bg)" : "var(--cyan)",
             }}
           />
         ))}
-      </div>
+      </button>
 
       <input
         value={value}
@@ -289,14 +355,89 @@ function CommandBar({ status, busy, onSend }) {
 
 export default function Console({ onNavigate, focusEnabled }) {
   const { status, question, answer, busy, ask } = useChat();
+  const lastWasVoiceRef = useRef(false);
+  const wasBusyRef = useRef(false);
+
+  // Déclaration de fonction (hoistée) : peut référencer `voice` avant sa
+  // ligne `const` ci-dessous, tant qu'elle n'est appelée qu'après coup
+  // (useVoice ne l'appelle que plus tard, de façon asynchrone, une fois
+  // le composant entièrement rendu — voir onCommandRef dans useVoice.js).
+  function handleVoiceCommand(text) {
+    lastWasVoiceRef.current = true;
+    voice.pause();
+    ask(text);
+  }
+
+  const voice = useVoice({ onCommand: handleVoiceCommand });
+
+  // Un tour vient de se terminer (busy: true → false) : si la question
+  // venait de la voix, on synthétise et on lit la réponse, puis on
+  // reprend l'écoute — sinon on reprend directement (une réponse à une
+  // question tapée ne doit pas se mettre à parler toute seule).
+  useEffect(() => {
+    if (wasBusyRef.current && !busy) {
+      if (lastWasVoiceRef.current) {
+        lastWasVoiceRef.current = false;
+        speakAnswer(answer, voice);
+      }
+    }
+    wasBusyRef.current = busy;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busy]);
 
   return (
     <Frame active="console" onNavigate={onNavigate} focusEnabled={focusEnabled}>
-      <Topbar status={status} />
+      <Topbar status={status} voice={voice} />
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
         <Hub question={question} answer={answer} busy={busy} />
       </div>
-      <CommandBar status={status} busy={busy} onSend={ask} />
+      {voice.error && (
+        <div
+          style={{
+            padding: "8px 22px",
+            fontSize: 12,
+            color: "var(--danger)",
+            background: "var(--bg-2)",
+            borderTop: "1px solid var(--stroke-soft)",
+          }}
+        >
+          {voice.error}
+        </div>
+      )}
+      <VoiceStatusBar voice={voice} />
+      <CommandBar status={status} busy={busy} onSend={ask} voice={voice} />
     </Frame>
   );
+}
+
+async function speakAnswer(text, voice) {
+  if (!text) {
+    voice.resume();
+    return;
+  }
+  try {
+    const res = await fetch("/api/speech/synthesize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) {
+      voice.resume();
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      voice.resume();
+    };
+    audio.onerror = () => {
+      URL.revokeObjectURL(url);
+      voice.resume();
+    };
+    await audio.play();
+  } catch {
+    voice.resume();
+  }
 }

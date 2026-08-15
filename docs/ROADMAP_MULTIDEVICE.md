@@ -334,37 +334,310 @@ Console web (Phase 2), donc au même historique.
   réponses/notifications courtes, dictée vocale). À revisiter une fois
   les phases 1-6 stables — inutile d'y penser avant.
 
-## Phase 9 — Voix dans le navigateur (pas commencé, à cadrer) ▲▲▲
+## Phase 9 — Voix dans le navigateur ▲▲▲ · 🟡 première version faite
 
 Identifiée le 2026-08-15 : condition réelle pour que le HUD PyQt6 puisse
-un jour disparaître au profit du seul web (voir échange avec Quentin) —
-aujourd'hui la Console web est **texte uniquement**, aucune voix.
+un jour disparaître au profit du seul web. Cadrée puis codée le même
+jour, avec deux décisions prises avec Quentin avant d'écrire du code :
 
-- Nécessite : capture micro dans le navigateur (MediaRecorder/Web Audio
-  API), envoi de l'audio pour transcription, lecture de la réponse
-  synthétisée dans le navigateur.
-- **Tension avec un principe déjà posé** (section « pièges » plus bas) :
-  « ne pas faire transiter l'audio brut par le brain — tout le pipeline
-  vocal reste local à l'agent qui possède le micro ». Cette règle
-  supposait que l'agent avec micro tourne toujours en process Python
-  local (Whisper local, etc.). Un navigateur ne peut pas faire de STT
-  local aussi facilement — donc soit on accepte de faire transiter
-  l'audio jusqu'à un service de transcription (via le brain ou à côté),
-  soit on explore du STT embarqué dans le navigateur (whisper.cpp en
-  WASM, ou l'API Web Speech native si la qualité suffit). **Pas décidé.**
-  Ne pas commencer sans clarifier ce point d'abord — c'est le vrai nœud
-  technique de cette phase, pas un détail.
-- Le mot d'éveil (« Jarvis ») en continu dans un onglet de navigateur
-  pose aussi ses propres limites (l'onglet doit rester ouvert et actif),
-  différent de l'app desktop qui tourne en arrière-plan/tray.
+- **Détection** : ni mot d'éveil continu (fragile dans un onglet), ni
+  bouton « maintenir pour parler » — une **fenêtre d'écoute armée** de
+  10 min pendant laquelle le navigateur transcrit en continu et cherche
+  « Jarvis » dans le texte (proposition de Quentin).
+- **STT/TTS** : réutiliser **Speaches** (Whisper + Piper), déjà utilisé
+  par l'agent desktop — pas de nouvelle dépendance, reste chez toi
+  (LAN ou Tailscale). Décidé plutôt que l'API Web Speech (aurait envoyé
+  l'audio à Google, contraire au principe local-first) ou un STT WASM
+  embarqué (rien de prouvé dans ce projet).
+
+### Ce qui a été construit
+
+- ✅ `brain/speech.py` + `brain/config.py` (config Speaches côté brain,
+  mêmes valeurs que l'agent desktop) — `transcribe()`/`synthesize()`,
+  jamais d'exception (un segment illisible ne casse pas la fenêtre
+  d'écoute).
+- ✅ `brain/server.py` — `POST /api/speech/transcribe` (upload audio →
+  texte), `POST /api/speech/synthesize` (texte → MP3).
+- ✅ `web/src/lib/fuzzyWakeWord.js` — recherche « Jarvis » tolérante.
+  **Bug réel trouvé par Quentin au premier essai** : le seuil initial
+  (distance de Levenshtein ≤ 2) était bien trop large — des mots
+  français courants (« jamais », « jadis ») tombaient dans cette marge
+  et déclenchaient le mot d'éveil sur n'importe quelle phrase. Resserré
+  à ≤ 1 (quasi-exact) + liste explicite des déformations Whisper
+  réellement observées (« Javi », distance 2) plutôt que d'élargir la
+  tolérance générale pour ce seul cas. Revalidé : « jamais »/« jadis »
+  ignorés, « Javi »/« Jarvis » toujours détectés.
+- ✅ `web/src/lib/useVoice.js` — fenêtre armée, enregistrement par
+  segments de 4s (MediaRecorder), boucle transcription → recherche du
+  mot → capture de la commande qui suit, `pause()`/`resume()` pour ne
+  pas réécouter pendant que Jarvis répond ou parle (pas de barge-in,
+  volontairement — sujet à part).
+- ✅ Bouton micro dans `Console.jsx` — armé/désarmé au clic, statut
+  visible (écoute / transcription / Jarvis parle), réponse vocale
+  synthétisée et jouée automatiquement **uniquement** si la question
+  venait de la voix (le texte tapé ne déclenche jamais de lecture).
+- 🐛 **Bug trouvé et corrigé pendant les tests** : `python-multipart`
+  manquant faisait planter le brain entier au démarrage dès l'ajout de
+  l'upload de fichier — ajouté à `brain/requirements.txt`.
+
+### Testé en conditions réelles (sans microphone, ici)
+
+- ✅ Aller-retour Speaches complet : synthèse Piper → transcription
+  Whisper, en ligne de commande ET via un vrai `fetch()` depuis le
+  navigateur (proxy Vite inclus) — MP3 réel reçu et lisible.
+- ✅ `fuzzyWakeWord.js` validé en Node avec de la vraie sortie Whisper
+  déformée (« Javi » détecté, extraction correcte de la commande qui
+  suit ; phrases sans rapport correctement ignorées).
+- ✅ Robustesse UI : accès micro refusé (bloqué dans cet environnement de
+  test) → message d'erreur affiché, pas de plantage, bouton revient à
+  l'état inactif proprement.
+- ✅ Non-régression : une question tapée continue de fonctionner
+  normalement et ne déclenche **jamais** de synthèse vocale.
+
+**Retour utilisateur (Quentin) après premier essai réel** : aucun moyen
+de savoir si le micro écoute, transcrit, ou a compris quoi que ce soit —
+tout était invisible (juste un tooltip au survol). Corrigé le même jour :
+`useVoice.js` expose maintenant `lastTranscript` (dernier segment
+transcrit, même sans « Jarvis » dedans) et `wakeWordHeard` (flash
+« ✓ Jarvis détecté » 2s) ; `Console.jsx` affiche un bandeau **toujours
+visible** (pas un tooltip) au-dessus de la barre de commande avec le
+statut en clair + « entendu : « … » ». Validé avec un flux audio
+synthétique (silence) envoyé au vrai pipeline d'enregistrement : compte
+à rebours, statut, et « entendu : « (silence) » » confirmés à l'écran.
+
+### Abandonné : détection par transcription + comparaison de texte
+
+L'approche ci-dessus (transcrire en continu, chercher « Jarvis » dans le
+texte) a été **remplacée** le jour même après un vrai faux-positif en
+usage réel : « jamais » déclenchait le mot d'éveil sur n'importe quelle
+phrase (distance de Levenshtein trop permissive — voir le bug documenté
+plus haut). Un premier resserrement du seuil a réduit le problème sans
+le résoudre : le défaut est structurel, pas un réglage — comparer du
+*texte* n'a rien à voir avec reconnaître un *son*. Quentin a demandé
+pourquoi ne pas réutiliser directement le vrai modèle du PC. Réponse
+honnête : raccourci pris pour livrer vite avec ce qui existait déjà
+(Speaches), sans assez peser le coût de fiabilité. Remplacé dans la
+foulée par la vraie détection acoustique ci-dessous.
+
+### Le vrai modèle, porté dans le navigateur ✅
+
+Même modèle exact que le PC (`agents/desktop/wakeword/jarvis_wakeword.tflite`),
+tournant en local dans le navigateur — plus aucun texte à comparer, plus
+aucun audio envoyé au réseau tant que « Jarvis » n'est pas vraiment
+détecté (exactement le principe qu'on avait posé en Phase 0, avant de le
+contourner pour la voix web).
+
+- ✅ **Conversion du modèle** : TFLite → ONNX (`tf2onnx`), validée
+  bit-identique au modèle original sur 10 échantillons réels (écart
+  `0.000000`).
+- ✅ **Port fidèle du prétraitement** (`web/src/lib/wakeWordFeatures.js`) :
+  FFT, banc de filtres mel (échelle Slaney), passage en dB, DCT — les
+  mêmes formules exactes que `librosa.feature.mfcc`, réécrites en JS pur
+  (FFT radix-2 maison, aucune dépendance). **Validé numériquement**
+  contre la vraie sortie librosa (Python) sur 10 échantillons : écart
+  absolu max `0.00006` (bruit de calcul flottant, négligeable).
+- ✅ **Pipeline complet bout en bout** (audio → MFCC JS → modèle ONNX)
+  validé en Node.js avec `onnxruntime-node` : sur les 10 mêmes
+  échantillons (5 « Jarvis », 5 négatifs), les scores obtenus en
+  JavaScript sont identiques aux scores Python/TFLite originaux à
+  `0.00000` près — positifs comme négatifs.
+- ✅ `web/src/lib/wakeWordDetector.js` — charge le modèle ONNX
+  (`onnxruntime-web`, backend WASM), même seuils que le PC (score ≥ 0.90,
+  2 détections consécutives, cooldown 2s, filtre RMS avant même de
+  lancer l'inférence).
+- ✅ `web/public/wakeword-worklet.js` + `useWakeWordDetector.js` —
+  capture micro continue via `AudioWorklet` (hors thread principal),
+  fenêtre glissante de 1.5s, scoring toutes les ~128ms — même cadence
+  que `agents/desktop/audio/wakeword.py`.
+- ✅ `useVoice.js` réécrit : la détection ne dépend plus de Whisper ni du
+  brain. Une fois « Jarvis » détecté localement, la commande qui suit
+  est enregistrée et envoyée à `/api/speech/transcribe` (Speaches via le
+  brain) — ce bout-là reste inchangé, c'est le bon usage de la
+  transcription réseau (transcrire une vraie commande, pas deviner un
+  mot d'éveil).
+- ✅ **Plus de fenêtre à durée limitée** : comme rien ne part au réseau
+  tant que le mot n'est pas détecté, plus besoin du compte à rebours de
+  10 min — ça écoute tant que c'est armé, comme sur PC.
+- 🐛 **Bug de taille d'asset trouvé et corrigé** : l'import par défaut
+  d'`onnxruntime-web` embarquait un binaire WASM de 26 Mo (variante
+  WebGPU/JSEP) dans le bundle Vite. Corrigé en important le sous-module
+  `onnxruntime-web/wasm` + une condition de résolution Vite dédiée
+  (`onnxruntime-web-use-extern-wasm`) pour ne charger que le binaire WASM
+  simple (13 Mo, un seul téléchargement, mis en cache par le navigateur
+  ensuite).
+- 🐛 **Bug de serveur de dev trouvé et corrigé** : le serveur de dev Vite
+  refuse par conception l'import dynamique de fichiers `public/`
+  (`ort-wasm-*.mjs`), ce dont `onnxruntime-web` a besoin pour charger son
+  runtime — erreur uniquement en dev (`npm run dev`), pas en production.
+  Corrigé en branchant enfin `brain/server.py` pour servir `web/dist` en
+  statique (prévu depuis la Phase 2, jamais fait) : `npm run build` dans
+  `web/`, puis tout se sert depuis `http://localhost:8420`, plus besoin
+  du serveur de dev séparé pour tester cette fonctionnalité.
+
+**Testé en conditions réelles, avec de vrais enregistrements — pas
+seulement en isolation :**
+
+- ✅ Un vrai extrait audio « Jarvis » (`samples_jarvis/jarvis_01.wav`),
+  joué dans le navigateur comme si c'était le micro (technique de
+  substitution audio, faute de vrai micro dans cet environnement de
+  test) → **détection déclenchée**, capture de la commande qui suit
+  activée.
+- ✅ **Contre-épreuve** : un vrai négatif (`samples_negatifs/negatif_01.wav`),
+  joué trois fois de suite → **aucune détection**, aucun déclenchement.
+- ✅ Une simple tonalité pure (220 Hz) → score proche de zéro, cohérent
+  avec les scores négatifs mesurés en Python (aucune ressemblance
+  spectrale avec de la parole).
+
+### Suite : deux vrais bugs remontés par Quentin en usage réel, corrigés
+
+**1. Réponses génériques (« Dûment noté, Monsieur » en boucle).** Cause :
+la commande était enregistrée sur une durée **fixe** de 4s après la
+détection, sans tenir compte du fait qu'on enchaîne naturellement
+« Jarvis, [question] » sans pause — le début de la question pouvait être
+coupé, Whisper transcrivait du vide/du bruit, et le LLM répondait par
+une confirmation générique faute de comprendre. Corrigé en remplaçant la
+capture à durée fixe par une **capture pilotée par le silence** (même
+principe que `agents/desktop/audio/stt.py` côté PC — pas de VAD neuronal
+ici, un seuil RMS suffit une fois qu'on sait qu'on est juste après un
+« Jarvis » confirmé) : `useWakeWordDetector.js::captureCommand()` attend
+le début de la parole (jusqu'à ~2.9s), capture jusqu'à ~380ms de silence
+ou 9s max, avec un pré-tampon pour ne pas couper le tout début.
+`encodeWav.js` encode le résultat en WAV PCM (remplace l'ancien
+enregistrement MediaRecorder/webm à durée fixe).
+
+**2. Détection moins fiable que sur PC.** Cause probable : le navigateur
+applique par défaut un traitement du signal (suppression de bruit, écho,
+gain automatique) avant même que le code ne reçoive l'audio — ça déforme
+le signal par rapport à l'audio brut sur lequel le modèle a été
+entraîné. Corrigé en désactivant explicitement ces options dans
+`getUserMedia` (`echoCancellation`/`noiseSuppression`/`autoGainControl`
+à `false`).
+
+**Testé en conditions réelles** (scénario qui posait justement problème :
+« Jarvis » enchaîné immédiatement par la question, sans pause, via
+lecture d'un extrait réel + une commande synthétisée à la suite, sans
+silence entre les deux) : commande correctement capturée et transcrite
+(« Quelle heure est-il ? »), réponse cohérente reçue (« Il est 16h47,
+Monsieur. ») — plus de confirmation générique.
+
+### Suite : faux positifs sur des bruits brefs (clics de clavier)
+
+**3. Se déclenche sur un clic de clavier.** Sur PC, une seconde
+vérification (Silero VAD, un vrai modèle de détection de parole) confirme
+qu'il y a réellement de la voix avant de déclencher
+(`agents/desktop/audio/wakeword.py::listen()`) — jamais portée dans le
+navigateur. Sans elle, le modèle wake word seul se déclenche parfois sur
+un bruit bref, puisqu'il n'a pas été entraîné à rejeter spécifiquement ce
+type de bruit (le jeu d'entraînement plafonne volontairement le bruit
+synthétique à 35 % des négatifs, voir `wakeword/entrainer.py`).
+
+Corrigé sans porter Silero (autre modèle, hors scope) : exige qu'un son
+assez fort dure au moins 200ms d'affilée avant de valider une détection
+— un clic est une impulsion de quelques ms, un mot parlé dure des
+centaines de ms. Plus grossier qu'un vrai VAD, mais cible exactement ce
+cas.
+
+**Bug trouvé en écrivant ce correctif** : le premier seuil choisi
+(0.01) était calibré sur une voix de synthèse Piper (forte), pas sur un
+vrai micro — un vrai enregistrement de « Jarvis » mesure ~0.0027 de RMS
+brut, sous ce seuil. Résultat : plus aucune détection ne passait, y
+compris les vraies. Mesuré sur `samples_jarvis/jarvis_01.wav` puis
+recalibré à 0.0018 (entre le bruit de fond à 0.0012 et la parole réelle à
+~0.0027) — **même seuil réutilisé pour la capture de commande**, qui
+avait le même problème latent (testée jusque-là uniquement avec une voix
+de synthèse, jamais avec un vrai micro discret).
+
+**Testé en conditions réelles, contre-épreuve incluse** : 20 clics
+synthétiques d'affilée (impulsion bruyante ~25ms, volume comparable à de
+la parole) → aucun déclenchement. Le vrai extrait « Jarvis » rejoué
+immédiatement après → détection toujours correcte (non-régression
+vérifiée après le recalibrage du seuil).
+
+### Suite : se redéclenchait tout seul juste après une vraie détection
+
+**4. « Dûment noté » persistant + redéclenchement fantôme.** Après
+correction des bugs 1-3, Quentin confirme que la détection capte bien ce
+qu'il dit — mais l'affichage « entendu » revient à « rien entendu après
+Jarvis » une fraction de seconde après avoir montré la bonne transcription.
+Deux bugs de timing distincts, empilés :
+
+- **a) Course entre fin de capture et mise en pause.** `captureCommand()`
+  repassait le détecteur en mode scoring dès que la capture se terminait
+  — mais la vraie mise en pause (déclenchée après la *transcription*,
+  dans `useVoice.js`) n'intervenait que plus tard. Pendant cet
+  entre-deux (le temps de l'appel réseau vers Whisper), le détecteur
+  rescorait déjà avec l'écho de la commande encore dans sa fenêtre.
+  Corrigé : `captureCommand()` met maintenant le détecteur en pause
+  **dès la fin de la capture elle-même**, pas après coup — et
+  `useVoice.js` doit explicitement appeler `resume()` dans les deux
+  culs-de-sac (rien dit, transcription vide) puisque plus rien ne le
+  fait automatiquement pour eux.
+- **b) Fenêtre glissante jamais vidée à la reprise.** Une fois le bug (a)
+  corrigé, un second est apparu : `resume()` (appelé après que Jarvis a
+  fini de répondre) ne vidait pas la fenêtre glissante de 1.5s — l'audio
+  d'avant la pause (fin du mot d'éveil, voire la commande) y restait, et
+  se faisait rescorer instantanément à la reprise, redéclenchant parfois
+  une détection fantôme. Corrigé : `resume()` vide maintenant la fenêtre,
+  l'historique de bruit et les compteurs avant de réactiver le scoring.
+
+**Testé en conditions réelles** : séquence complète « Jarvis » + question
+enchaînée sans pause, réponse correcte reçue, **puis surveillé 15
+secondes sans qu'aucun redéclenchement fantôme n'apparaisse** (contre une
+réapparition quasi immédiate de « rien entendu » avant ce correctif).
+
+### Ce qui reste à valider — nécessite ta vraie voix, donc toi
+
+- 🔲 Détection et capture de commande avec ta vraie voix, en conditions
+  d'usage réelles (les tests ci-dessus rejouent des enregistrements,
+  proche mais pas identique à parler en direct).
+- 🔲 Latence perçue en usage réel (le calcul tourne dans le navigateur,
+  potentiellement plus lent qu'un PC selon l'appareil — à surveiller
+  surtout sur un téléphone plus tard).
+- 🔲 Lecture audio automatique de la réponse : les navigateurs bloquent
+  parfois `audio.play()` déclenché en dehors d'un clic direct
+  (politiques « autoplay »). Le code échoue proprement si bloqué (pas de
+  plantage), mais reste silencieux sans te prévenir pourquoi — à
+  vérifier en usage réel.
+- 🔲 Comportement si tu parles pendant que Jarvis répond (pas de
+  barge-in : il faut attendre la fin avant que l'écoute reprenne).
+
+### Mise en place (une fois — deux fichiers ne sont pas versionnés)
+
+`web/public/models/jarvis_wakeword.onnx` (gitignoré comme tous les
+`*.onnx`/`*.tflite` du projet, même logique que le modèle wake word du
+PC) et `web/public/ort/` (runtime tiers, pas du code projet) doivent
+exister avant de lancer le build. S'ils manquent (première installation,
+nouveau clone) :
+
+```
+pip install tf2onnx onnx
+python -m tf2onnx.convert --tflite agents/desktop/wakeword/jarvis_wakeword.tflite --output web/public/models/jarvis_wakeword.onnx --opset 13
+
+cd web && npm install
+cp node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm public/ort/
+cp node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs public/ort/
+```
+
+### Pour tester
+
+```
+cd web && npm run build
+```
+puis va sur `http://localhost:8420` (le brain sert maintenant la Console
+directement — plus besoin de `npm run dev` séparé pour cette
+fonctionnalité, qui ne marche pas en mode dev Vite, voir bug ci-dessus).
 
 ---
 
 ## Ce qu'il ne faut PAS faire (pièges, dans la continuité de `ROADMAP.md`)
 
-- Ne pas faire transiter l'audio brut (micro) par le brain — latence et
-  complexité inutiles, tout le pipeline vocal reste local à l'agent qui
-  possède le micro.
+- Ne pas faire transiter l'audio brut par le brain **pour l'agent
+  desktop** — latence et complexité inutiles, son pipeline vocal reste
+  local (wake word TFLite, Whisper spéculatif). Exception assumée et
+  décidée avec Quentin en Phase 9 : un navigateur ne peut pas faire de
+  wake word/STT local aussi facilement, donc la Console web envoie
+  l'audio au brain (qui relaie à Speaches, en local ou via Tailscale) —
+  seule la voix web fait ce choix, pas le PC.
 - Ne pas construire l'agent mobile natif avant que la Phase 6 (accès web
   distant) soit stable — le navigateur couvre déjà 80 % du besoin
   immédiat pour beaucoup moins d'effort.

@@ -17,7 +17,9 @@ import asyncio
 import threading
 from typing import Any, Callable
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
 from agents.protocol.auth import generate_token
@@ -28,7 +30,7 @@ from agents.protocol.messages import (
     RegisterAck,
     parse_message,
 )
-from brain import activity, config, device_store, pairing, routines
+from brain import activity, config, device_store, pairing, routines, speech
 from brain.core.chat import ask_stream
 from brain.devices import Device, registry
 
@@ -187,6 +189,33 @@ async def routine_status(routine_id: str) -> dict:
     return routines.status(routine_id) or {"status": "idle"}
 
 
+@app.post("/api/speech/transcribe")
+async def transcribe_speech(file: UploadFile) -> dict:
+    """Transcrit un segment audio envoyé par la Console web (Phase 9).
+
+    Appel bloquant (I/O réseau vers Speaches) exécuté dans le threadpool
+    de FastAPI par défaut pour les endpoints `def` synchrones — mais ici
+    la fonction est `async`, donc on le fait explicitement pour ne pas
+    geler la boucle d'événements pendant l'appel à Speaches.
+    """
+    audio_bytes = await file.read()
+    text = await asyncio.to_thread(
+        speech.transcribe, audio_bytes, file.filename or "audio.webm", file.content_type or "audio/webm",
+    )
+    return {"text": text}
+
+
+@app.post("/api/speech/synthesize")
+async def synthesize_speech(body: dict) -> Response:
+    text = (body.get("text") or "").strip()
+    if not text:
+        raise HTTPException(400, "text manquant")
+    audio = await asyncio.to_thread(speech.synthesize, text)
+    if audio is None:
+        raise HTTPException(502, "synthèse vocale indisponible")
+    return Response(content=audio, media_type="audio/mpeg")
+
+
 @app.websocket("/ws/chat")
 async def ws_chat(websocket: WebSocket) -> None:
     """Chat texte — utilisé par la Console web (Phase 2) et, depuis la
@@ -279,6 +308,20 @@ async def ws_agent(websocket: WebSocket) -> None:
         if device_id:
             registry.unregister(device_id)
             print(f"[brain] appareil déconnecté : {device_id}")
+
+
+# Doit être monté APRÈS toutes les routes /api et /ws ci-dessus : Starlette
+# essaie les routes dans l'ordre d'enregistrement, donc /api/... continue de
+# matcher ses handlers avant que ce montage catch-all ne s'en charge.
+# Nécessaire pour la Phase 9 (détection locale du mot d'éveil) : le
+# navigateur importe dynamiquement des fichiers .wasm/.mjs, ce que le
+# serveur de dev Vite refuse pour les fichiers de web/public — brain sert
+# le vrai build (web/dist) sans cette restriction. `npm run build` d'abord.
+_WEB_DIST = config.ROOT / "web" / "dist"
+if _WEB_DIST.exists():
+    app.mount("/", StaticFiles(directory=str(_WEB_DIST), html=True), name="web")
+else:
+    print(f"[brain] {_WEB_DIST} introuvable — lance `npm run build` dans web/ pour servir la Console ici.")
 
 
 def start() -> None:
