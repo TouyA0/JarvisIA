@@ -28,7 +28,7 @@ from agents.protocol.messages import (
     RegisterAck,
     parse_message,
 )
-from brain import config, device_store, pairing
+from brain import activity, config, device_store, pairing
 from brain.core.chat import ask_stream
 from brain.devices import Device, registry
 
@@ -89,6 +89,22 @@ async def list_devices() -> list[dict]:
     return result
 
 
+@app.get("/api/devices/{device_id}")
+async def get_device(device_id: str) -> dict:
+    live_dev = registry.get(device_id)
+    known = next((d for d in device_store.list_known() if d["device_id"] == device_id), None)
+    if not known:
+        raise HTTPException(404, f"appareil {device_id!r} inconnu")
+    return {
+        "device_id": device_id,
+        "name": known["name"],
+        "device_type": known["device_type"],
+        "paired_at": known["paired_at"],
+        "capabilities": live_dev.capabilities if live_dev else [],
+        "status": live_dev.status if live_dev else "offline",
+    }
+
+
 @app.post("/api/pairing/code")
 async def create_pairing_code() -> dict:
     """Génère un code d'appairage à usage unique (5 min) — affiché côté
@@ -124,8 +140,15 @@ async def dispatch_command(device_id: str, body: dict) -> dict:
     except KeyError:
         raise HTTPException(404, f"appareil {device_id!r} non connecté")
     except asyncio.TimeoutError:
+        activity.record(device_id, tool, ok=False, error="timeout")
         raise HTTPException(504, "l'appareil n'a pas répondu à temps")
+    activity.record(device_id, tool, ok=result.ok, error=result.error)
     return result.model_dump()
+
+
+@app.get("/api/devices/{device_id}/activity")
+async def device_activity(device_id: str) -> list[dict]:
+    return activity.for_device(device_id)
 
 
 @app.websocket("/ws/chat")

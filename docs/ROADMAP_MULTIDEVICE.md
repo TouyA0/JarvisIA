@@ -205,10 +205,28 @@ de la boucle vocale existante — pas à sa place.
   (token sauvegardé, aucune ressaisie) → révocation testée (`Oublier`
   dans l'UI → l'agent se fait couper, détecte le refus, s'arrête avec un
   message clair au lieu de boucler). Capture d'écran vérifiée.
-- 🔲 **Écran 03 Focus appareil** — pas fait. Vue détaillée (capture
-  d'écran à la demande, journal d'activité, contrôle distant) reste à
-  construire ; `POST /api/devices/{id}/dispatch` (Phase 3) est déjà le
-  bon point d'entrée pour son bouton d'action.
+- ✅ **Écran 03 Focus appareil** (`web/src/components/Focus.jsx`) —
+  accessible depuis un bouton « Focus » sur chaque carte d'appareil
+  (Centre d'appareils), pas depuis le dock seul (n'a de sens qu'une fois
+  un appareil choisi). Fonctionnalités **réelles**, pas de maquette :
+  - **Capturer** — dispatch réel de `take_screenshot` vers l'agent,
+    image reçue et affichée. Testé en vrai : capture d'écran effective
+    du PC reçue via le brain et affichée dans le navigateur.
+  - **Journal** — `brain/activity.py` (nouveau) enregistre chaque
+    dispatch (outil, succès/échec, horodatage) par appareil, exposé via
+    `GET /api/devices/{id}/activity`. Testé : l'entrée `take_screenshot`
+    apparaît bien après une capture.
+  - **Verrouiller** — dispatch `run_powershell` (verrouillage Windows),
+    confirmation JS avant envoi. **Non testé en direct** volontairement
+    — l'aurait fait sur la machine réellement utilisée pour ce test,
+    donc l'aurait verrouillée sous mes propres yeux. Le mécanisme
+    sous-jacent (dispatch → `run_powershell`) est déjà prouvé par les
+    tests Phase 3.
+  - **Volontairement absents** : flux vidéo live (le design en montre
+    un, mais rien ne le permet aujourd'hui — juste une capture à la
+    demande), section Capteurs (micro distant/localisation — concepts
+    mobile, aucun sens pour un agent desktop), bouton Transférer (aucune
+    infra de transfert de fichier entre appareils).
 - 🔲 **Routage contextuel** (« ouvre ça sur mon portable ») — pas fait,
   dépend du même chantier que la fin de la Phase 3 : `router.py`/
   `commands.py`/`agent.py` n'appellent toujours pas le dispatch réseau,

@@ -1,6 +1,6 @@
 import Dock from "./Dock.jsx";
 
-export default function Frame({ active, onNavigate, children }) {
+export default function Frame({ active, onNavigate, focusEnabled, children }) {
   return (
     <div
       style={{
@@ -24,7 +24,7 @@ export default function Frame({ active, onNavigate, children }) {
           boxShadow: "0 40px 90px -50px #000",
         }}
       >
-        <Dock active={active} onNavigate={onNavigate} />
+        <Dock active={active} onNavigate={onNavigate} focusEnabled={focusEnabled} />
         <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
           {children}
         </div>

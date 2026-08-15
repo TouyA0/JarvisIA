@@ -1,10 +1,22 @@
 import { useState } from "react";
 import Console from "./components/Console.jsx";
 import Devices from "./components/Devices.jsx";
+import Focus from "./components/Focus.jsx";
 
 export default function App() {
   const [view, setView] = useState("console");
+  const [focusDeviceId, setFocusDeviceId] = useState(null);
 
-  if (view === "devices") return <Devices onNavigate={setView} />;
-  return <Console onNavigate={setView} />;
+  function openFocus(deviceId) {
+    setFocusDeviceId(deviceId);
+    setView("focus");
+  }
+
+  if (view === "devices") {
+    return <Devices onNavigate={setView} onOpenFocus={openFocus} focusEnabled={!!focusDeviceId} />;
+  }
+  if (view === "focus" && focusDeviceId) {
+    return <Focus deviceId={focusDeviceId} onNavigate={setView} />;
+  }
+  return <Console onNavigate={setView} focusEnabled={!!focusDeviceId} />;
 }

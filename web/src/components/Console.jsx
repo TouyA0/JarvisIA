@@ -287,11 +287,11 @@ function CommandBar({ status, busy, onSend }) {
   );
 }
 
-export default function Console({ onNavigate }) {
+export default function Console({ onNavigate, focusEnabled }) {
   const { status, question, answer, busy, ask } = useChat();
 
   return (
-    <Frame active="console" onNavigate={onNavigate}>
+    <Frame active="console" onNavigate={onNavigate} focusEnabled={focusEnabled}>
       <Topbar status={status} />
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
         <Hub question={question} answer={answer} busy={busy} />

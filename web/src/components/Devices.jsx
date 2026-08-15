@@ -34,7 +34,7 @@ function Topbar({ count }) {
   );
 }
 
-function DeviceCard({ device, onForget }) {
+function DeviceCard({ device, onForget, onFocus }) {
   const online = device.status === "online";
   return (
     <div
@@ -72,7 +72,7 @@ function DeviceCard({ device, onForget }) {
           {online ? "en ligne" : "hors ligne"}
         </span>
       </div>
-      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
         <button
           onClick={() => onForget(device.device_id)}
           style={{
@@ -86,6 +86,22 @@ function DeviceCard({ device, onForget }) {
           }}
         >
           Oublier
+        </button>
+        <button
+          onClick={() => onFocus(device.device_id)}
+          disabled={!online}
+          title={online ? undefined : "hors ligne"}
+          style={{
+            border: "1px solid var(--stroke)",
+            borderRadius: 9,
+            padding: "7px 11px",
+            fontSize: 12,
+            background: online ? "var(--cyan-dim)" : "transparent",
+            color: online ? "var(--cyan)" : "var(--faint)",
+            cursor: online ? "pointer" : "default",
+          }}
+        >
+          Focus
         </button>
       </div>
     </div>
@@ -180,11 +196,11 @@ function PairingPanel() {
   );
 }
 
-export default function Devices({ onNavigate }) {
+export default function Devices({ onNavigate, onOpenFocus, focusEnabled }) {
   const { devices, forget } = useDevices();
 
   return (
-    <Frame active="devices" onNavigate={onNavigate}>
+    <Frame active="devices" onNavigate={onNavigate} focusEnabled={focusEnabled}>
       <Topbar count={devices.length} />
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
         <div style={{ flex: 1, padding: 22, overflow: "auto", minWidth: 0 }}>
@@ -195,7 +211,7 @@ export default function Devices({ onNavigate }) {
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
               {devices.map((d) => (
-                <DeviceCard key={d.device_id} device={d} onForget={forget} />
+                <DeviceCard key={d.device_id} device={d} onForget={forget} onFocus={onOpenFocus} />
               ))}
             </div>
           )}

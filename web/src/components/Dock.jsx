@@ -1,9 +1,10 @@
 import Reactor from "./Reactor.jsx";
 
-// focus/routines pas encore codés (Phase 4 suite / Phase 5) — icônes
-// visibles pour la fidélité au design mais inertes plutôt que de mener
-// vers un écran vide.
-const ITEMS = [
+// routines pas encore codé (Phase 5) — icône visible pour la fidélité au
+// design mais inerte plutôt que de mener vers un écran vide. focus n'a de
+// sens qu'une fois un appareil choisi (bouton "Focus" d'une carte dans
+// Appareils) — inerte tant qu'aucun n'est sélectionné.
+const BASE_ITEMS = [
   { id: "console", enabled: true },
   { id: "devices", enabled: true },
   { id: "focus", enabled: false },
@@ -34,7 +35,10 @@ function DockShape({ id, active }) {
   return <div style={{ width: 12, height: 12, borderRadius: "50%", background: color }} />;
 }
 
-export default function Dock({ active, onNavigate }) {
+export default function Dock({ active, onNavigate, focusEnabled = false }) {
+  const items = BASE_ITEMS.map((item) =>
+    item.id === "focus" ? { ...item, enabled: focusEnabled } : item,
+  );
   return (
     <div
       style={{
@@ -51,7 +55,7 @@ export default function Dock({ active, onNavigate }) {
     >
       <Reactor />
       <div style={{ display: "flex", flexDirection: "column", gap: 14, alignItems: "center" }}>
-        {ITEMS.map((item) => {
+        {items.map((item) => {
           const isActive = item.id === active;
           return (
             <button
