@@ -21,6 +21,7 @@ MODES_FILE = DATA_DIR / "modes.json"
 CURRENT_MODE_FILE = DATA_DIR / "current_mode.json"
 USAGE_FILE = DATA_DIR / "usage.json"
 CONTEXT_FILE = DATA_DIR / "context.json"
+DEVICES_FILE = DATA_DIR / "devices.json"
 
 
 def ensure_dirs() -> None:

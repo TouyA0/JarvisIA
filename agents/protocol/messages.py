@@ -57,12 +57,20 @@ class CommandResult(BaseModel):
 
 # ══ Brain → Agent ═══════════════════════════════════════════════════════════
 class RegisterAck(BaseModel):
-    """Réponse du brain à un DeviceRegister — accepte ou refuse la connexion."""
+    """Réponse du brain à un DeviceRegister — accepte ou refuse la connexion.
+
+    issued_token n'est présent qu'au tout premier appairage (le token
+    envoyé dans DeviceRegister était un code d'appairage à usage unique,
+    pas encore un vrai token) — l'agent doit alors le sauvegarder et
+    l'utiliser pour toutes les connexions suivantes. Absent quand
+    l'agent se reconnectait déjà avec son token définitif.
+    """
 
     type: Literal["device.register_ack"] = "device.register_ack"
     device_id: str
     ok: bool
     reason: str | None = None
+    issued_token: str | None = None
 
 
 class CommandDispatch(BaseModel):

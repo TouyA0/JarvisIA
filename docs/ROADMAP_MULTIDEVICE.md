@@ -153,21 +153,44 @@ ce qui tourne au quotidien. Le canal réseau est prouvé et prêt ;
 l'intégration réelle mérite d'être faite à part, en pouvant tester sur ta
 machine au fur et à mesure.
 
-## Phase 4 — Centre d'appareils & Focus appareil ▲▲▲
+## Phase 4 — Centre d'appareils & Focus appareil ▲▲▲ · 🟡 partiellement fait
 
-- Écran **02 Centre d'appareils** : liste des agents connectés (vient du
-  registre de la Phase 1), statut temps réel via WebSocket, flux
-  d'appairage d'un nouvel appareil (génération + affichage d'un token/QR
-  code à saisir côté agent).
-- Écran **03 Focus appareil** : vue détaillée — capture d'écran à la
-  demande (`agents/desktop/tools/screen.py` existe déjà, il faut
-  l'exposer via le protocole), journal d'activité (réutilise
-  `services/convlog.py` côté brain), contrôle distant (envoyer une
-  commande à un agent précis).
-- **Routage contextuel** : quand tu dis « ouvre cette page sur mon PC
-  portable », le brain doit déduire `device_id` cible depuis la phrase —
-  probablement un outil Claude dédié (`list_devices` + `target_device` en
-  paramètre des tools existants) plutôt qu'une nouvelle mécanique de NLU.
+- ✅ **Vrai appairage, plus de token accepté à l'aveugle** (résout le TODO
+  de sécurité laissé en Phase 1) :
+  - `agents/protocol/messages.py` — `RegisterAck.issued_token` ajouté.
+  - `brain/pairing.py` — codes à usage unique (format `XXX-XXX`, 5 min,
+    en mémoire uniquement).
+  - `brain/device_store.py` — appareils appairés persistés
+    (`data/devices.json`, token définitif par appareil).
+  - `brain/server.py` — `/ws/agent` accepte un code d'appairage (échangé
+    contre un token permanent) OU un token déjà connu ; refuse tout le
+    reste. `POST /api/pairing/code`, `GET /api/devices` (fusionne
+    connectés + connus hors ligne), `DELETE /api/devices/{id}` (révoque).
+  - `agents/desktop/agent_client.py` — demande le code au premier
+    lancement (`JARVIS_PAIRING_CODE` ou saisie clavier), sauvegarde le
+    token émis, se reconnecte ensuite sans rien redemander ; distingue
+    proprement « brain injoignable » (retente) de « token révoqué »
+    (s'arrête avec un message clair plutôt que boucler dans le vide).
+- ✅ Écran **02 Centre d'appareils** (`web/src/components/Devices.jsx`) :
+  liste des appareils (statut, capacités, bouton Oublier) + panneau
+  d'appairage (génération de code, instructions). `Dock`/`Frame`/`Reactor`
+  extraits en composants partagés (Console les utilise aussi désormais).
+  Rafraîchi par polling (`useDevices.js`, 3s) — pas de WebSocket dédié,
+  suffisant pour un écran de gestion.
+- ✅ **Testé en conditions réelles, cycle complet** : code généré dans le
+  navigateur → collé dans un vrai `agent_client.py` lancé en parallèle →
+  apparaît « en ligne » dans l'UI → reconnexion automatique vérifiée
+  (token sauvegardé, aucune ressaisie) → révocation testée (`Oublier`
+  dans l'UI → l'agent se fait couper, détecte le refus, s'arrête avec un
+  message clair au lieu de boucler). Capture d'écran vérifiée.
+- 🔲 **Écran 03 Focus appareil** — pas fait. Vue détaillée (capture
+  d'écran à la demande, journal d'activité, contrôle distant) reste à
+  construire ; `POST /api/devices/{id}/dispatch` (Phase 3) est déjà le
+  bon point d'entrée pour son bouton d'action.
+- 🔲 **Routage contextuel** (« ouvre ça sur mon portable ») — pas fait,
+  dépend du même chantier que la fin de la Phase 3 : `router.py`/
+  `commands.py`/`agent.py` n'appellent toujours pas le dispatch réseau,
+  donc il n'y a rien à cibler contextuellement pour l'instant.
 
 ## Phase 5 — Routines cross-device ▲▲
 

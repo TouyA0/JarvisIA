@@ -20,6 +20,7 @@ from typing import Any, Callable
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
+from agents.protocol.auth import generate_token
 from agents.protocol.messages import (
     CommandResult,
     DeviceRegister,
@@ -27,7 +28,7 @@ from agents.protocol.messages import (
     RegisterAck,
     parse_message,
 )
-from brain import config
+from brain import config, device_store, pairing
 from brain.core.chat import ask_stream
 from brain.devices import Device, registry
 
@@ -70,16 +71,41 @@ async def health() -> dict:
 
 @app.get("/api/devices")
 async def list_devices() -> list[dict]:
-    return [
-        {
-            "device_id": d.device_id,
-            "name": d.name,
-            "device_type": d.device_type,
-            "capabilities": d.capabilities,
-            "status": d.status,
-        }
-        for d in registry.list()
-    ]
+    """Tous les appareils appairés (connus), en ligne ou pas — l'écran Centre
+    d'appareils affiche aussi ceux actuellement hors ligne."""
+    live = {d.device_id: d for d in registry.list()}
+    result = []
+    for known in device_store.list_known():
+        device_id = known["device_id"]
+        live_dev = live.get(device_id)
+        result.append({
+            "device_id": device_id,
+            "name": known["name"],
+            "device_type": known["device_type"],
+            "paired_at": known["paired_at"],
+            "capabilities": live_dev.capabilities if live_dev else [],
+            "status": live_dev.status if live_dev else "offline",
+        })
+    return result
+
+
+@app.post("/api/pairing/code")
+async def create_pairing_code() -> dict:
+    """Génère un code d'appairage à usage unique (5 min) — affiché côté
+    Centre d'appareils, à saisir sur le nouvel agent."""
+    return {"code": pairing.create_code()}
+
+
+@app.delete("/api/devices/{device_id}")
+async def forget_device(device_id: str) -> dict:
+    """Révoque un appareil appairé — il devra être ré-appairé pour revenir."""
+    live_dev = registry.get(device_id)
+    if live_dev:
+        await live_dev.websocket.close()
+        registry.unregister(device_id)
+    if not device_store.forget(device_id):
+        raise HTTPException(404, f"appareil {device_id!r} inconnu")
+    return {"ok": True}
 
 
 @app.post("/api/devices/{device_id}/dispatch")
@@ -140,11 +166,23 @@ async def ws_agent(websocket: WebSocket) -> None:
             await websocket.close()
             return
 
-        # TODO Phase 1 suite : vérifier msg.token contre un registre persistant
-        # (data/devices.json) au lieu d'accepter tout token non vide.
-        if not msg.token:
+        issued_token = None
+        known = device_store.find_by_token(msg.token) if msg.token else None
+
+        if known:
+            # Reconnexion normale : le token présenté est déjà celui émis à
+            # l'appairage. On fait confiance au device_id qu'il porte déjà.
+            pass
+        elif msg.token and pairing.consume(msg.token):
+            # Premier appairage : msg.token était en fait le code affiché
+            # côté Centre d'appareils, pas un vrai token — on en émet un
+            # définitif que l'agent devra sauvegarder pour la suite.
+            issued_token = generate_token()
+            device_store.register(msg.device_id, msg.name, msg.device_type, issued_token)
+        else:
             await websocket.send_json(RegisterAck(
-                device_id=msg.device_id, ok=False, reason="token manquant",
+                device_id=msg.device_id, ok=False,
+                reason="token invalide, expiré, ou appareil non appairé",
             ).model_dump())
             await websocket.close()
             return
@@ -157,8 +195,11 @@ async def ws_agent(websocket: WebSocket) -> None:
             capabilities=list(msg.capabilities),
             websocket=websocket,
         ))
-        await websocket.send_json(RegisterAck(device_id=msg.device_id, ok=True).model_dump())
-        print(f"[brain] appareil connecté : {msg.name} ({msg.device_id})")
+        await websocket.send_json(RegisterAck(
+            device_id=msg.device_id, ok=True, issued_token=issued_token,
+        ).model_dump())
+        print(f"[brain] appareil connecté : {msg.name} ({msg.device_id})"
+              + (" [nouvel appairage]" if issued_token else ""))
 
         while True:
             raw = await websocket.receive_json()

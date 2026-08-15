@@ -15,6 +15,7 @@ data/usage.json
 data/memory.json
 data/current_mode.json
 data/device_id.json
+data/devices.json
 
 # Audio d'entraînement wake word (volumineux)
 agents/desktop/wakeword/samples_jarvis/

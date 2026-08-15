@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useChat } from "../lib/useChat.js";
+import Frame from "./Frame.jsx";
 
 const dot = (color, size = 7) => ({
   width: size,
@@ -9,96 +10,6 @@ const dot = (color, size = 7) => ({
   boxShadow: `0 0 8px ${color}`,
   flex: "none",
 });
-
-function Reactor({ size = 38 }) {
-  return (
-    <div
-      style={{
-        position: "relative",
-        width: size,
-        height: size,
-        borderRadius: "50%",
-        border: "1px solid var(--stroke)",
-        display: "grid",
-        placeItems: "center",
-        boxShadow: "0 0 18px -6px var(--glow)",
-        flex: "none",
-      }}
-    >
-      <div style={dot("var(--cyan)", size * 0.24)} />
-      <div
-        style={{
-          position: "absolute",
-          inset: -1,
-          borderRadius: "50%",
-          borderTop: "1.5px solid var(--cyan)",
-          animation: "spin 5s linear infinite",
-        }}
-      />
-    </div>
-  );
-}
-
-function Dock() {
-  const items = ["console", "devices", "focus", "routines"];
-  const [active] = useState("console");
-  return (
-    <div
-      style={{
-        width: 70,
-        flex: "none",
-        borderRight: "1px solid var(--stroke-soft)",
-        background: "var(--bg-2)",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        padding: "18px 0",
-        gap: 22,
-      }}
-    >
-      <Reactor />
-      <div style={{ display: "flex", flexDirection: "column", gap: 14, alignItems: "center" }}>
-        {items.map((id) => (
-          <div
-            key={id}
-            title={id}
-            style={{
-              width: 42,
-              height: 42,
-              borderRadius: 12,
-              display: "grid",
-              placeItems: "center",
-              background: id === active ? "var(--cyan-dim)" : "transparent",
-              border: id === active ? "1px solid var(--stroke)" : "1px solid transparent",
-              boxShadow: id === active ? "0 0 16px -6px var(--glow)" : "none",
-            }}
-          >
-            <div
-              style={{
-                width: 12,
-                height: 12,
-                borderRadius: id === "devices" ? 2 : id === "focus" ? 3 : "50%",
-                background: id === active ? "var(--cyan)" : "var(--faint)",
-                transform: id === "devices" ? "rotate(45deg)" : "none",
-                border: id === "focus" ? "1.5px solid var(--faint)" : "none",
-              }}
-            />
-          </div>
-        ))}
-      </div>
-      <div
-        style={{
-          marginTop: "auto",
-          width: 34,
-          height: 34,
-          borderRadius: "50%",
-          background: "var(--bg-3)",
-          border: "1px solid var(--stroke-soft)",
-        }}
-      />
-    </div>
-  );
-}
 
 function Topbar({ status }) {
   const online = status === "online";
@@ -376,41 +287,16 @@ function CommandBar({ status, busy, onSend }) {
   );
 }
 
-export default function Console() {
+export default function Console({ onNavigate }) {
   const { status, question, answer, busy, ask } = useChat();
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        padding: 24,
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 1160,
-          height: "min(720px, 90vh)",
-          border: "1px solid var(--stroke-soft)",
-          borderRadius: 20,
-          overflow: "hidden",
-          display: "flex",
-          background: "var(--bg)",
-          boxShadow: "0 40px 90px -50px #000",
-        }}
-      >
-        <Dock />
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-          <Topbar status={status} />
-          <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
-            <Hub question={question} answer={answer} busy={busy} />
-          </div>
-          <CommandBar status={status} busy={busy} onSend={ask} />
-        </div>
+    <Frame active="console" onNavigate={onNavigate}>
+      <Topbar status={status} />
+      <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
+        <Hub question={question} answer={answer} busy={busy} />
       </div>
-    </div>
+      <CommandBar status={status} busy={busy} onSend={ask} />
+    </Frame>
   );
 }
