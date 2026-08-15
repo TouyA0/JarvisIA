@@ -265,14 +265,35 @@ Console web (Phase 2), donc au même historique.
   `commands.py`/`agent.py` n'appellent toujours pas le dispatch réseau,
   donc il n'y a rien à cibler contextuellement pour l'instant.
 
-## Phase 5 — Routines cross-device ▲▲
+## Phase 5 — Routines cross-device ▲▲ · ✅ fait (périmètre manuel)
 
-- Écran **04 Routines** : les routines existent déjà côté agent
-  (`services/routines.py`) mais mono-appareil. Étendre le format pour
-  qu'une routine puisse cibler plusieurs `device_id` dans une même
-  séquence.
-- Éditeur de routine dans le web (au moins CRUD basique), pas seulement
-  vocal.
+- ✅ `brain/routines.py` (nouveau, côté brain — pas une extension de
+  `agents/desktop/services/routines.py`, qui reste mono-appareil et
+  vocal, système séparé exprès) : routines = séquences d'étapes
+  `{device_id, tool, args}`, stockées dans
+  `data/cross_device_routines.json`, exécutées via
+  `brain/devices.py::registry.dispatch()` (Phase 3), journalisées via
+  `brain/activity.py` (Phase 4). S'arrête à la première étape en échec.
+- ✅ Écran **04 Routines** (`web/src/components/Routines.jsx`) : liste
+  des routines avec progression en direct pendant l'exécution, builder
+  (nom + étapes, appareil + action par étape). Actions volontairement
+  **curatées** (Capturer, Verrouiller, Ouvrir une URL) — pas de console
+  PowerShell libre dans le builder, une routine s'exécute d'un clic sans
+  reconfirmation étape par étape, donc pas de commande arbitraire à ce
+  niveau (même logique de prudence que Focus appareil).
+- ✅ **Testé en conditions réelles** : routine à 2 étapes créée
+  (Capturer × 2, sur l'appareil desktop appairé), lancée depuis le
+  navigateur, progression `2 / 2` observée, confirmée aussi dans le
+  journal d'activité côté brain (2 `take_screenshot` réussis). Suppression
+  testée. Le step « Verrouiller » a été codé mais **jamais lancé** en
+  test — même prudence que pour Focus appareil, pour ne pas verrouiller
+  la machine de test.
+- 🔲 **Déclencheur manuel uniquement** — pas de déclencheur automatique
+  (horaire, vocal, arrivée sur un lieu). Le design en montre (« Focus
+  travail » activé/désactivé façon interrupteur), mais un interrupteur
+  qui ne déclenche rien tout seul serait un mensonge dans l'interface —
+  volontairement pas construit. Nécessiterait un scheduler et/ou un
+  branchement dans la boucle vocale (Phase 9), aucun des deux n'existe.
 
 ## Phase 6 — Accès distant + mobile web ▲▲
 
@@ -304,6 +325,30 @@ Console web (Phase 2), donc au même historique.
   réponses/notifications courtes, dictée vocale). À revisiter une fois
   les phases 1-6 stables — inutile d'y penser avant.
 
+## Phase 9 — Voix dans le navigateur (pas commencé, à cadrer) ▲▲▲
+
+Identifiée le 2026-08-15 : condition réelle pour que le HUD PyQt6 puisse
+un jour disparaître au profit du seul web (voir échange avec Quentin) —
+aujourd'hui la Console web est **texte uniquement**, aucune voix.
+
+- Nécessite : capture micro dans le navigateur (MediaRecorder/Web Audio
+  API), envoi de l'audio pour transcription, lecture de la réponse
+  synthétisée dans le navigateur.
+- **Tension avec un principe déjà posé** (section « pièges » plus bas) :
+  « ne pas faire transiter l'audio brut par le brain — tout le pipeline
+  vocal reste local à l'agent qui possède le micro ». Cette règle
+  supposait que l'agent avec micro tourne toujours en process Python
+  local (Whisper local, etc.). Un navigateur ne peut pas faire de STT
+  local aussi facilement — donc soit on accepte de faire transiter
+  l'audio jusqu'à un service de transcription (via le brain ou à côté),
+  soit on explore du STT embarqué dans le navigateur (whisper.cpp en
+  WASM, ou l'API Web Speech native si la qualité suffit). **Pas décidé.**
+  Ne pas commencer sans clarifier ce point d'abord — c'est le vrai nœud
+  technique de cette phase, pas un détail.
+- Le mot d'éveil (« Jarvis ») en continu dans un onglet de navigateur
+  pose aussi ses propres limites (l'onglet doit rester ouvert et actif),
+  différent de l'app desktop qui tourne en arrière-plan/tray.
+
 ---
 
 ## Ce qu'il ne faut PAS faire (pièges, dans la continuité de `ROADMAP.md`)
@@ -323,8 +368,10 @@ Console web (Phase 2), donc au même historique.
 
 ## Ordre recommandé
 
-Phase 0 → 1 → 2 → 3 → 4 → 5 → 6 → (7 et 8 en option, plus tard, pas
-urgentes). Chaque phase est démontrable seule avant de passer à la
-suivante — pas besoin d'attendre la fin du chantier pour avoir quelque
-chose d'utilisable : dès la Phase 2, tu peux déjà parler à Jarvis depuis
-un navigateur.
+Phase 0 → 1 → 2 → 3 → 4 → 5 faites. Restent : Phase 6 (accès distant +
+mobile web), Phase 9 (voix dans le navigateur — condition réelle pour
+que le HUD PyQt6 puisse un jour disparaître), puis 7 et 8 en option,
+plus tard, pas urgentes. Chaque phase est démontrable seule avant de
+passer à la suivante — pas besoin d'attendre la fin du chantier pour
+avoir quelque chose d'utilisable : dès la Phase 2, tu peux déjà taper à
+Jarvis depuis un navigateur (parler, pas encore — Phase 9).

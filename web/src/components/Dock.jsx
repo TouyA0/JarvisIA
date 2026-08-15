@@ -1,14 +1,12 @@
 import Reactor from "./Reactor.jsx";
 
-// routines pas encore codé (Phase 5) — icône visible pour la fidélité au
-// design mais inerte plutôt que de mener vers un écran vide. focus n'a de
-// sens qu'une fois un appareil choisi (bouton "Focus" d'une carte dans
-// Appareils) — inerte tant qu'aucun n'est sélectionné.
+// focus n'a de sens qu'une fois un appareil choisi (bouton "Focus" d'une
+// carte dans Appareils) — inerte tant qu'aucun n'est sélectionné.
 const BASE_ITEMS = [
   { id: "console", enabled: true },
   { id: "devices", enabled: true },
   { id: "focus", enabled: false },
-  { id: "routines", enabled: false },
+  { id: "routines", enabled: true },
 ];
 
 function DockShape({ id, active }) {

@@ -22,6 +22,11 @@ CURRENT_MODE_FILE = DATA_DIR / "current_mode.json"
 USAGE_FILE = DATA_DIR / "usage.json"
 CONTEXT_FILE = DATA_DIR / "context.json"
 DEVICES_FILE = DATA_DIR / "devices.json"
+# Nom délibérément différent de agents/desktop/config.py::ROUTINES_FILE
+# (data/routines.json) — formats et systèmes distincts, ne pas fusionner :
+# celui-ci cible plusieurs appareils via dispatch réseau, l'autre est
+# mono-appareil et exécuté en local par l'agent desktop.
+CROSS_DEVICE_ROUTINES_FILE = DATA_DIR / "cross_device_routines.json"
 
 
 def ensure_dirs() -> None:

@@ -28,7 +28,7 @@ from agents.protocol.messages import (
     RegisterAck,
     parse_message,
 )
-from brain import activity, config, device_store, pairing
+from brain import activity, config, device_store, pairing, routines
 from brain.core.chat import ask_stream
 from brain.devices import Device, registry
 
@@ -149,6 +149,42 @@ async def dispatch_command(device_id: str, body: dict) -> dict:
 @app.get("/api/devices/{device_id}/activity")
 async def device_activity(device_id: str) -> list[dict]:
     return activity.for_device(device_id)
+
+
+@app.get("/api/routines")
+async def list_routines() -> list[dict]:
+    return routines.list_routines()
+
+
+@app.post("/api/routines")
+async def create_routine(body: dict) -> dict:
+    name = (body.get("name") or "").strip()
+    steps = body.get("steps") or []
+    if not name:
+        raise HTTPException(400, "nom manquant")
+    if not steps:
+        raise HTTPException(400, "au moins une étape requise")
+    return routines.create(name, steps)
+
+
+@app.delete("/api/routines/{routine_id}")
+async def delete_routine(routine_id: str) -> dict:
+    if not routines.delete(routine_id):
+        raise HTTPException(404, f"routine {routine_id!r} inconnue")
+    return {"ok": True}
+
+
+@app.post("/api/routines/{routine_id}/run")
+async def run_routine(routine_id: str) -> dict:
+    if not routines.exists(routine_id):
+        raise HTTPException(404, f"routine {routine_id!r} inconnue")
+    asyncio.create_task(routines.run(routine_id))
+    return {"ok": True}
+
+
+@app.get("/api/routines/{routine_id}/status")
+async def routine_status(routine_id: str) -> dict:
+    return routines.status(routine_id) or {"status": "idle"}
 
 
 @app.websocket("/ws/chat")
