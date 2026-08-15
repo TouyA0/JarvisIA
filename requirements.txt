@@ -38,3 +38,8 @@ PyAutoGUI==0.9.54
 
 # --- Entraînement du wake word uniquement (wakeword/entrainer.py) ---
 scikit-learn==1.8.0
+
+# --- Protocole multi-appareils (agents/protocol/) ---
+# Nécessaire dès que l'agent desktop se connecte au brain en WebSocket (Phase 3).
+pydantic==2.9.2
+websockets==13.1

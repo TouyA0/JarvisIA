@@ -8,7 +8,7 @@ from __future__ import annotations
 import time
 
 from agents.desktop import config
-from agents.desktop.textutil import normalize_text_aligned
+from common.textutil import normalize_text_aligned
 
 _NOTE_TRIGGERS = ["prends note", "prend note", "prends en note", "prend en note",
                   "nouvelle note", "ajoute une note", "note dans mes notes"]

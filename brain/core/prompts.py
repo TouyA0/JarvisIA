@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 
-from agents.desktop import config
+from brain import config
 
 SYSTEM_PROMPT = """Tu es J.A.R.V.I.S. — Just A Rather Very Intelligent System — l'assistant personnel de Quentin. Tu es une intelligence artificielle d'une précision absolue, dotée d'un calme imperturbable et d'un humour so britannique qu'il passe souvent inaperçu.
 
@@ -195,7 +195,7 @@ def get_system_prompt() -> tuple[str, str]:
     """Retourne (bloc statique cacheable, bloc dynamique)."""
     global _system_prompt_cache
     if _system_prompt_cache is None:
-        from agents.desktop.brain import memory, modes
+        from brain.core import memory, modes
 
         static = SYSTEM_PROMPT
         context = load_context()

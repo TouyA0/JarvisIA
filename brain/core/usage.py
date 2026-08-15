@@ -6,7 +6,7 @@ import threading
 import time
 from typing import Callable, Optional
 
-from agents.desktop import config
+from brain import config
 
 _usage_lock = threading.Lock()
 

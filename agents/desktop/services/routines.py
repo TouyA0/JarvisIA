@@ -11,7 +11,7 @@ import time
 from typing import Callable
 
 from agents.desktop import config
-from agents.desktop.textutil import normalize_text
+from common.textutil import normalize_text
 
 _routines_cache: dict | None = None
 
@@ -44,7 +44,7 @@ def match_trigger(text: str) -> dict | None:
 def run(routine: dict, say: Callable[[str], None]) -> None:
     """Exécute les étapes d'une routine. `say` est fourni par le runtime
     (parole avec interruption + affichage HUD)."""
-    from agents.desktop.brain import modes as modes_mod
+    from brain.core import modes as modes_mod
     from agents.desktop.services import weather
     from agents.desktop import state
 

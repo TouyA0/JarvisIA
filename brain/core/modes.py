@@ -9,8 +9,8 @@ import json
 import re
 import time
 
-from agents.desktop import config
-from agents.desktop.textutil import normalize_text
+from brain import config
+from common.textutil import normalize_text
 
 _modes_cache: dict | None = None
 _current_mode_cache: dict | None = None
@@ -40,7 +40,7 @@ def get_current() -> dict:
 
 def set_mode(mode_id: str) -> dict | None:
     global _current_mode_cache
-    from agents.desktop.brain import prompts
+    from brain.core import prompts
 
     modes = load()
     mode = next((m for m in modes["modes"] if m["id"] == mode_id), None)

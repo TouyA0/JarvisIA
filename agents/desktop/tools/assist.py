@@ -4,7 +4,7 @@ from __future__ import annotations
 import time
 
 from agents.desktop import state
-from agents.desktop.textutil import normalize_text
+from common.textutil import normalize_text
 from agents.desktop.tools.safety import is_destructive_command
 
 

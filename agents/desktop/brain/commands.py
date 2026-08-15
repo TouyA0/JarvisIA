@@ -10,7 +10,7 @@ import json
 import time
 
 from agents.desktop import config
-from agents.desktop.textutil import normalize_text
+from common.textutil import normalize_text
 
 _commands_cache: list | None = None
 

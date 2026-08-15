@@ -8,9 +8,9 @@ from __future__ import annotations
 import time
 
 from agents.desktop import config, state
-from agents.desktop.brain import history, prompts, usage
 from agents.desktop.clients import get_anthropic
-from agents.desktop.textutil import split_ready_phrases
+from brain.core import history, prompts, usage
+from common.textutil import split_ready_phrases
 
 _DEFAULT_QUESTION = "Décris brièvement ce que montre cette zone et signale ce qui est notable."
 

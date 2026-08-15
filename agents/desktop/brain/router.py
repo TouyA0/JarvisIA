@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 import time
 
-from agents.desktop.textutil import normalize_text
+from common.textutil import normalize_text
 
 PC_COMMAND_KEYWORDS = [
     "ouvre", "ferme", "lance", "démarre", "arrête", "volume", "son",
@@ -100,7 +100,7 @@ def handle_direct(question: str) -> str | None:
     # Coût API du mois (« combien tu m'as coûté ce mois-ci ? »)
     if (("combien" in q and ("coute" in q or "cout" in q.split() or "depense" in q))
             or "cout du mois" in q or "ton cout" in q):
-        from agents.desktop.brain import usage
+        from brain.core import usage
         s = usage.summary()
         eur = s["month_cost_usd"] * 0.92
         if s["month_calls"] == 0:

@@ -11,8 +11,8 @@ import time
 from typing import Callable, Optional
 
 from agents.desktop import config, state
-from agents.desktop.brain import history, prompts, usage
 from agents.desktop.clients import get_anthropic
+from brain.core import history, prompts, usage
 from agents.desktop.tools import registry
 
 # Callback branché par le runtime pour afficher l'activité dans le HUD

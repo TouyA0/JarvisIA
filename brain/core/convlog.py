@@ -5,7 +5,7 @@ import json
 import threading
 import time
 
-from agents.desktop import config
+from brain import config
 
 _lock = threading.Lock()
 

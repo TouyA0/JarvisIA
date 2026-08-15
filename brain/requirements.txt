@@ -1,0 +1,8 @@
+# brain/ — dépendances du serveur central (Phase 1)
+# Séparé de requirements.txt (agent desktop) : le brain tourne comme process
+# à part, même si aujourd'hui les deux vivent sur la même machine.
+
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+pydantic==2.9.2
+websockets==13.1

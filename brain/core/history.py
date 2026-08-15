@@ -12,7 +12,7 @@ def remember_exchange(question: str, answer: str, source: str = "") -> None:
 
     # Journal persistant (data/logs/) — consultable plus tard
     try:
-        from agents.desktop.services import convlog
+        from brain.core import convlog
         convlog.log_exchange(question, answer, source)
     except Exception:
         pass

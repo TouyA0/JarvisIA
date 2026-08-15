@@ -15,7 +15,7 @@ import time
 from typing import Callable, Optional
 
 from agents.desktop import state
-from agents.desktop.textutil import normalize_text
+from common.textutil import normalize_text
 
 # ── Parsing des durées en français ────────────────────────────────────────────
 _WORD_NUMBERS = {

@@ -11,9 +11,9 @@ import json
 import re
 import time
 
-from agents.desktop import config
-from agents.desktop.clients import get_anthropic
-from agents.desktop.textutil import normalize_text, normalize_text_aligned
+from brain import config
+from brain.clients import get_anthropic
+from common.textutil import normalize_text, normalize_text_aligned
 
 _memory_cache: dict | None = None
 
@@ -51,7 +51,7 @@ def clean_fact(fact) -> str | None:
 
 def save(memory: dict) -> None:
     global _memory_cache
-    from agents.desktop.brain import prompts
+    from brain.core import prompts
 
     cleaned_facts = []
     for fact in memory.get("facts", []):
@@ -73,6 +73,10 @@ _FACT_TRIGGERS = ["memorise que", "retiens que", "sache que", "note que",
 
 def is_memory_fact(question: str) -> bool:
     """Détecte une demande de mémorisation de FAIT PERSONNEL (sans verbe d'action)."""
+    # Dépendance dans le mauvais sens (brain/core ne devrait pas importer
+    # agents/desktop) : is_learn_command est une fonction pure de matching
+    # texte, tolérable en attendant la Phase 3 où commands.py sera scindé
+    # entre matching (→ brain/core) et exécution locale (→ agents/desktop).
     from agents.desktop.brain.commands import is_learn_command
     q = normalize_text(question)
     return any(kw in q for kw in _FACT_TRIGGERS) and not is_learn_command(question)
@@ -109,7 +113,7 @@ def save_explicit_fact(question: str) -> str | None:
 # ── Consolidation en arrière-plan ────────────────────────────────────────────
 def update_memory() -> None:
     """Extrait les faits importants de la conversation via Claude et les mémorise."""
-    from agents.desktop.brain import history, usage
+    from brain.core import history, usage
 
     if len(history.conversation_history) < 4:
         return

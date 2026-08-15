@@ -17,7 +17,7 @@ import time
 import traceback
 
 from agents.desktop import APP_VERSION, config, state
-from agents.desktop.textutil import normalize_text
+from common.textutil import normalize_text
 from agents.desktop.ui.hud import overlay, TOKEN_PAUSE, TOKEN_RESUME, TOKEN_SNIP
 
 _tray = None
@@ -97,7 +97,8 @@ def _answer_with_brain(question: str) -> str | None:
     Retourne le texte prononcé, ou None si le tour a été interrompu avant
     toute parole.
     """
-    from agents.desktop.brain import agent, chat, router
+    from agents.desktop.brain import agent, router
+    from brain.core import chat
 
     if router.is_pc_command(question):
         from agents.desktop.audio import tts
@@ -266,7 +267,8 @@ def _handle_question(question: str) -> None:
 
 def _route_question(question: str, t0: float) -> None:
     from agents.desktop.audio import capture
-    from agents.desktop.brain import commands, memory, modes, router
+    from agents.desktop.brain import commands, router
+    from brain.core import memory, modes
     from agents.desktop.services import notes, routines, timers
 
     # 1. Changement de mode (« passe en mode travail »)
@@ -400,7 +402,8 @@ def _exit_pause() -> None:
 
 def _main_loop() -> None:
     from agents.desktop.audio import capture, stt, wakeword
-    from agents.desktop.brain import memory, router
+    from agents.desktop.brain import router
+    from brain.core import memory
 
     question_count = 0
 
@@ -516,7 +519,7 @@ def _greeting() -> str:
 def _boot() -> None:
     """Séquence de mise sous tension — chaque étape s'affiche dans le journal."""
     from agents.desktop.audio import capture, vad, wakeword
-    from agents.desktop.brain import modes, usage
+    from brain.core import modes, usage
     from agents.desktop.services import bootsound, diagnostics, hotkey, timers, weather
 
     overlay.show(0)
@@ -628,7 +631,8 @@ def start() -> None:
     except Exception:
         pass
 
-    from agents.desktop.brain import agent, usage
+    from agents.desktop.brain import agent
+    from brain.core import usage
     from agents.desktop.ui import dialogs, snip
     from agents.desktop.ui.tray import Tray
 
@@ -647,7 +651,7 @@ def start() -> None:
     overlay.on_quit = _quit
 
     def _mode_change_from_hud(mode_id: str) -> None:
-        from agents.desktop.brain import modes
+        from brain.core import modes
         activated = modes.set_mode(mode_id)
         if activated:
             overlay.set_mode(activated["name"].replace("Mode ", ""))

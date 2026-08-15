@@ -17,7 +17,7 @@ from pydub import AudioSegment
 
 from agents.desktop import config, state
 from agents.desktop.audio import capture, vad
-from agents.desktop.textutil import normalize_text
+from common.textutil import normalize_text
 
 # ── Profil de sortie audio (casque vs haut-parleurs) ─────────────────────────
 _output_profile_cache = {"name": None, "profile": "inconnu", "checked_at": 0.0}

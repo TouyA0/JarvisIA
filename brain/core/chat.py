@@ -11,10 +11,10 @@ import time
 
 import requests
 
-from agents.desktop import config, state
-from agents.desktop.brain import history, prompts, usage
-from agents.desktop.clients import get_anthropic
-from agents.desktop.textutil import split_ready_phrases
+from brain import config, state
+from brain.core import history, prompts, usage
+from brain.clients import get_anthropic
+from common.textutil import split_ready_phrases
 
 
 def ask_ollama_stream(question: str):

@@ -73,7 +73,7 @@ def start(push: callable) -> None:
                     links = _check_links()
                     last_links_at = now
 
-                from agents.desktop.brain import usage
+                from brain.core import usage
                 s = usage.summary()
 
                 metrics = state.get_metrics()
