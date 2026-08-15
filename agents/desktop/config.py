@@ -124,6 +124,10 @@ WEATHER_REFRESH_MINUTES = 30
 BOOT_SOUND = os.getenv("BOOT_SOUND", "1") != "0"
 GLOBAL_HOTKEY = os.getenv("GLOBAL_HOTKEY", "1") != "0"   # Ctrl+Alt+J
 
+# ── Brain (connexion réseau, agent_client.py) ────────────────────────────────
+BRAIN_URL = os.getenv("BRAIN_URL", "ws://127.0.0.1:8420/ws/agent")
+DEVICE_ID_FILE = DATA_DIR / "device_id.json"
+
 # ── Divers ────────────────────────────────────────────────────────────────────
 # Timeout d'écoute après le wake word avant retour en veille (secondes)
 CONVERSATION_TIMEOUT = 20

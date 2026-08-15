@@ -17,7 +17,7 @@ import asyncio
 import threading
 from typing import Any, Callable
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from agents.protocol.messages import (
@@ -66,6 +66,40 @@ async def _stream_sync_generator(gen_func: Callable[..., Any], *args, **kwargs):
 @app.get("/api/health")
 async def health() -> dict:
     return {"status": "ok", "devices": [d.device_id for d in registry.list()]}
+
+
+@app.get("/api/devices")
+async def list_devices() -> list[dict]:
+    return [
+        {
+            "device_id": d.device_id,
+            "name": d.name,
+            "device_type": d.device_type,
+            "capabilities": d.capabilities,
+            "status": d.status,
+        }
+        for d in registry.list()
+    ]
+
+
+@app.post("/api/devices/{device_id}/dispatch")
+async def dispatch_command(device_id: str, body: dict) -> dict:
+    """Envoie une commande à un agent connecté et attend son résultat.
+
+    Utilisé pour l'instant pour valider la Phase 3 en conditions réelles ;
+    deviendra le point d'entrée du bouton « exécuter » côté Focus appareil
+    (Phase 4).
+    """
+    tool = body.get("tool")
+    if not tool:
+        raise HTTPException(400, "tool manquant")
+    try:
+        result = await registry.dispatch(device_id, tool, body.get("args", {}))
+    except KeyError:
+        raise HTTPException(404, f"appareil {device_id!r} non connecté")
+    except asyncio.TimeoutError:
+        raise HTTPException(504, "l'appareil n'a pas répondu à temps")
+    return result.model_dump()
 
 
 @app.websocket("/ws/chat")

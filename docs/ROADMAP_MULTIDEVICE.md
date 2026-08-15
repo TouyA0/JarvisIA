@@ -109,21 +109,49 @@ Sur le PC fixe, un process qui tourne en continu.
 - Rien côté pilotage PC ni voix à ce stade, comme prévu — uniquement la
   chaîne web ↔ brain.
 
-## Phase 3 — Agent desktop en client réseau ▲▲▲
+## Phase 3 — Agent desktop en client réseau ▲▲▲ · 🟡 partiellement fait
 
-- `agents/desktop/runtime.py` devient un client WebSocket : il se connecte
-  au brain au démarrage, s'enregistre (`device.register`), écoute
-  `command.dispatch`, exécute via `agents/desktop/tools/*` (déjà prêt :
-  system, screen, input_ctl…), renvoie `command.result`.
-- La boucle micro/wake word/TTS reste **locale** à l'agent desktop (pas de
-  sens à faire transiter l'audio brut par le brain) ; seul le texte
-  transcrit part vers le brain pour décision.
-- Le HUD PyQt6 actuel devient optionnel : soit il reste comme interface
-  native de secours sur le PC fixe, soit il est retiré au profit du web
-  une fois la Console (Phase 2) au niveau. À trancher une fois la Phase 2
-  utilisable au quotidien — pas de décision à prendre maintenant.
-- Lancement auto au démarrage de Windows (F39 de `ROADMAP.md`, jamais fait)
-  — le bon moment de le faire puisqu'on retouche le point d'entrée.
+- ✅ `agents/desktop/agent_client.py` : client WebSocket complet — identité
+  stable persistée (`data/device_id.json`), enregistrement (`device.register`),
+  heartbeat périodique, écoute `command.dispatch`, exécute via
+  `agents/desktop/tools/registry.py` (le même registry qu'utilise déjà
+  l'agent Claude local — aucun outil réécrit), renvoie `command.result`.
+  Reconnexion automatique si le brain redémarre ou est injoignable.
+- ✅ `brain/server.py` : `GET /api/devices` (liste des appareils connectés)
+  et `POST /api/devices/{id}/dispatch` (envoie une commande, attend le
+  résultat) — deviendra le point d'entrée du bouton « exécuter » de Focus
+  appareil en Phase 4.
+- ✅ **Testé en conditions réelles, pas juste compilé** : brain lancé,
+  agent desktop connecté et visible dans `/api/devices`, commande
+  `read_clipboard` dispatchée du brain vers l'agent à travers le réseau,
+  résultat réel reçu en retour. Cas d'erreur vérifié (appareil inconnu →
+  404). Déconnexion propre vérifiée (l'appareil disparaît du registre).
+- 🔲 **Décision d'intégration NON prise** : `agent_client.py` est un canal
+  **parallèle et optionnel** — il ne remplace pas encore `runtime.py`.
+  `router.py`/`commands.py`/`agent.py` continuent d'exécuter les outils en
+  local comme avant, la boucle vocale n'est pas touchée. La question de
+  savoir SI et COMMENT faire router ces trois modules à travers ce canal
+  (au lieu d'appeler `agents.desktop.tools.registry` en direct) reste
+  ouverte — voir la section suivante pour pourquoi elle est reportée
+  volontairement plutôt que tranchée dans le désordre.
+- 🔲 HUD PyQt6 : question de le garder/retirer non tranchée, comme prévu.
+- 🔲 Lancement auto au démarrage de Windows (F39) : pas fait, reste
+  pertinent une fois l'agent réellement en usage quotidien.
+
+### Pourquoi l'intégration dans `runtime.py` n'a pas été faite ici
+
+`runtime.py` est la boucle vocale que tu utilises tous les jours — audio,
+wake word, TTS, HUD PyQt6, tout dans un seul process synchrone/threadé.
+La transformer en client réseau suppose de redessiner comment
+`state.stop_speaking`/`state.stop_agent` (de simples `threading.Event`
+aujourd'hui) fonctionnent une fois brain et agent dans deux process
+séparés — un signal d'interruption devra devenir un message du protocole,
+pas un Event partagé. C'est un vrai sujet de conception, pas une passe
+d'imports comme les autres phases, et je n'ai pas de moyen de tester
+micro/HUD/TTS dans cet environnement pour le faire sans risque de casser
+ce qui tourne au quotidien. Le canal réseau est prouvé et prêt ;
+l'intégration réelle mérite d'être faite à part, en pouvant tester sur ta
+machine au fur et à mesure.
 
 ## Phase 4 — Centre d'appareils & Focus appareil ▲▲▲
 
