@@ -97,8 +97,7 @@ def _answer_with_brain(question: str) -> str | None:
     Retourne le texte prononcé, ou None si le tour a été interrompu avant
     toute parole.
     """
-    from agents.desktop.brain import agent, router
-    from brain.core import chat
+    from agents.desktop.brain import agent, remote_chat, router
 
     if router.is_pc_command(question):
         from agents.desktop.audio import tts
@@ -131,7 +130,7 @@ def _answer_with_brain(question: str) -> str | None:
     def _sync_source(_phrase):
         overlay.set_source("ollama" if brain_state.get("source") == "ollama" else "ai")
 
-    result = _speak_stream(chat.ask_stream(question, brain_state), on_phrase=_sync_source)
+    result = _speak_stream(remote_chat.ask_stream(question, brain_state), on_phrase=_sync_source)
     overlay.set_model_label(
         config.OLLAMA_MODEL if brain_state.get("source") == "ollama"
         else config.CLAUDE_MODEL)

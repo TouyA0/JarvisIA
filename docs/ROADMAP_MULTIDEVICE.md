@@ -175,6 +175,39 @@ de la boucle vocale existante — pas à sa place.
   distance) reste ouvert mais n'était pas nécessaire pour cette
   intégration — seulement pour un futur bouton « stop » côté web.
 
+### Suite : voix et web unifiées sur la même conversation ✅
+
+Jusqu'ici, la voix (ce process) et la Console web (`brain/server.py`)
+tournaient chacune leur propre instance de `brain.core.chat`/`history` —
+deux conversations, deux mémoires, jamais synchronisées (limite notée
+explicitement plus haut). Résolu sans dupliquer aucune logique de
+décision : la voix parle maintenant au **même** `/ws/chat` que la
+Console web (Phase 2), donc au même historique.
+
+- `agents/desktop/brain/remote_chat.py` (nouveau) — même contrat que
+  `brain.core.chat.ask_stream` (générateur synchrone de phrases), mais
+  passe par `/ws/chat` via `websockets.sync.client` au lieu d'appeler
+  `brain.core.chat` en local. Repli automatique sur le chat local si le
+  brain est désactivé, injoignable, ou si la connexion tombe après coup
+  (même logique de non-mélange de réponses que le repli Ollama → Claude
+  existant : on annonce l'interruption plutôt que d'enchaîner une
+  réponse d'une autre source).
+- `brain/server.py::ws_chat` renvoie désormais la source
+  (`ollama`/`claude`) dans `chat.done`, pour que le badge modèle du HUD
+  reste correct même en passant par le réseau.
+- `runtime.py` appelle `remote_chat.ask_stream` à la place de
+  `brain.core.chat.ask_stream` pour la conversation pure (pas pour le
+  pilotage PC, qui reste local — voir plus haut).
+- **Testé en conditions réelles, les 3 branches** : désactivé → zéro
+  tentative réseau, direct au chat local ; activé + brain injoignable →
+  échec détecté immédiatement (`WinError 10061`), repli local propre ;
+  activé + brain lancé → réponse réelle reçue via `/ws/chat`, source
+  correctement remontée. Testé à part, sans passer par le process
+  `jarvis.py` réel de Quentin pour ne pas le perturber.
+- Portée volontairement limitée à la conversation pure : le pilotage PC
+  (`router.py`/`commands.py`/`agent.py`) exécute toujours en local,
+  inchangé.
+
 ## Phase 4 — Centre d'appareils & Focus appareil ▲▲▲ · 🟡 partiellement fait
 
 - ✅ **Vrai appairage, plus de token accepté à l'aveugle** (résout le TODO

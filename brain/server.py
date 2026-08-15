@@ -153,7 +153,12 @@ async def device_activity(device_id: str) -> list[dict]:
 
 @app.websocket("/ws/chat")
 async def ws_chat(websocket: WebSocket) -> None:
-    """Chat texte simple pour la Console web — pas de pilotage PC (Phase 2)."""
+    """Chat texte — utilisé par la Console web (Phase 2) et, depuis la
+    Phase 3 suite, par la boucle vocale de l'agent desktop elle-même
+    (voir agents/desktop/brain/remote_chat.py) : les deux partagent
+    maintenant la même conversation/mémoire, un seul brain qui décide.
+    Pas de pilotage PC ici, juste la conversation Ollama/Claude.
+    """
     await websocket.accept()
     try:
         while True:
@@ -161,9 +166,10 @@ async def ws_chat(websocket: WebSocket) -> None:
             question = (data.get("question") or "").strip()
             if not question:
                 continue
-            async for phrase in _stream_sync_generator(ask_stream, question):
+            brain_state: dict = {}
+            async for phrase in _stream_sync_generator(ask_stream, question, brain_state):
                 await websocket.send_json({"type": "chat.phrase", "text": phrase})
-            await websocket.send_json({"type": "chat.done"})
+            await websocket.send_json({"type": "chat.done", "source": brain_state.get("source")})
     except WebSocketDisconnect:
         pass
 
