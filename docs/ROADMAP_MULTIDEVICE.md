@@ -295,17 +295,26 @@ Console web (Phase 2), donc au même historique.
   volontairement pas construit. Nécessiterait un scheduler et/ou un
   branchement dans la boucle vocale (Phase 9), aucun des deux n'existe.
 
-## Phase 6 — Accès distant + mobile web ▲▲
+## Phase 6 — Accès distant + mobile web ▲▲ · 🟡 partiellement fait
 
-- **Tailscale** (ou équivalent WireGuard) sur le PC fixe et le téléphone :
-  accès à l'interface web du brain depuis l'extérieur du réseau local,
-  sans exposer de port publiquement.
-- Écran **05 Mobile** : appliquer les variantes responsive du design (pas
-  du simple reflow) à la Console, au Centre d'appareils et au Focus
-  appareil.
-- À ce stade, le téléphone peut déjà *piloter* Jarvis via le navigateur —
-  c'est suffisant pour beaucoup d'usages avant même d'avoir un agent
-  natif dessus.
+- ✅ **Web responsive, pas un simple reflow** : `useIsMobile.js` (seuil
+  768px, `matchMedia`) pilote une vraie réorganisation, pas juste des
+  colonnes qui rétrécissent. `Dock.jsx` passe en barre basse (comme
+  l'écran 05 du design) au lieu de barre latérale. `Frame.jsx` passe en
+  plein écran (fini la fenêtre flottante à coins arrondis). Les panneaux
+  latéraux (appairage dans Devices, builder dans Routines, infos/journal
+  dans Focus) passent sous le contenu principal au lieu d'à côté.
+  Console n'a rien demandé de spécifique (déjà fluide).
+- ✅ **Testé en conditions réelles** : viewport 375×812 (mobile) — dock en
+  bas confirmé (positions x variables/y fixe), cartes appareil pleine
+  largeur (grille 2 colonnes → 1), builder Routines pleine largeur, zéro
+  débordement horizontal sur les 4 écrans. Viewport 1280×800 (desktop) —
+  sidebar verticale confirmée intacte, aucune régression.
+- 🔲 **Tailscale (ou WireGuard)** — pas fait, c'est une action d'infra
+  côté PC fixe + téléphone de Quentin, pas du code à écrire ici.
+- À ce stade, le téléphone peut déjà *piloter* Jarvis via le navigateur
+  en local — il manque juste l'accès distant (Tailscale) pour en dehors
+  du réseau maison.
 
 ## Phase 7 — Agent mobile ▲▲▲
 
@@ -368,10 +377,11 @@ aujourd'hui la Console web est **texte uniquement**, aucune voix.
 
 ## Ordre recommandé
 
-Phase 0 → 1 → 2 → 3 → 4 → 5 faites. Restent : Phase 6 (accès distant +
-mobile web), Phase 9 (voix dans le navigateur — condition réelle pour
-que le HUD PyQt6 puisse un jour disparaître), puis 7 et 8 en option,
-plus tard, pas urgentes. Chaque phase est démontrable seule avant de
-passer à la suivante — pas besoin d'attendre la fin du chantier pour
+Phase 0 → 1 → 2 → 3 → 4 → 5 faites. Phase 6 : le web mobile est fait,
+il ne reste que Tailscale (action d'infra, pas de code). Reste sinon :
+Phase 9 (voix dans le navigateur — condition réelle pour que le HUD
+PyQt6 puisse un jour disparaître), puis 7 et 8 en option, plus tard,
+pas urgentes. Chaque phase est démontrable seule avant de passer à la
+suivante — pas besoin d'attendre la fin du chantier pour
 avoir quelque chose d'utilisable : dès la Phase 2, tu peux déjà taper à
 Jarvis depuis un navigateur (parler, pas encore — Phase 9).

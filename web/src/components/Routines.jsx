@@ -2,6 +2,7 @@ import { useState } from "react";
 import Frame from "./Frame.jsx";
 import { useRoutines } from "../lib/useRoutines.js";
 import { useDevices } from "../lib/useDevices.js";
+import { useIsMobile } from "../lib/useIsMobile.js";
 
 // Set volontairement restreint et curaté (pas de console PowerShell libre
 // dans le builder) — même logique de prudence que Focus.jsx : une routine
@@ -100,7 +101,7 @@ function RoutineCard({ routine, devices, onRun, onDelete }) {
   );
 }
 
-function Builder({ devices, onCreate }) {
+function Builder({ devices, onCreate, isMobile }) {
   const [name, setName] = useState("");
   const [steps, setSteps] = useState([]);
   const [kind, setKind] = useState(STEP_KINDS[0].id);
@@ -137,7 +138,9 @@ function Builder({ devices, onCreate }) {
   return (
     <div
       style={{
-        width: 298, flex: "none", borderLeft: "1px solid var(--stroke-soft)",
+        width: isMobile ? "100%" : 298, flex: "none",
+        borderLeft: isMobile ? "none" : "1px solid var(--stroke-soft)",
+        borderTop: isMobile ? "1px solid var(--stroke-soft)" : "none",
         background: "var(--bg-2)", padding: "22px 20px", display: "flex",
         flexDirection: "column", gap: 16, overflow: "auto",
       }}
@@ -206,21 +209,24 @@ function Builder({ devices, onCreate }) {
 export default function Routines({ onNavigate, focusEnabled }) {
   const { routines, create, remove, run } = useRoutines();
   const { devices } = useDevices();
+  const isMobile = useIsMobile();
 
   return (
     <Frame active="routines" onNavigate={onNavigate} focusEnabled={focusEnabled}>
       <Topbar count={routines.length} />
-      <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
-        <div style={{ flex: 1, padding: 22, overflow: "auto", display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: isMobile ? "column" : "row", minHeight: 0, overflow: "auto" }}>
+        <div style={{ flex: 1, padding: 22, overflow: "visible", display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
           {routines.length === 0 ? (
-            <div style={{ color: "var(--faint)", fontSize: 13 }}>Aucune routine — crées-en une à droite.</div>
+            <div style={{ color: "var(--faint)", fontSize: 13 }}>
+              Aucune routine — crées-en une {isMobile ? "en dessous" : "à droite"}.
+            </div>
           ) : (
             routines.map((r) => (
               <RoutineCard key={r.id} routine={r} devices={devices} onRun={run} onDelete={remove} />
             ))
           )}
         </div>
-        <Builder devices={devices} onCreate={create} />
+        <Builder devices={devices} onCreate={create} isMobile={isMobile} />
       </div>
     </Frame>
   );

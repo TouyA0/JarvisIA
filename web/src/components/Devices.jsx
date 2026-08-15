@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Frame from "./Frame.jsx";
 import { useDevices } from "../lib/useDevices.js";
+import { useIsMobile } from "../lib/useIsMobile.js";
 
 const dot = (color, size = 7) => ({
   width: size,
@@ -108,7 +109,7 @@ function DeviceCard({ device, onForget, onFocus }) {
   );
 }
 
-function PairingPanel() {
+function PairingPanel({ isMobile }) {
   const [code, setCode] = useState(null);
   const [expired, setExpired] = useState(false);
 
@@ -123,9 +124,10 @@ function PairingPanel() {
   return (
     <div
       style={{
-        width: 298,
+        width: isMobile ? "100%" : 298,
         flex: "none",
-        borderLeft: "1px solid var(--stroke-soft)",
+        borderLeft: isMobile ? "none" : "1px solid var(--stroke-soft)",
+        borderTop: isMobile ? "1px solid var(--stroke-soft)" : "none",
         background: "var(--bg-2)",
         padding: "22px 20px",
         display: "flex",
@@ -198,25 +200,26 @@ function PairingPanel() {
 
 export default function Devices({ onNavigate, onOpenFocus, focusEnabled }) {
   const { devices, forget } = useDevices();
+  const isMobile = useIsMobile();
 
   return (
     <Frame active="devices" onNavigate={onNavigate} focusEnabled={focusEnabled}>
       <Topbar count={devices.length} />
-      <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
-        <div style={{ flex: 1, padding: 22, overflow: "auto", minWidth: 0 }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: isMobile ? "column" : "row", minHeight: 0, overflow: "auto" }}>
+        <div style={{ flex: 1, padding: 22, overflow: isMobile ? "visible" : "auto", minWidth: 0 }}>
           {devices.length === 0 ? (
             <div style={{ color: "var(--faint)", fontSize: 13 }}>
-              Aucun appareil appairé pour l'instant — génère un code d'appairage à droite.
+              Aucun appareil appairé pour l'instant — génère un code d'appairage {isMobile ? "en dessous" : "à droite"}.
             </div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14 }}>
               {devices.map((d) => (
                 <DeviceCard key={d.device_id} device={d} onForget={forget} onFocus={onOpenFocus} />
               ))}
             </div>
           )}
         </div>
-        <PairingPanel />
+        <PairingPanel isMobile={isMobile} />
       </div>
     </Frame>
   );

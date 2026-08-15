@@ -1,4 +1,5 @@
 import Reactor from "./Reactor.jsx";
+import { useIsMobile } from "../lib/useIsMobile.js";
 
 // focus n'a de sens qu'une fois un appareil choisi (bouton "Focus" d'une
 // carte dans Appareils) — inerte tant qu'aucun n'est sélectionné.
@@ -34,9 +35,57 @@ function DockShape({ id, active }) {
 }
 
 export default function Dock({ active, onNavigate, focusEnabled = false }) {
+  const isMobile = useIsMobile();
   const items = BASE_ITEMS.map((item) =>
     item.id === "focus" ? { ...item, enabled: focusEnabled } : item,
   );
+
+  // Sur mobile, le dock devient une barre basse (pas de reactor ni de
+  // pastille compte — juste la navigation, à portée de pouce). Sur
+  // desktop, barre latérale complète comme dans le design.
+  if (isMobile) {
+    return (
+      <div
+        style={{
+          height: 64,
+          flex: "none",
+          borderTop: "1px solid var(--stroke-soft)",
+          background: "var(--bg-2)",
+          display: "flex",
+          justifyContent: "space-around",
+          alignItems: "center",
+          order: 2,
+        }}
+      >
+        {items.map((item) => {
+          const isActive = item.id === active;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              title={item.enabled ? item.id : `${item.id} — bientôt`}
+              onClick={() => item.enabled && onNavigate(item.id)}
+              disabled={!item.enabled}
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 12,
+                display: "grid",
+                placeItems: "center",
+                background: isActive ? "var(--cyan-dim)" : "transparent",
+                border: "none",
+                opacity: item.enabled ? 1 : 0.4,
+                padding: 0,
+              }}
+            >
+              <DockShape id={item.id} active={isActive} />
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div
       style={{

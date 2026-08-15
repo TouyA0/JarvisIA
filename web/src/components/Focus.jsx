@@ -1,5 +1,6 @@
 import Frame from "./Frame.jsx";
 import { useFocusDevice } from "../lib/useFocusDevice.js";
+import { useIsMobile } from "../lib/useIsMobile.js";
 
 const dot = (color, size = 7) => ({
   width: size,
@@ -43,6 +44,7 @@ function formatTime(ts) {
 
 export default function Focus({ deviceId, onNavigate }) {
   const { device, activityLog, screenshot, busy, error, capture, lock } = useFocusDevice(deviceId);
+  const isMobile = useIsMobile();
 
   function handleLock() {
     if (window.confirm("Verrouiller cet appareil maintenant ?")) lock();
@@ -51,7 +53,7 @@ export default function Focus({ deviceId, onNavigate }) {
   return (
     <Frame active="focus" onNavigate={onNavigate} focusEnabled>
       <Topbar device={device} />
-      <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: isMobile ? "column" : "row", minHeight: 0, overflow: "auto" }}>
         <div
           style={{
             flex: 1,
@@ -128,7 +130,9 @@ export default function Focus({ deviceId, onNavigate }) {
 
         <div
           style={{
-            width: 298, flex: "none", borderLeft: "1px solid var(--stroke-soft)",
+            width: isMobile ? "100%" : 298, flex: "none",
+            borderLeft: isMobile ? "none" : "1px solid var(--stroke-soft)",
+            borderTop: isMobile ? "1px solid var(--stroke-soft)" : "none",
             background: "var(--bg-2)", padding: "22px 20px", display: "flex",
             flexDirection: "column", gap: 18, overflow: "auto",
           }}

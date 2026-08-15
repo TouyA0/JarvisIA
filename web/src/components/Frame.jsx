@@ -1,6 +1,20 @@
 import Dock from "./Dock.jsx";
+import { useIsMobile } from "../lib/useIsMobile.js";
 
 export default function Frame({ active, onNavigate, focusEnabled, children }) {
+  const isMobile = useIsMobile();
+
+  if (isMobile) {
+    // Plein écran, pas de fenêtre flottante — le dock passe en barre
+    // basse (voir Dock.jsx), le contenu prend toute la largeur.
+    return (
+      <div style={{ height: "100dvh", display: "flex", flexDirection: "column", background: "var(--bg)" }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>{children}</div>
+        <Dock active={active} onNavigate={onNavigate} focusEnabled={focusEnabled} />
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
