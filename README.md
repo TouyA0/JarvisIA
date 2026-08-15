@@ -157,6 +157,8 @@ Jarvis/
 | `WEATHER_LAT` / `WEATHER_LON` / `WEATHER_CITY` | Toulouse | météo |
 | `BOOT_SOUND` | `1` | son de mise sous tension |
 | `GLOBAL_HOTKEY` | `1` | Ctrl+Alt+J (HUD) et Ctrl+Alt+V (Vision ciblée) |
+| `BRAIN_ENABLED` | `0` | connecte ce PC au brain en tâche de fond (multi-appareils, voir `docs/ROADMAP_MULTIDEVICE.md`) — nécessite d'avoir appairé l'appareil au préalable via `python -m agents.desktop.agent_client` |
+| `BRAIN_URL` | `ws://127.0.0.1:8420/ws/agent` | adresse du brain, si `BRAIN_ENABLED=1` |
 
 > Voix personnalisée : le dossier `voice/` contient `jarvis-high.onnx` (Piper).
 > Pour l'utiliser, enregistrez-la dans votre instance Speaches puis pointez

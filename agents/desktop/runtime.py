@@ -659,4 +659,33 @@ def start() -> None:
     overlay.on_mode_change = _mode_change_from_hud
 
     threading.Thread(target=_worker, daemon=True).start()
+    _start_brain_link()
     overlay.exec()   # boucle Qt — bloque jusqu'à fermeture
+
+
+def _start_brain_link() -> None:
+    """Connecte ce PC au brain en tâche de fond, EN PLUS de la boucle vocale
+    locale (inchangée) — permet au brain/à la Console web de dispatcher des
+    commandes ici, sans rien changer au fonctionnement vocal existant.
+
+    Désactivé par défaut (config.BRAIN_ENABLED) et n'essaie jamais si
+    l'appareil n'est pas déjà appairé : le flux d'appairage attend une
+    saisie clavier (voir agents/desktop/agent_client.py), inconcevable
+    dans un thread caché du HUD — l'appairage se fait à part, une fois,
+    via `python -m agents.desktop.agent_client`.
+    """
+    if not config.BRAIN_ENABLED:
+        return
+    if not config.DEVICE_ID_FILE.exists():
+        print("[brain] BRAIN_ENABLED=1 mais aucun appareil appairé — "
+              "lancez `python -m agents.desktop.agent_client` une fois pour appairer.")
+        return
+
+    import asyncio
+    from agents.desktop import agent_client
+
+    def _run_agent_client() -> None:
+        asyncio.run(agent_client.run())
+
+    threading.Thread(target=_run_agent_client, daemon=True).start()
+    print("[brain] connexion au brain en arrière-plan activée (BRAIN_ENABLED=1).")

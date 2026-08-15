@@ -138,20 +138,42 @@ Sur le PC fixe, un process qui tourne en continu.
 - 🔲 Lancement auto au démarrage de Windows (F39) : pas fait, reste
   pertinent une fois l'agent réellement en usage quotidien.
 
-### Pourquoi l'intégration dans `runtime.py` n'a pas été faite ici
+### Suite : `runtime.py` connecté au brain, en tâche de fond ✅
 
-`runtime.py` est la boucle vocale que tu utilises tous les jours — audio,
-wake word, TTS, HUD PyQt6, tout dans un seul process synchrone/threadé.
-La transformer en client réseau suppose de redessiner comment
-`state.stop_speaking`/`state.stop_agent` (de simples `threading.Event`
-aujourd'hui) fonctionnent une fois brain et agent dans deux process
-séparés — un signal d'interruption devra devenir un message du protocole,
-pas un Event partagé. C'est un vrai sujet de conception, pas une passe
-d'imports comme les autres phases, et je n'ai pas de moyen de tester
-micro/HUD/TTS dans cet environnement pour le faire sans risque de casser
-ce qui tourne au quotidien. Le canal réseau est prouvé et prêt ;
-l'intégration réelle mérite d'être faite à part, en pouvant tester sur ta
-machine au fur et à mesure.
+Plutôt que de transformer `router.py`/`commands.py`/`agent.py` pour
+qu'ils appellent le dispatch réseau à la place de l'exécution locale
+(ce qui aurait ajouté de la latence pour zéro bénéfice tant qu'il n'y a
+qu'un seul appareil, PC fixe = celui qui écoute), l'intégration retenue
+est plus simple et sans risque : `runtime.py` lance
+`agent_client.run()` dans un **thread daemon supplémentaire**, en plus
+de la boucle vocale existante — pas à sa place.
+
+- `agents/desktop/runtime.py::_start_brain_link()` — démarre le client
+  brain dans un thread à part (`asyncio.run()` dans son propre thread,
+  la boucle Qt/audio existante reste inchangée). N'essaie **jamais** si
+  l'appareil n'est pas déjà appairé (le flux d'appairage attend une
+  saisie clavier — inconcevable dans un thread caché du HUD). Gardé
+  **désactivé par défaut** (`config.BRAIN_ENABLED`, `.env`) : le brain ne
+  fait pas encore partie de `start_jarvis.bat`, donc aucun changement de
+  comportement tant qu'on n'active pas explicitement.
+- `agent_client.py` : bruit de reconnexion réduit (un seul message par
+  coupure au lieu d'un toutes les 5s) — nécessaire maintenant qu'il
+  tourne en silence à l'année plutôt que dans un terminal de test.
+- **Testé en conditions réelles** (sans passer par le HUD Qt, en appelant
+  `_start_brain_link()` directement — la fonction ne dépend pas de Qt) :
+  les trois branches vérifiées — désactivé → aucun thread ; activé sans
+  appairage → message d'aide, aucun thread ; activé + appairé + brain
+  lancé → connexion réelle confirmée en ligne côté `/api/devices` avec
+  les bonnes capacités pendant que le thread tourne.
+- 🔲 **Reste non fait, sciemment** : `router.py`/`commands.py`/`agent.py`
+  n'appellent toujours pas le dispatch réseau — ils continuent d'exécuter
+  localement. Le PC fixe est maintenant à la fois exécutant vocal local
+  ET agent joignable à distance, mais rien ne route encore une commande
+  d'un appareil vers un AUTRE — ça n'a de sens qu'avec un deuxième agent
+  réel (portable ou mobile) à cibler, qui n'existe pas encore.
+- 🔲 Le sujet `state.stop_speaking`/`state.stop_agent` (interruption à
+  distance) reste ouvert mais n'était pas nécessaire pour cette
+  intégration — seulement pour un futur bouton « stop » côté web.
 
 ## Phase 4 — Centre d'appareils & Focus appareil ▲▲▲ · 🟡 partiellement fait
 

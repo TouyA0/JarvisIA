@@ -125,6 +125,10 @@ BOOT_SOUND = os.getenv("BOOT_SOUND", "1") != "0"
 GLOBAL_HOTKEY = os.getenv("GLOBAL_HOTKEY", "1") != "0"   # Ctrl+Alt+J
 
 # ── Brain (connexion réseau, agent_client.py) ────────────────────────────────
+# Désactivé par défaut : le brain ne fait pas encore partie du lancement
+# quotidien (start_jarvis.bat ne le démarre pas). Activer avec BRAIN_ENABLED=1
+# dans .env une fois prêt à tester — sinon aucun changement de comportement.
+BRAIN_ENABLED = os.getenv("BRAIN_ENABLED", "0") == "1"
 BRAIN_URL = os.getenv("BRAIN_URL", "ws://127.0.0.1:8420/ws/agent")
 DEVICE_ID_FILE = DATA_DIR / "device_id.json"
 

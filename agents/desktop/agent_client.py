@@ -133,12 +133,21 @@ async def _handle_connection(ws, identity: dict) -> None:
 async def run(brain_url: str | None = None) -> None:
     identity = _load_identity()
     url = brain_url or config.BRAIN_URL
+    was_unreachable = False
     while True:
         try:
             async with websockets.connect(url) as ws:
+                if was_unreachable:
+                    print("[agent] brain de nouveau joignable.")
+                    was_unreachable = False
                 await _handle_connection(ws, identity)
         except (websockets.exceptions.ConnectionClosed, OSError) as exc:
-            print(f"[agent] brain injoignable ({exc}) — nouvelle tentative dans {RECONNECT_SECONDS}s")
+            # Tourne en tâche de fond au quotidien (voir runtime.py) : un seul
+            # message par coupure, pas un toutes les 5s tant que le brain
+            # n'est simplement pas lancé.
+            if not was_unreachable:
+                print(f"[agent] brain injoignable ({exc}) — nouvelles tentatives silencieuses en arrière-plan.")
+                was_unreachable = True
         except PairingRejected as exc:
             if identity.get("paired"):
                 # Était appairé, ne l'est plus (révoqué côté Centre
