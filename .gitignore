@@ -23,6 +23,10 @@ agents/desktop/wakeword/samples_negatifs/
 *.onnx
 *.tflite
 
+# Web (web/)
+web/node_modules/
+web/dist/
+
 # VS Code / OS
 .vscode/
 .DS_Store

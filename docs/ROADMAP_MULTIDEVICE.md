@@ -89,15 +89,25 @@ Sur le PC fixe, un process qui tourne en continu.
 - Un seul agent supporté au départ (le desktop) pour valider le
   brain avant de généraliser — confirmé par la scope ci-dessus.
 
-## Phase 2 — Web UI : Console ▲▲
+## Phase 2 — Web UI : Console ▲▲ · ✅ fait
 
-- Scaffolding front (Vite + framework choisi), extraction des tokens
-  couleur/typo du design en variables CSS/thème partagé.
-- Écran **01 Console** codé en composants réels, branché sur
-  `brain/server.py` en WebSocket : chat texte fonctionnel de bout en bout
-  (toi → web → brain → Claude/Ollama → réponse streamée → web).
-- Pas encore de voix ni de multi-appareils à ce stade — juste valider que
-  la chaîne web ↔ brain marche et que le rendu colle au design.
+- ✅ Scaffolding front : React + Vite (`web/`), tokens couleur/typo extraits
+  du design dans `web/src/styles/tokens.css` (palette OKLCH, Space
+  Grotesk + IBM Plex Sans/Mono — copiés, pas réinventés).
+- ✅ `brain/server.py` mis à jour : proxy Vite (`/api`, `/ws` → :8420 en
+  dev) configuré dans `web/vite.config.js`.
+- ✅ Écran **01 Console** codé (`web/src/components/Console.jsx`) : dock,
+  topbar avec statut cerveau, hub radial animé (breathe/spin), barre de
+  commande fonctionnelle. Rail de droite (état système / aperçu appareil /
+  activité) volontairement pas codé — décoratif dans le design, dépend
+  du multi-appareils (Phase 4), pas de sens de le figer maintenant.
+- ✅ **Testé de bout en bout dans un vrai navigateur** : question tapée →
+  `useChat.js` (WebSocket) → `brain/server.py` (`/ws/chat`) →
+  `brain/core/chat.py` (Ollama indisponible → repli Claude, confirmé en
+  usage réel) → réponse streamée affichée dans l'UI. Capture d'écran
+  vérifiée, rendu conforme au design.
+- Rien côté pilotage PC ni voix à ce stade, comme prévu — uniquement la
+  chaîne web ↔ brain.
 
 ## Phase 3 — Agent desktop en client réseau ▲▲▲
 
