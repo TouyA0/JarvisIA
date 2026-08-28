@@ -295,7 +295,7 @@ Console web (Phase 2), donc au même historique.
   volontairement pas construit. Nécessiterait un scheduler et/ou un
   branchement dans la boucle vocale (Phase 9), aucun des deux n'existe.
 
-## Phase 6 — Accès distant + mobile web ▲▲ · 🟡 partiellement fait
+## Phase 6 — Accès distant + mobile web ▲▲ · ✅ fait
 
 - ✅ **Web responsive, pas un simple reflow** : `useIsMobile.js` (seuil
   768px, `matchMedia`) pilote une vraie réorganisation, pas juste des
@@ -310,11 +310,29 @@ Console web (Phase 2), donc au même historique.
   largeur (grille 2 colonnes → 1), builder Routines pleine largeur, zéro
   débordement horizontal sur les 4 écrans. Viewport 1280×800 (desktop) —
   sidebar verticale confirmée intacte, aucune régression.
-- 🔲 **Tailscale (ou WireGuard)** — pas fait, c'est une action d'infra
-  côté PC fixe + téléphone de Quentin, pas du code à écrire ici.
-- À ce stade, le téléphone peut déjà *piloter* Jarvis via le navigateur
-  en local — il manque juste l'accès distant (Tailscale) pour en dehors
-  du réseau maison.
+- ✅ **Accès distant** — fait, sans Tailscale : Quentin avait déjà un VPN
+  WireGuard vers un Raspberry Pi sur le même réseau que le PC fixe,
+  avec `AllowedIPs` incluant déjà le sous-réseau maison côté client.
+  Réutilisé tel quel plutôt que d'ajouter une nouvelle brique — cohérent
+  avec « ne pas exposer le brain publiquement » (il n'a pas
+  d'authentification sur `/ws/chat`, pas prêt pour internet).
+  **Deux vrais blocages trouvés et corrigés en testant en conditions
+  réelles** (téléphone en 4G, wifi coupé, VPN activé) :
+  - Windows bloquait les connexions entrantes sur le port 8420 —
+    résolu avec une règle de pare-feu (`New-NetFirewallRule`), qui doit
+    être lancée dans un PowerShell **administrateur** (sinon échec
+    silencieux « Access is denied »).
+  - **Le vrai bogue** : le brain que j'avais lancé pendant mes tests du
+    jour tournait avec `--host 127.0.0.1` (habitude prise pendant les
+    tests locaux) au lieu de `0.0.0.0` — donc injoignable depuis le
+    réseau quoi qu'il arrive, pare-feu ou pas. `brain/config.py` a
+    pourtant `0.0.0.0` comme défaut ; le problème venait uniquement des
+    commandes manuelles tapées pendant la session de test, pas du code.
+    À retenir : toujours lancer avec `python -m brain.server` (utilise
+    les bons défauts) ou `--host 0.0.0.0` explicite, jamais
+    `--host 127.0.0.1` si un accès réseau est prévu.
+- Testé : Console web chargée et fonctionnelle depuis un téléphone en
+  4G, VPN activé, aucun wifi partagé avec le PC fixe.
 
 ## Phase 7 — Agent mobile ▲▲▲
 
@@ -650,11 +668,9 @@ fonctionnalité, qui ne marche pas en mode dev Vite, voir bug ci-dessus).
 
 ## Ordre recommandé
 
-Phase 0 → 1 → 2 → 3 → 4 → 5 faites. Phase 6 : le web mobile est fait,
-il ne reste que Tailscale (action d'infra, pas de code). Reste sinon :
-Phase 9 (voix dans le navigateur — condition réelle pour que le HUD
-PyQt6 puisse un jour disparaître), puis 7 et 8 en option, plus tard,
-pas urgentes. Chaque phase est démontrable seule avant de passer à la
+Phase 0 → 1 → 2 → 3 → 4 → 5 → 6 → 9 faites (voix web comprise). Restent
+7 et 8 en option, plus tard, pas urgentes — rien d'autre d'important en
+attente. Chaque phase est démontrable seule avant de passer à la
 suivante — pas besoin d'attendre la fin du chantier pour
 avoir quelque chose d'utilisable : dès la Phase 2, tu peux déjà taper à
 Jarvis depuis un navigateur (parler, pas encore — Phase 9).
