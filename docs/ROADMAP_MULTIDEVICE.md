@@ -603,6 +603,43 @@ enchaînée sans pause, réponse correcte reçue, **puis surveillé 15
 secondes sans qu'aucun redéclenchement fantôme n'apparaisse** (contre une
 réapparition quasi immédiate de « rien entendu » avant ce correctif).
 
+### Suite : réponses génériques (« Dûment noté, Monsieur. ») à de vraies questions
+
+En testant la voix en conditions réelles, Quentin a remarqué que Jarvis
+répondait par des accusés de réception vagues (« Dûment noté, Monsieur. »,
+« C'est en cours. ») même à des questions directes (« tu m'entends ? »),
+au lieu d'y répondre vraiment — visible surtout côté modèle local Ollama
+(`qwen3:14b`), moins avec Claude.
+
+**Diagnostic** : `brain/core/prompts.py::SYSTEM_PROMPT` listait « Dûment
+noté. » parmi les formulations de confirmation, sans distinguer le cas
+« Monsieur donne une instruction/info à retenir » (confirmation
+appropriée) du cas « Monsieur pose une question et attend une réponse »
+(confirmation = échec). Un modèle plus petit qu'Ollama généralise mal
+cette nuance implicite.
+
+**Corrigé** : ajout d'une règle explicite dans `RÈGLES DE COMMUNICATION`
+distinguant question et instruction, plus un exemple concret (« tu
+m'entends ? » → « Cinq sur cinq, Monsieur. Je vous entends
+parfaitement. ») dans `EXEMPLES DE RÉPONSES PARFAITES`. Brain redémarré
+pour vider le cache du prompt (`_system_prompt_cache`).
+
+**Testé en conditions réelles**, brain relancé et Ollama chargé (source
+confirmée `ollama` sur chaque réponse, pas juste le fallback Claude) :
+
+| Question | Avant | Après |
+|---|---|---|
+| « Est-ce que tu m'entends bien » | « Dûment noté, Monsieur. » | « Cinq sur cinq, Monsieur. Je vous entends parfaitement. » |
+| « Tu es là » | générique | réponse directe |
+| « Tu m'entends » | générique | « Cinq sur cinq... » |
+| « Quelle heure est-il » | correct | inchangé (pas de régression) |
+| « Mémorise que j'aime le café » | « Dûment noté, Monsieur. ... » | inchangé — la confirmation reste utilisée à bon escient pour une vraie instruction |
+
+Cas limite noté sans y toucher : « Ça fonctionne bien » (affirmation sans
+point d'interrogation) reçoit encore une réponse de type « C'est en
+cours » — ambigu (peut se lire comme une affirmation, pas forcément une
+question), pas traité comme une régression.
+
 ### Ce qui reste à valider — nécessite ta vraie voix, donc toi
 
 - 🔲 Détection et capture de commande avec ta vraie voix, en conditions
