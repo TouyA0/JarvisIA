@@ -3,7 +3,10 @@
 #   2. Vérifie/démarre Ollama (cerveau conversationnel local)
 #   3. Préchauffe le modèle local en arrière-plan (~2 min à froid, sinon Jarvis
 #      démarre avec un premier "chat" lent le temps que le modèle charge)
-#   4. Lance jarvis.py
+#   4. Vérifie/démarre le brain (serveur central : Console web, accès
+#      distant, voix navigateur — dans sa propre fenêtre, pour garder les
+#      logs visibles séparément de Jarvis)
+#   5. Lance jarvis.py (agent desktop : wake word, HUD, pilotage PC)
 #
 # Docker Desktop et Ollama démarrent normalement tout seuls avec Windows — ce
 # script ne fait rien dans ce cas (juste une vérification rapide), et ne les
@@ -138,7 +141,37 @@ if ($ollamaReady) {
 }
 Write-Host ""
 
-# --- 3. Jarvis ---
+# --- 3. Brain (serveur central : Console web, accès distant, voix navigateur) ---
+Write-Step "Brain (serveur central)..."
+$brainPort = Get-EnvValue "BRAIN_PORT" "8420"
+$brainReady = Test-HttpOk "http://localhost:$brainPort/api/health"
+
+if ($brainReady) {
+    Write-Ok "Brain déjà actif sur le port $brainPort."
+} else {
+    Write-Warn "Brain non démarré. Lancement dans sa propre fenêtre..."
+    # Fenêtre séparée (pas Start-Job) : le brain a ses propres logs utiles
+    # à surveiller (voir docs/ROADMAP_MULTIDEVICE.md, bugs de host binding /
+    # port déjà utilisé déjà rencontrés) — plus simple à repérer et fermer
+    # indépendamment de Jarvis que dans un job caché.
+    Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$ProjectDir'; python -m brain.server" -WindowStyle Normal
+    $elapsed = 0
+    while (-not $brainReady -and $elapsed -lt 20) {
+        Start-Sleep -Seconds 1
+        $elapsed += 1
+        $brainReady = Test-HttpOk "http://localhost:$brainPort/api/health"
+        Write-Host "." -NoNewline
+    }
+    Write-Host ""
+    if ($brainReady) {
+        Write-Ok "Brain actif sur le port $brainPort."
+    } else {
+        Write-Err "Le brain ne répond pas encore après 20s — vérifie sa fenêtre (port déjà utilisé ?)."
+    }
+}
+Write-Host ""
+
+# --- 4. Jarvis ---
 Write-Step "Lancement de Jarvis..."
 Write-Host ""
 python jarvis.py

@@ -20,7 +20,7 @@ Assistant vocal personnel façon Iron Man, 100 % Windows :
 ## Démarrage
 
 ```
-start_jarvis.bat        # vérifie Docker/Speaches/Ollama puis lance Jarvis
+start_jarvis.bat        # démarre tout : Docker/Speaches, Ollama, le brain (Console web), puis Jarvis
 # ou, tout étant déjà lancé :
 python jarvis.py
 ```
@@ -64,8 +64,8 @@ qui tourne 100 % en local sur le PC fixe.
 
 ```
 Jarvis/
-├─ jarvis.py                 ← point d'entrée de l'agent desktop (compatible .bat / .vbs existants)
-├─ brain/                    ← [à venir] serveur central : décision, mémoire, routage multi-appareils
+├─ jarvis.py                 ← point d'entrée de l'agent desktop
+├─ brain/                    ← serveur central : décision, mémoire, routage multi-appareils
 │  └─ core/                  ← [à venir] extraction de agents/desktop/brain/ une fois le serveur en place
 ├─ web/                      ← [à venir] interface web (dashboard, chat, centre de contrôle des appareils)
 ├─ agents/
