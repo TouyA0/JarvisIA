@@ -59,6 +59,17 @@ class DeviceRegistry:
     def list(self) -> list[Device]:
         return list(self._devices.values())
 
+    def pick_default_device(self) -> str | None:
+        """Appareil cible implicite pour le pilotage PC déclenché depuis le
+        chat (Phase 10) : un seul appareil réel existe aujourd'hui, donc pas
+        de sélecteur — juste celui qui sait exécuter des outils
+        (capacité "exec"). None si aucun ou plusieurs (ambigu) ; la
+        désambiguïsation explicite est reportée sciemment, comme le
+        "routage contextuel" de la Phase 4, tant qu'il n'y a pas un vrai
+        deuxième appareil à cibler."""
+        candidates = [d for d in self._devices.values() if "exec" in d.capabilities]
+        return candidates[0].device_id if len(candidates) == 1 else None
+
     # ── Dispatch ──────────────────────────────────────────────────────────────
     async def dispatch(self, device_id: str, tool: str, args: dict, timeout: float = 15.0) -> CommandResult:
         """Envoie une commande à un appareil et attend son résultat.

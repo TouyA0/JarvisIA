@@ -6,10 +6,11 @@ Deux canaux distincts :
   /ws/chat   — la Console web (Phase 2) y envoie du texte, reçoit la
                réponse en streaming phrase par phrase.
 
-Pas encore de pilotage PC ici : ask_stream (brain.core.chat) ne fait que
-de la conversation Ollama/Claude, aucun tool-use. Le pilotage PC reste
-pour l'instant dans agents/desktop/brain/agent.py, exécuté en local —
-voir docs/ROADMAP_MULTIDEVICE.md, Phase 3.
+Depuis la Phase 10 : /ws/chat peut aussi déclencher du pilotage PC
+(brain.core.agent.ask_with_tools, dispatché sur le réseau vers un
+appareil) quand la question ressemble à une commande PC
+(agents/desktop/brain/router.py::is_pc_command) — sinon conversation
+pure comme avant (brain.core.chat.ask_stream, aucun tool-use).
 """
 from __future__ import annotations
 
@@ -22,6 +23,7 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
+from agents.desktop.brain.router import is_pc_command
 from agents.protocol.auth import generate_token
 from agents.protocol.messages import (
     CommandResult,
@@ -31,6 +33,7 @@ from agents.protocol.messages import (
     parse_message,
 )
 from brain import activity, config, device_store, pairing, routines, speech
+from brain.core import agent as pc_agent
 from brain.core.chat import ask_stream
 from brain.devices import Device, registry
 
@@ -245,7 +248,8 @@ async def ws_chat(websocket: WebSocket) -> None:
     Phase 3 suite, par la boucle vocale de l'agent desktop elle-même
     (voir agents/desktop/brain/remote_chat.py) : les deux partagent
     maintenant la même conversation/mémoire, un seul brain qui décide.
-    Pas de pilotage PC ici, juste la conversation Ollama/Claude.
+    Depuis la Phase 10, décide aussi entre conversation pure et pilotage
+    PC dispatché sur le réseau (brain.core.agent) selon is_pc_command.
     """
     await websocket.accept()
     if config.CONSOLE_PASSWORD and websocket.query_params.get("token") != config.CONSOLE_PASSWORD:
@@ -260,6 +264,35 @@ async def ws_chat(websocket: WebSocket) -> None:
             question = (data.get("question") or "").strip()
             if not question:
                 continue
+
+            if is_pc_command(question):
+                device_id = registry.pick_default_device()
+                if not device_id:
+                    await websocket.send_json({
+                        "type": "chat.phrase",
+                        "text": "Aucun appareil disponible pour exécuter ça, Monsieur.",
+                    })
+                    await websocket.send_json({"type": "chat.done", "source": "brain-agent"})
+                    continue
+
+                async def _send_status(text: str) -> None:
+                    try:
+                        await websocket.send_json({"type": "chat.status", "text": text})
+                    except Exception:
+                        pass  # connexion fermée entre-temps — sans conséquence, juste cosmétique
+
+                def _on_activity(text: str) -> None:
+                    asyncio.create_task(_send_status(text))
+
+                pc_agent.on_activity = _on_activity
+                try:
+                    answer = await pc_agent.ask_with_tools(question, device_id)
+                finally:
+                    pc_agent.on_activity = None
+                await websocket.send_json({"type": "chat.phrase", "text": answer or ""})
+                await websocket.send_json({"type": "chat.done", "source": "brain-agent"})
+                continue
+
             brain_state: dict = {}
             async for phrase in _stream_sync_generator(ask_stream, question, brain_state):
                 await websocket.send_json({"type": "chat.phrase", "text": phrase})

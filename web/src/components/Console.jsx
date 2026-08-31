@@ -66,7 +66,7 @@ function Topbar({ status, voice }) {
   );
 }
 
-function Hub({ question, answer, busy }) {
+function Hub({ question, answer, activity, busy }) {
   return (
     <div
       style={{
@@ -183,7 +183,11 @@ function Hub({ question, answer, busy }) {
             color: "var(--text)",
           }}
         >
-          {answer || <span style={{ color: "var(--faint)" }}>Réflexion…</span>}
+          {answer || (
+            <span style={{ color: "var(--faint)", fontFamily: activity ? "var(--font-mono)" : undefined }}>
+              {activity || "Réflexion…"}
+            </span>
+          )}
         </div>
       )}
     </div>
@@ -355,7 +359,7 @@ function CommandBar({ status, busy, onSend, voice }) {
 }
 
 export default function Console({ onNavigate, focusEnabled }) {
-  const { status, question, answer, busy, ask } = useChat();
+  const { status, question, answer, activity, busy, ask } = useChat();
   const lastWasVoiceRef = useRef(false);
   const wasBusyRef = useRef(false);
 
@@ -390,7 +394,7 @@ export default function Console({ onNavigate, focusEnabled }) {
     <Frame active="console" onNavigate={onNavigate} focusEnabled={focusEnabled}>
       <Topbar status={status} voice={voice} />
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
-        <Hub question={question} answer={answer} busy={busy} />
+        <Hub question={question} answer={answer} activity={activity} busy={busy} />
       </div>
       {voice.error && (
         <div

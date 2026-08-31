@@ -14,15 +14,19 @@ function wsUrl() {
 const AUTH_CLOSE_CODE = 4401;
 
 /**
- * Chat texte simple vers brain/server.py (/ws/chat). Pas de pilotage PC ici
- * — juste la conversation Ollama/Claude en streaming phrase par phrase
- * (voir docs/ROADMAP_MULTIDEVICE.md, Phase 2).
+ * Chat texte vers brain/server.py (/ws/chat) : conversation en streaming
+ * phrase par phrase (Phase 2), ou pilotage PC dispatché sur le réseau
+ * quand la question ressemble à une commande (Phase 10) — le brain
+ * décide, ce hook ne fait qu'afficher `activity` pendant qu'un outil
+ * tourne côté serveur (chat.status), pour que la Console ne semble pas
+ * figée sur un tour à plusieurs outils.
  */
 export function useChat() {
   const wsRef = useRef(null);
   const [status, setStatus] = useState("connecting"); // connecting | online | offline
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
+  const [activity, setActivity] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -48,7 +52,10 @@ export function useChat() {
         const msg = JSON.parse(event.data);
         if (msg.type === "chat.phrase") {
           setAnswer((prev) => (prev ? `${prev} ${msg.text}` : msg.text));
+        } else if (msg.type === "chat.status") {
+          setActivity(msg.text || "");
         } else if (msg.type === "chat.done") {
+          setActivity("");
           setBusy(false);
         }
       };
@@ -67,9 +74,10 @@ export function useChat() {
     if (!ws || ws.readyState !== WebSocket.OPEN || !trimmed) return;
     setQuestion(trimmed);
     setAnswer("");
+    setActivity("");
     setBusy(true);
     ws.send(JSON.stringify({ question: trimmed }));
   }, []);
 
-  return { status, question, answer, busy, ask };
+  return { status, question, answer, activity, busy, ask };
 }

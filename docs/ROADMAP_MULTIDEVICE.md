@@ -684,7 +684,7 @@ fonctionnalité, qui ne marche pas en mode dev Vite, voir bug ci-dessus).
 
 ---
 
-## Phase 10 — Pilotage PC depuis le web ▲▲▲ · 🟡 en cours
+## Phase 10 — Pilotage PC depuis le web ▲▲▲ · ✅ fait (Steps 0-3)
 
 Jusqu'ici, la Console web ne fait que de la conversation
 (`brain/core/chat.py`, aucun tool-use) : taper « ouvre Chrome » dans le
@@ -745,31 +745,50 @@ figés), ce vide devenait plus sensible qu'avant.
   tuer puis relancer le process (process resté actif depuis avant le
   changement, testé par erreur une première fois sans effet).
 
-### Step 1 — `brain/core/agent.py` (boucle d'outils côté brain) 🔲
+### Step 1 — `brain/core/agent.py` (boucle d'outils côté brain) ✅
 
-À venir : miroir async de `agents/desktop/brain/agent.py::ask_with_tools`,
-mais qui dispatche les outils sur le réseau
+Miroir async de `agents/desktop/brain/agent.py::ask_with_tools`, mais
+qui dispatche les outils sur le réseau
 (`brain.devices.registry.dispatch()`) au lieu de les exécuter en local.
 Réutilise tel quel le schéma d'outils
-(`agents.desktop.tools.registry.to_claude_tools()`), les instructions
-agent (`brain.core.prompts.AGENT_INSTRUCTIONS`) et l'historique partagé
+(`agents.desktop.tools.registry.to_claude_tools()`, import différé —
+voir commentaire dans le code : un brain qui tournerait un jour ailleurs
+que sur ce PC ne doit pas planter au démarrage à cause de modules
+Windows-only importés juste pour leur schéma), les instructions agent
+(`brain.core.prompts.AGENT_INSTRUCTIONS`) et l'historique partagé
 (`brain.core.history` — déjà utilisé par le chat web, la nouvelle boucle
 en hérite pour de vrai puisqu'elle tourne dans le même process).
 
-### Step 2 — Brancher `/ws/chat` sur le pilotage PC 🔲
+### Step 2 — Brancher `/ws/chat` sur le pilotage PC ✅
 
-À venir : `agents/desktop/brain/router.py::is_pc_command()` (fonction
-pure, déjà réutilisable telle quelle) décide si une question part vers
-`agent.ask_with_tools` (nouveau) ou `chat.ask_stream` (existant). Un
-seul appareil réel aujourd'hui → ciblage implicite
-(`pick_default_device()`), pas de sélecteur. Statuts intermédiaires
-(`chat.status`) pendant qu'un outil tourne, pour ne pas figer la
-Console pendant un tour à plusieurs outils.
+`agents/desktop/brain/router.py::is_pc_command()` (fonction pure,
+réutilisée telle quelle) décide si une question part vers
+`agent.ask_with_tools` (nouveau) ou `chat.ask_stream` (existant).
+`brain/devices.py::pick_default_device()` (nouveau) : un seul appareil
+réel aujourd'hui → ciblage implicite (capacité `"exec"`), pas de
+sélecteur ; renvoie `None` si aucun ou plusieurs appareils, auquel cas
+la Console reçoit un message explicite plutôt qu'un silence. Statuts
+intermédiaires (`chat.status`, ex. « OUTIL : take_screenshot ») envoyés
+pendant qu'un outil tourne.
 
-### Step 3 — Retour visuel Console web 🔲
+### Step 3 — Retour visuel Console web ✅
 
-À venir : `useChat.js` gère `chat.status`, `Console.jsx` l'affiche dans
-le même esprit que `VoiceStatusBar` (Phase 9).
+`useChat.js` gère `chat.status` (nouvel état `activity`), `Console.jsx`
+l'affiche dans la bulle de réponse pendant l'exécution, dans le même
+esprit que `VoiceStatusBar` (Phase 9).
+
+### Testé en conditions réelles (Steps 1-3)
+
+Brain relancé (nécessaire : `python -m brain.server` ne recharge rien à
+chaud, déjà noté au Step 0), `jarvis.py` connecté (`BRAIN_ENABLED=1`,
+visible dans `/api/health`). Depuis la vraie Console web : « prends une
+capture d'écran » tapé dans le chat → statut « OUTIL :
+take_screenshot » visible pendant l'exécution → réponse finale
+cohérente décrivant réellement le contenu de l'écran (VS Code, fichier
+`.env` ouvert, Docker actif...), confirmant que l'image est bien
+transmise à Claude via le dispatch réseau. Pas d'image affichée dans le
+chat lui-même — attendu : seul l'écran Focus (Phase 4) affiche une
+capture comme image, le chat reste texte-only par conception.
 
 ### Volontairement hors de ce chantier
 
@@ -809,9 +828,9 @@ le même esprit que `VoiceStatusBar` (Phase 9).
 
 ## Ordre recommandé
 
-Phase 0 → 1 → 2 → 3 → 4 → 5 → 6 → 9 faites (voix web comprise). Phase 10
-en cours (Step 0 fait, Steps 1-3 à venir). Restent 7 et 8 en option,
-plus tard, pas urgentes — rien d'autre d'important en attente. Chaque
+Phase 0 → 1 → 2 → 3 → 4 → 5 → 6 → 9 → 10 faites (voix web et pilotage PC
+depuis le web compris). Restent 7 et 8 en option, plus tard, pas
+urgentes — rien d'autre d'important en attente. Chaque
 phase est démontrable seule avant de passer à la suivante — pas besoin
 d'attendre la fin du chantier pour avoir quelque chose d'utilisable :
 dès la Phase 2, tu peux déjà taper à Jarvis depuis un navigateur
