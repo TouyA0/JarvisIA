@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { authFetch } from "./consoleAuth.js";
 
 const POLL_MS = 3000;
 
@@ -18,8 +19,8 @@ export function useFocusDevice(deviceId) {
     if (!deviceId) return;
     try {
       const [devRes, actRes] = await Promise.all([
-        fetch(`/api/devices/${deviceId}`),
-        fetch(`/api/devices/${deviceId}/activity`),
+        authFetch(`/api/devices/${deviceId}`),
+        authFetch(`/api/devices/${deviceId}/activity`),
       ]);
       if (devRes.ok) setDevice(await devRes.json());
       if (actRes.ok) setActivityLog(await actRes.json());
@@ -39,7 +40,7 @@ export function useFocusDevice(deviceId) {
       setBusy(true);
       setError(null);
       try {
-        const res = await fetch(`/api/devices/${deviceId}/dispatch`, {
+        const res = await authFetch(`/api/devices/${deviceId}/dispatch`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ tool, args }),

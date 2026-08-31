@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { authFetch } from "./consoleAuth.js";
 import { useWakeWordDetector } from "./useWakeWordDetector.js";
 
 /**
@@ -82,7 +83,7 @@ export function useVoice({ onCommand }) {
     const form = new FormData();
     form.append("file", blob, "command.wav");
     try {
-      const res = await fetch("/api/speech/transcribe", { method: "POST", body: form });
+      const res = await authFetch("/api/speech/transcribe", { method: "POST", body: form });
       if (!res.ok) return "";
       const data = await res.json();
       return data.text || "";

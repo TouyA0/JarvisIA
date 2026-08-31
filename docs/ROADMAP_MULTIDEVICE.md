@@ -684,6 +684,110 @@ fonctionnalité, qui ne marche pas en mode dev Vite, voir bug ci-dessus).
 
 ---
 
+## Phase 10 — Pilotage PC depuis le web ▲▲▲ · 🟡 en cours
+
+Jusqu'ici, la Console web ne fait que de la conversation
+(`brain/core/chat.py`, aucun tool-use) : taper « ouvre Chrome » dans le
+chat web ne fait rien, alors que le mécanisme de dispatch réseau existe
+déjà et marche (Phase 3/4, utilisé aujourd'hui uniquement par les
+boutons figés de l'écran Focus — Capturer/Verrouiller). Objectif :
+brancher le chat web (et donc l'accès distant, Phase 6) sur le vrai
+pilotage PC en langage naturel, en réutilisant l'infra existante
+(schéma d'outils, dispatch réseau, historique) plutôt qu'en dupliquant
+la boucle Claude qui existe déjà côté desktop
+(`agents/desktop/brain/agent.py`).
+
+Découpé en étapes testables une par une (voir le détail du découpage
+dans la session qui a mené ce chantier) : Step 0 (verrou d'accès) →
+Step 1 (boucle d'outils côté brain) → Step 2 (branchement `/ws/chat`) →
+Step 3 (retour visuel web).
+
+### Step 0 — Verrou d'accès sur tout le brain ✅
+
+Décidé avant de brancher quoi que ce soit de sensible : le brain
+(Console, chat, dispatch réseau) n'avait **aucune authentification** —
+seul le VPN limitait qui pouvait l'atteindre. Une fois le chat capable
+de déclencher du pilotage PC en langage libre (pas juste 2 boutons
+figés), ce vide devenait plus sensible qu'avant.
+
+- `brain/config.py` — `CONSOLE_PASSWORD` (`.env`, vide = auth
+  désactivée, pratique en dev local).
+- `brain/server.py` — middleware HTTP `_require_console_auth` :
+  `Authorization: Bearer <mdp>` obligatoire sur `/api/*` (sauf
+  `/api/health`, laissé ouvert pour les sondes de démarrage) ;
+  `/ws/chat` vérifie `?token=` au handshake (un navigateur ne peut pas
+  poser de header custom sur une connexion WebSocket), ferme avec le
+  code applicatif `4401` si absent/invalide. `/ws/agent` non touché — a
+  déjà sa propre auth par token (Phase 4).
+- `web/src/lib/consoleAuth.js` (nouveau) — pas de vérification
+  proactive au chargement (si `CONSOLE_PASSWORD` est vide côté brain,
+  rien ne change pour l'utilisateur) : purement réactif au premier 401
+  reçu, quelle que soit la requête. `web/src/components/AuthGate.jsx` —
+  écran plein écran, un champ, pas de compte : le mot de passe sert
+  lui-même de token, comme le token d'appareil existant. Un mot de passe
+  embarqué dans le bundle JS n'aurait rien protégé (visible par
+  quiconque ouvre les devtools) — celui-ci n'est jamais présent dans le
+  code livré, seulement saisi à l'usage et gardé en `localStorage`.
+- Tous les appels réseau du web (`useDevices`, `useFocusDevice`,
+  `useChat`, `useVoice`, `Routines`, synthèse/transcription vocale,
+  génération de code d'appairage) passent maintenant par `authFetch()` /
+  `wsAuthQuery()` au lieu de `fetch`/`WebSocket` bruts.
+- **Testé en conditions réelles** : sans token → `401` confirmé sur
+  `/api/devices` (curl) ; mauvais token → `401` confirmé ; `/api/health`
+  reste `200` sans token ; `/ws/chat` sans token → fermé avec le code
+  `4401` (vérifié avec un client WebSocket direct, hors navigateur).
+  Côté navigateur : chargement de la Console → écran de connexion
+  affiché ; mauvais mot de passe → refusé, écran de connexion
+  réaffiché proprement (token effacé automatiquement) ; bon mot de
+  passe → Console fonctionnelle normalement (confirmé par Quentin).
+  Piège trouvé en testant : `python -m brain.server` ne recharge rien à
+  chaud — un simple changement de code ne suffit pas, il faut vraiment
+  tuer puis relancer le process (process resté actif depuis avant le
+  changement, testé par erreur une première fois sans effet).
+
+### Step 1 — `brain/core/agent.py` (boucle d'outils côté brain) 🔲
+
+À venir : miroir async de `agents/desktop/brain/agent.py::ask_with_tools`,
+mais qui dispatche les outils sur le réseau
+(`brain.devices.registry.dispatch()`) au lieu de les exécuter en local.
+Réutilise tel quel le schéma d'outils
+(`agents.desktop.tools.registry.to_claude_tools()`), les instructions
+agent (`brain.core.prompts.AGENT_INSTRUCTIONS`) et l'historique partagé
+(`brain.core.history` — déjà utilisé par le chat web, la nouvelle boucle
+en hérite pour de vrai puisqu'elle tourne dans le même process).
+
+### Step 2 — Brancher `/ws/chat` sur le pilotage PC 🔲
+
+À venir : `agents/desktop/brain/router.py::is_pc_command()` (fonction
+pure, déjà réutilisable telle quelle) décide si une question part vers
+`agent.ask_with_tools` (nouveau) ou `chat.ask_stream` (existant). Un
+seul appareil réel aujourd'hui → ciblage implicite
+(`pick_default_device()`), pas de sélecteur. Statuts intermédiaires
+(`chat.status`) pendant qu'un outil tourne, pour ne pas figer la
+Console pendant un tour à plusieurs outils.
+
+### Step 3 — Retour visuel Console web 🔲
+
+À venir : `useChat.js` gère `chat.status`, `Console.jsx` l'affiche dans
+le même esprit que `VoiceStatusBar` (Phase 9).
+
+### Volontairement hors de ce chantier
+
+- **Arrêt à distance** (bouton stop côté web) — nécessite un vrai
+  protocole d'interruption réseau, pas juste le `threading.Event` local
+  actuel (`state.stop_agent`). Reste ouvert, comme noté depuis la
+  Phase 3.
+- **Sélection explicite de l'appareil cible** — n'a de sens qu'avec un
+  vrai deuxième appareil (mobile/portable), toujours pas le cas.
+- **Garde-fou « tainted » sur le dispatch réseau** — `run_powershell`
+  garde son blocage/dialogue de confirmation pour toute commande
+  détectée destructive quel que soit le canal d'origine (réseau
+  compris), donc pas un trou béant ; juste imparfait sur le cas précis
+  « commande anodine + contenu piégé lu juste avant » côté réseau. Pas
+  bloquant pour ce chantier.
+
+---
+
 ## Ce qu'il ne faut PAS faire (pièges, dans la continuité de `ROADMAP.md`)
 
 - Ne pas faire transiter l'audio brut par le brain **pour l'agent
@@ -705,9 +809,10 @@ fonctionnalité, qui ne marche pas en mode dev Vite, voir bug ci-dessus).
 
 ## Ordre recommandé
 
-Phase 0 → 1 → 2 → 3 → 4 → 5 → 6 → 9 faites (voix web comprise). Restent
-7 et 8 en option, plus tard, pas urgentes — rien d'autre d'important en
-attente. Chaque phase est démontrable seule avant de passer à la
-suivante — pas besoin d'attendre la fin du chantier pour
-avoir quelque chose d'utilisable : dès la Phase 2, tu peux déjà taper à
-Jarvis depuis un navigateur (parler, pas encore — Phase 9).
+Phase 0 → 1 → 2 → 3 → 4 → 5 → 6 → 9 faites (voix web comprise). Phase 10
+en cours (Step 0 fait, Steps 1-3 à venir). Restent 7 et 8 en option,
+plus tard, pas urgentes — rien d'autre d'important en attente. Chaque
+phase est démontrable seule avant de passer à la suivante — pas besoin
+d'attendre la fin du chantier pour avoir quelque chose d'utilisable :
+dès la Phase 2, tu peux déjà taper à Jarvis depuis un navigateur
+(parler, pas encore — Phase 9).

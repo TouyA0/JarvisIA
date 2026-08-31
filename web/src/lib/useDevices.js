@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { authFetch } from "./consoleAuth.js";
 
 const POLL_MS = 3000;
 
@@ -13,7 +14,7 @@ export function useDevices() {
 
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch("/api/devices");
+      const res = await authFetch("/api/devices");
       if (res.ok) setDevices(await res.json());
     } catch {
       // brain injoignable — on garde la dernière liste connue à l'écran
@@ -30,7 +31,7 @@ export function useDevices() {
 
   const forget = useCallback(
     async (deviceId) => {
-      await fetch(`/api/devices/${deviceId}`, { method: "DELETE" });
+      await authFetch(`/api/devices/${deviceId}`, { method: "DELETE" });
       await refresh();
     },
     [refresh],

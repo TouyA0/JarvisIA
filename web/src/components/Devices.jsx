@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Frame from "./Frame.jsx";
+import { authFetch } from "../lib/consoleAuth.js";
 import { useDevices } from "../lib/useDevices.js";
 import { useIsMobile } from "../lib/useIsMobile.js";
 
@@ -115,7 +116,7 @@ function PairingPanel({ isMobile }) {
 
   async function generate() {
     setExpired(false);
-    const res = await fetch("/api/pairing/code", { method: "POST" });
+    const res = await authFetch("/api/pairing/code", { method: "POST" });
     const data = await res.json();
     setCode(data.code);
     setTimeout(() => setExpired(true), 5 * 60 * 1000);

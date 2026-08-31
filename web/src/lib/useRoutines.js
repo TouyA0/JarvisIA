@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { authFetch } from "./consoleAuth.js";
 
 const POLL_MS = 2000;
 
@@ -7,7 +8,7 @@ export function useRoutines() {
 
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch("/api/routines");
+      const res = await authFetch("/api/routines");
       if (res.ok) setRoutines(await res.json());
     } catch {
       // brain injoignable — on garde la dernière liste connue
@@ -22,7 +23,7 @@ export function useRoutines() {
 
   const create = useCallback(
     async (name, steps) => {
-      const res = await fetch("/api/routines", {
+      const res = await authFetch("/api/routines", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, steps }),
@@ -38,7 +39,7 @@ export function useRoutines() {
 
   const remove = useCallback(
     async (id) => {
-      await fetch(`/api/routines/${id}`, { method: "DELETE" });
+      await authFetch(`/api/routines/${id}`, { method: "DELETE" });
       await refresh();
     },
     [refresh],
@@ -46,7 +47,7 @@ export function useRoutines() {
 
   const run = useCallback(
     async (id) => {
-      await fetch(`/api/routines/${id}/run`, { method: "POST" });
+      await authFetch(`/api/routines/${id}/run`, { method: "POST" });
       await refresh();
     },
     [refresh],

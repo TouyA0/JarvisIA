@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { authFetch } from "../lib/consoleAuth.js";
 import { useChat } from "../lib/useChat.js";
 import { useVoice } from "../lib/useVoice.js";
 import Frame from "./Frame.jsx";
@@ -416,7 +417,7 @@ async function speakAnswer(text, voice) {
     return;
   }
   try {
-    const res = await fetch("/api/speech/synthesize", {
+    const res = await authFetch("/api/speech/synthesize", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),

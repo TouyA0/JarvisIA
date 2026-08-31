@@ -1,16 +1,23 @@
 import { useState } from "react";
+import AuthGate from "./components/AuthGate.jsx";
 import Console from "./components/Console.jsx";
 import Devices from "./components/Devices.jsx";
 import Focus from "./components/Focus.jsx";
 import Routines from "./components/Routines.jsx";
+import { useConsoleAuth } from "./lib/useConsoleAuth.js";
 
 export default function App() {
   const [view, setView] = useState("console");
   const [focusDeviceId, setFocusDeviceId] = useState(null);
+  const { needsAuth, login } = useConsoleAuth();
 
   function openFocus(deviceId) {
     setFocusDeviceId(deviceId);
     setView("focus");
+  }
+
+  if (needsAuth) {
+    return <AuthGate onSubmit={login} />;
   }
 
   if (view === "devices") {

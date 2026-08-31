@@ -84,3 +84,9 @@ SPEECH_REQUEST_TIMEOUT = 20
 # ── Réseau ────────────────────────────────────────────────────────────────────
 HOST = os.getenv("BRAIN_HOST", "0.0.0.0")
 PORT = int(os.getenv("BRAIN_PORT", "8420"))
+
+# ── Accès Console ─────────────────────────────────────────────────────────────
+# Seul rempart aujourd'hui entre "atteint le brain sur le réseau/VPN" et
+# "peut piloter le PC" — vide = auth désactivée (pratique en dev local),
+# à définir dans .env dès que le brain est exposé au-delà de 127.0.0.1.
+CONSOLE_PASSWORD = os.getenv("CONSOLE_PASSWORD", "")

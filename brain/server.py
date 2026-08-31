@@ -17,8 +17,8 @@ import asyncio
 import threading
 from typing import Any, Callable
 
-from fastapi import FastAPI, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import Response
+from fastapi import FastAPI, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
@@ -37,6 +37,29 @@ from brain.devices import Device, registry
 config.ensure_dirs()
 
 app = FastAPI(title="Jarvis Brain")
+
+if not config.CONSOLE_PASSWORD:
+    print("[brain] CONSOLE_PASSWORD non défini — API et Console accessibles sans "
+          "authentification à quiconque atteint ce serveur (VPN/LAN compris). "
+          "À définir dans .env avant toute exposition au-delà de 127.0.0.1.")
+
+
+@app.middleware("http")
+async def _require_console_auth(request: Request, call_next):
+    """Rempart unique devant toute l'API : sans lui, quiconque atteint le
+    brain sur le réseau (VPN, LAN) peut déjà tout faire — lire les
+    appareils, dispatcher des commandes, déclencher des routines. Devient
+    plus sensible depuis que le chat peut piloter le PC en langage libre,
+    pas seulement via les boutons figés de Focus. /api/health reste ouvert
+    (sondes de démarrage, aucune donnée sensible)."""
+    path = request.url.path
+    if config.CONSOLE_PASSWORD and path.startswith("/api/") and path != "/api/health":
+        auth = request.headers.get("authorization", "")
+        token = auth[7:] if auth.lower().startswith("bearer ") else ""
+        if token != config.CONSOLE_PASSWORD:
+            return JSONResponse({"detail": "authentification requise"}, status_code=401)
+    return await call_next(request)
+
 
 _SENTINEL = object()
 
@@ -225,6 +248,12 @@ async def ws_chat(websocket: WebSocket) -> None:
     Pas de pilotage PC ici, juste la conversation Ollama/Claude.
     """
     await websocket.accept()
+    if config.CONSOLE_PASSWORD and websocket.query_params.get("token") != config.CONSOLE_PASSWORD:
+        # Pas de header custom possible au handshake WebSocket depuis un
+        # navigateur — le token passe donc en paramètre de requête, comme
+        # web/src/lib/useConsoleAuth.js le construit.
+        await websocket.close(code=4401)
+        return
     try:
         while True:
             data = await websocket.receive_json()
