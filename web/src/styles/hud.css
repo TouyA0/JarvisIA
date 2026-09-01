@@ -231,6 +231,43 @@
   justify-content: flex-start;
 }
 
+/* F32 : sous-titres grand format — un bandeau qui se pose par-dessus le
+   pupitre tant que Jarvis parle, pensé pour être lu depuis l'autre bout
+   de la pièce plutôt que penché sur l'écran comme la bulle ci-dessus. */
+.hud-subtitles {
+  position: absolute;
+  left: 50%;
+  bottom: var(--sp-8);
+  transform: translate(-50%, 12px);
+  z-index: 2;
+  width: min(90%, 980px);
+  padding: var(--sp-4) var(--sp-6);
+  border-radius: var(--r-lg);
+  background: oklch(0.1 0.02 255 / 0.72);
+  backdrop-filter: blur(6px);
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.hud-subtitles--visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.hud-subtitles-text {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 3.6vw, 2.6rem);
+  line-height: 1.35;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.hud--kiosk .hud-subtitles-text {
+  font-size: clamp(1.8rem, 4.4vw, 3.4rem);
+}
+
 .hud-suggestions {
   display: flex;
   flex-wrap: wrap;

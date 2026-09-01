@@ -202,6 +202,20 @@ function Stage({ state, question, answer, activity, compact }) {
   );
 }
 
+/** F32 : version grand format de la réponse, lisible à trois mètres — la
+ * bulle de `.hud-speech` reste (elle sert de journal visuel juste sous le
+ * réacteur), mais elle est bien trop petite pour un salon. Ce bandeau se
+ * pose par-dessus le pupitre tant que Jarvis parle à voix haute, puis
+ * s'efface avec la réponse. */
+function Subtitles({ text, visible }) {
+  if (!text) return null;
+  return (
+    <div className={`hud-subtitles${visible ? " hud-subtitles--visible" : ""}`} aria-hidden="true">
+      <p className="hud-subtitles-text">{text}</p>
+    </div>
+  );
+}
+
 function Composer({ online, busy, onSend, voice }) {
   const [value, setValue] = useState("");
 
@@ -386,6 +400,7 @@ export default function Hud() {
           activity={activity}
           compact={hasCards}
         />
+        <Subtitles text={answer} visible={state === "speaking"} />
 
         {hasCards ? (
           <section className="hud-deck" aria-label="Affichages de Jarvis">
