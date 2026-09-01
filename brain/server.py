@@ -15,6 +15,7 @@ pure comme avant (brain.core.chat.ask_stream, aucun tool-use).
 from __future__ import annotations
 
 import asyncio
+import re
 import threading
 import time
 from typing import Any, Callable
@@ -73,6 +74,15 @@ timers.start()
 proactive.start()
 
 app = FastAPI(title="Jarvis Brain")
+
+
+@app.on_event("startup")
+async def _start_routine_scheduler() -> None:
+    # asyncio.create_task exige une boucle déjà démarrée — contrairement à
+    # timers.start()/proactive.start() (threads classiques), ne peut donc
+    # pas être appelé au chargement du module comme eux, plus haut.
+    routines.start_scheduler()
+
 
 if not config.CONSOLE_PASSWORD:
     print("[brain] CONSOLE_PASSWORD non défini — API et Console accessibles sans "
@@ -247,6 +257,27 @@ async def list_routines() -> list[dict]:
     return routines.list_routines()
 
 
+def _parse_schedule(body: dict) -> dict | None:
+    """`schedule: null`/absent = manuel. Sinon {"time": "HH:MM", "days":
+    [0-6]?} — voir routines.set_schedule pour le format stocké."""
+    raw = body.get("schedule")
+    if not raw:
+        return None
+    time_str = (raw.get("time") or "").strip()
+    if not re.match(r"^([01]\d|2[0-3]):[0-5]\d$", time_str):
+        raise HTTPException(400, "heure invalide (attendu HH:MM)")
+    schedule = {"time": time_str}
+    days = raw.get("days")
+    if days:
+        try:
+            days = sorted({int(d) for d in days if 0 <= int(d) <= 6})
+        except (TypeError, ValueError):
+            raise HTTPException(400, "jours invalides (attendu 0-6, 0 = lundi)")
+        if days:
+            schedule["days"] = days
+    return schedule
+
+
 @app.post("/api/routines")
 async def create_routine(body: dict) -> dict:
     name = (body.get("name") or "").strip()
@@ -255,7 +286,7 @@ async def create_routine(body: dict) -> dict:
         raise HTTPException(400, "nom manquant")
     if not steps:
         raise HTTPException(400, "au moins une étape requise")
-    return routines.create(name, steps)
+    return routines.create(name, steps, _parse_schedule(body))
 
 
 @app.delete("/api/routines/{routine_id}")
@@ -263,6 +294,16 @@ async def delete_routine(routine_id: str) -> dict:
     if not routines.delete(routine_id):
         raise HTTPException(404, f"routine {routine_id!r} inconnue")
     return {"ok": True}
+
+
+@app.put("/api/routines/{routine_id}/schedule")
+async def set_routine_schedule(routine_id: str, body: dict) -> dict:
+    """`{"schedule": null}` repasse la routine en déclenchement manuel."""
+    schedule = _parse_schedule(body)
+    try:
+        return routines.set_schedule(routine_id, schedule)
+    except KeyError:
+        raise HTTPException(404, f"routine {routine_id!r} inconnue")
 
 
 @app.post("/api/routines/{routine_id}/run")

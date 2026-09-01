@@ -34,7 +34,132 @@ function stepLabel(step) {
   return kind ? kind.label : step.tool;
 }
 
-function RoutineCard({ routine, devices, onRun, onDelete }) {
+// 0 = lundi, comme time.localtime().tm_wday côté brain (routines.py) — pas
+// dimanche-premier, pour ne pas avoir à traduire dans les deux sens.
+const DAYS = [
+  { v: 0, label: "Lu" },
+  { v: 1, label: "Ma" },
+  { v: 2, label: "Me" },
+  { v: 3, label: "Je" },
+  { v: 4, label: "Ve" },
+  { v: 5, label: "Sa" },
+  { v: 6, label: "Di" },
+];
+
+function scheduleSummary(schedule) {
+  if (!schedule) return "Déclenchement manuel";
+  const days = schedule.days;
+  if (!days || days.length === 0 || days.length === 7) return `Tous les jours à ${schedule.time}`;
+  return `${days.map((d) => DAYS.find((x) => x.v === d)?.label).join(" ")} à ${schedule.time}`;
+}
+
+/** Éditeur de programmation (C4) : une case à cocher, une heure, des jours
+ * — partagé entre le formulaire de création et l'édition sur une routine
+ * déjà enregistrée, seul le bouton d'enregistrement change autour de lui. */
+function ScheduleFields({ enabled, onToggleEnabled, time, onTime, days, onToggleDay }) {
+  return (
+    <section className="stack stack--tight">
+      <label className="row" style={{ gap: "var(--sp-2)", cursor: "pointer" }}>
+        <input type="checkbox" checked={enabled} onChange={(e) => onToggleEnabled(e.target.checked)} />
+        <span>Déclenchement automatique</span>
+      </label>
+      {enabled && (
+        <>
+          <TextField
+            label="Heure"
+            type="time"
+            value={time}
+            onChange={(e) => onTime(e.target.value)}
+            required
+          />
+          <div className="row row--wrap" style={{ gap: "var(--sp-1)" }}>
+            {DAYS.map((d) => (
+              <button
+                key={d.v}
+                type="button"
+                className={`chip ${days.includes(d.v) ? "chip--active" : ""}`.trim()}
+                aria-pressed={days.includes(d.v)}
+                onClick={() => onToggleDay(d.v)}
+              >
+                {d.label}
+              </button>
+            ))}
+          </div>
+          <p className="hint">Aucun jour coché = tous les jours.</p>
+        </>
+      )}
+    </section>
+  );
+}
+
+/** Programmation d'une routine déjà enregistrée — repliée par défaut, pour
+ * ne pas alourdir chaque carte quand la routine reste manuelle (le cas
+ * courant aujourd'hui). */
+function ScheduleEditor({ routine, onSave }) {
+  const [open, setOpen] = useState(false);
+  const [enabled, setEnabled] = useState(Boolean(routine.schedule));
+  const [time, setTime] = useState(routine.schedule?.time || "08:00");
+  const [days, setDays] = useState(routine.schedule?.days || []);
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+
+  function toggleDay(v) {
+    setDays((prev) => (prev.includes(v) ? prev.filter((d) => d !== v) : [...prev, v].sort()));
+  }
+
+  async function save() {
+    setBusy(true);
+    try {
+      await onSave(enabled ? { time, days } : null);
+      toast.success(enabled ? "Programmation enregistrée." : "Retour au déclenchement manuel.");
+      setOpen(false);
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button type="button" className="btn btn--ghost btn--sm" onClick={() => setOpen(true)}>
+        <Icon name="clock" size={15} />
+        {scheduleSummary(routine.schedule)}
+      </button>
+    );
+  }
+
+  return (
+    <div
+      className="stack stack--tight"
+      style={{ padding: "var(--sp-3)", border: "1px dashed var(--line-strong)", borderRadius: "var(--r-md)" }}
+    >
+      <ScheduleFields
+        enabled={enabled}
+        onToggleEnabled={setEnabled}
+        time={time}
+        onTime={setTime}
+        days={days}
+        onToggleDay={toggleDay}
+      />
+      <div className="row" style={{ gap: "var(--sp-2)" }}>
+        <button type="button" className="btn btn--ghost btn--sm" onClick={() => setOpen(false)} disabled={busy}>
+          Annuler
+        </button>
+        <button
+          type="button"
+          className="btn btn--primary btn--sm"
+          onClick={save}
+          disabled={busy || (enabled && !time)}
+        >
+          Enregistrer
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function RoutineCard({ routine, devices, onRun, onDelete, onSchedule }) {
   const run = routine.run_status;
   const running = run?.status === "running";
   const failed = run?.status === "error";
@@ -78,6 +203,8 @@ function RoutineCard({ routine, devices, onRun, onDelete }) {
         ))}
       </ol>
 
+      <ScheduleEditor routine={routine} onSave={(schedule) => onSchedule(routine, schedule)} />
+
       <div className="card-actions">
         <button type="button" className="btn btn--danger btn--sm" onClick={() => onDelete(routine)}>
           <Icon name="trash" size={15} />
@@ -101,8 +228,15 @@ function BuilderDialog({ open, onClose, devices, onCreate }) {
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [scheduleTime, setScheduleTime] = useState("08:00");
+  const [scheduleDays, setScheduleDays] = useState([]);
 
   const currentKind = STEP_KINDS.find((k) => k.id === kind);
+
+  function toggleScheduleDay(v) {
+    setScheduleDays((prev) => (prev.includes(v) ? prev.filter((d) => d !== v) : [...prev, v].sort()));
+  }
 
   function reset() {
     setName("");
@@ -111,6 +245,9 @@ function BuilderDialog({ open, onClose, devices, onCreate }) {
     setDeviceId("");
     setUrl("");
     setError("");
+    setScheduleEnabled(false);
+    setScheduleTime("08:00");
+    setScheduleDays([]);
   }
 
   function addStep() {
@@ -148,7 +285,8 @@ function BuilderDialog({ open, onClose, devices, onCreate }) {
     setBusy(true);
     setError("");
     try {
-      await onCreate(name.trim(), steps);
+      const schedule = scheduleEnabled ? { time: scheduleTime, days: scheduleDays } : null;
+      await onCreate(name.trim(), steps, schedule);
       toast.success(`Routine « ${name.trim()} » enregistrée.`);
       reset();
       onClose();
@@ -294,12 +432,21 @@ function BuilderDialog({ open, onClose, devices, onCreate }) {
           Ajouter cette étape
         </button>
       </section>
+
+      <ScheduleFields
+        enabled={scheduleEnabled}
+        onToggleEnabled={setScheduleEnabled}
+        time={scheduleTime}
+        onTime={setScheduleTime}
+        days={scheduleDays}
+        onToggleDay={toggleScheduleDay}
+      />
     </Modal>
   );
 }
 
 export default function Routines() {
-  const { routines, create, remove, run } = useRoutines();
+  const { routines, create, remove, run, setSchedule } = useRoutines();
   const { devices } = useDevices();
   const confirm = useConfirm();
   const toast = useToast();
@@ -319,6 +466,10 @@ export default function Routines() {
   async function handleRun(routine) {
     await run(routine.id);
     toast.info(`« ${routine.name} » lancée.`);
+  }
+
+  async function handleSchedule(routine, schedule) {
+    await setSchedule(routine.id, schedule);
   }
 
   return (
@@ -355,7 +506,14 @@ export default function Routines() {
           ) : (
             <div className="grid">
               {routines.map((r) => (
-                <RoutineCard key={r.id} routine={r} devices={devices} onRun={handleRun} onDelete={handleDelete} />
+                <RoutineCard
+                  key={r.id}
+                  routine={r}
+                  devices={devices}
+                  onRun={handleRun}
+                  onDelete={handleDelete}
+                  onSchedule={handleSchedule}
+                />
               ))}
             </div>
           )}

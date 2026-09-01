@@ -567,6 +567,17 @@
   font-size: var(--text-xs);
   color: var(--text-muted);
 }
+button.chip {
+  cursor: pointer;
+}
+button.chip:hover {
+  border-color: var(--line-strong);
+}
+.chip--active {
+  border-color: transparent;
+  background: var(--cyan-dim);
+  color: var(--cyan);
+}
 
 .kbd {
   display: inline-block;

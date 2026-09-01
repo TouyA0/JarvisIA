@@ -22,15 +22,33 @@ export function useRoutines() {
   }, [refresh]);
 
   const create = useCallback(
-    async (name, steps) => {
+    async (name, steps, schedule) => {
       const res = await authFetch("/api/routines", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, steps }),
+        body: JSON.stringify({ name, steps, schedule: schedule || null }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || "échec de la création");
+      }
+      await refresh();
+    },
+    [refresh],
+  );
+
+  /** `schedule` : {time: "HH:MM", days?: [0-6]} ou null pour repasser en
+   * déclenchement manuel (C4). */
+  const setSchedule = useCallback(
+    async (id, schedule) => {
+      const res = await authFetch(`/api/routines/${id}/schedule`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schedule: schedule || null }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "échec de la programmation");
       }
       await refresh();
     },
@@ -53,5 +71,5 @@ export function useRoutines() {
     [refresh],
   );
 
-  return { routines, create, remove, run };
+  return { routines, create, remove, run, setSchedule };
 }
