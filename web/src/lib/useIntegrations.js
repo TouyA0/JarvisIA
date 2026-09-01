@@ -40,11 +40,11 @@ export function useIntegrations() {
     return () => window.removeEventListener("message", onMessage);
   }, [refresh]);
 
-  const connectGoogle = useCallback(async () => {
-    const res = await authFetch("/api/integrations/google/auth-url");
+  const connectGoogle = useCallback(async (service = "google_calendar") => {
+    const res = await authFetch(`/api/integrations/google/auth-url?service=${encodeURIComponent(service)}`);
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      throw new Error(data.detail || "Google Calendar non configuré");
+      throw new Error(data.detail || "Google non configuré");
     }
     const { url } = await res.json();
     window.open(url, "jarvis-google-auth", "width=480,height=680");

@@ -162,44 +162,71 @@ Jarvis/
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | — | intégration Google Calendar (panneau **Intégrations** de la Console web), voir ci-dessous |
 | `GOOGLE_REDIRECT_URI` | `http://127.0.0.1:8420/api/integrations/google/callback` | à ne changer que si le brain n'écoute pas sur `127.0.0.1:8420` |
 
-### Google Calendar
+### Google (Calendar, Drive)
 
 Panneau **Intégrations** de la Console web (`ROADMAP_DISPLAY_INTEGRATIONS.md`)
-— comptes multiples supportés, agendas fusionnés automatiquement. Mise en
-place (une fois, ~5 min) :
+— comptes multiples supportés par service, résultats fusionnés
+automatiquement. Un seul Client ID/Secret Google sert pour tous les
+services (Calendar, Drive, et les suivants sur le même modèle) — mise en
+place une fois, ~5 min :
 
 1. [Google Cloud Console](https://console.cloud.google.com/) → nouveau
    projet (ou existant) → **APIs & Services** → activer **Google Calendar
-   API**.
+   API** ET **Google Drive API** (les deux, même si tu ne comptes utiliser
+   qu'un des deux services pour l'instant — inactive, l'API bloque juste
+   silencieusement les appels le jour où tu voudras l'autre).
 2. **APIs & Services → OAuth consent screen** → type *External* (ou
    *Internal* si Workspace), ajoute-toi comme utilisateur de test si l'app
-   reste en mode test (largement suffisant pour un usage perso).
+   reste en mode test (largement suffisant pour un usage perso) — ajoute
+   bien **chaque** compte Gmail que tu comptes connecter, Calendar et Drive
+   confondus, sinon Google bloque avec une erreur 403 (« accès bloqué »).
 3. **APIs & Services → Identifiants → Créer des identifiants → ID client
    OAuth**, type **Application Web**. Dans *URI de redirection autorisés*,
    colle exactement `http://127.0.0.1:8420/api/integrations/google/callback`
-   (ou la valeur de `GOOGLE_REDIRECT_URI` si tu l'as changée).
+   (ou la valeur de `GOOGLE_REDIRECT_URI` si tu l'as changée) — un seul URI
+   pour tous les services Google, le brain route en interne selon lequel a
+   été demandé.
 4. Ouvre la Console web → **Intégrations** → déplie **Paramètres Google** en
    bas à droite → colle le *Client ID* et le *Client Secret* → **Enregistrer**.
    (Alternative équivalente : les mettre dans `.env` —
    `GOOGLE_CLIENT_ID=...` / `GOOGLE_CLIENT_SECRET=...` — et redémarrer le
    brain ; le réglage saisi dans la Console reste prioritaire si les deux
    existent.)
-5. Toujours dans **Intégrations** → **Connecter** sous Google Calendar →
-   choisis le compte Google → accepte. Répète pour chaque compte Google
-   supplémentaire à connecter — tout se passe depuis le site, aucun fichier
-   à éditer après l'étape 4.
+5. Toujours dans **Intégrations** → **Connecter** sous Google Calendar et/ou
+   Google Drive → choisis le compte Google → accepte. Répète pour chaque
+   compte et chaque service à connecter — tout se passe depuis le site,
+   aucun fichier à éditer après l'étape 4. Un même compte Google demande une
+   connexion séparée par service (jetons indépendants, scopes différents).
 
-Seule l'étape 1-3 (créer le client OAuth dans Google Cloud Console) ne peut
-pas se faire depuis Jarvis : Google n'expose aucune API pour ça, c'est un
-geste unique et obligatoire dans leur propre console, quelle que soit
-l'application tierce.
+Seules les étapes 1-3 (créer le client OAuth dans Google Cloud Console) ne
+peuvent pas se faire depuis Jarvis : Google n'expose aucune API pour ça,
+c'est un geste unique et obligatoire dans leur propre console, quelle que
+soit l'application tierce.
 
-Une fois connecté : « Jarvis, qu'est-ce que j'ai aujourd'hui ? » (et
-demain/cette semaine) fonctionne **depuis la Console web** (le chat y
-dispatche déjà le pilotage PC vers l'agent à outils). Ça ne fonctionne pas
-encore depuis la boucle vocale locale (le pilotage PC vocal reste
-volontairement 100 % local aujourd'hui, voir `docs/ROADMAP_MULTIDEVICE.md`)
-— sujet pour une prochaine étape si utile.
+Une fois connecté, depuis la Console web (le chat y dispatche déjà le
+pilotage PC vers l'agent à outils) :
+- « Jarvis, qu'est-ce que j'ai aujourd'hui ? » (et demain/cette semaine) → agenda
+- « Jarvis, cherche le fichier X dans mon Drive » / « mes derniers fichiers Drive » → recherche
+- « Jarvis, résume/trouve l'info sur Y dans le document Z » → recherche puis lecture
+  du contenu (Docs/Sheets/Slides Google, PDF, texte brut — pas les images/vidéos)
+- « Jarvis, ouvre-moi ce fichier » → ouvre le lien dans un onglet du navigateur (open_url)
+- « Jarvis, crée un fichier sur mon Drive avec... » / « remplace le contenu de X par... » /
+  « supprime/mets à la corbeille X » → écriture, avec une **bannière de confirmation**
+  qui apparaît dans la Console (n'importe quelle vue) avant toute exécution ; sans
+  réponse sous 90s ou en cas de refus, rien n'est fait. La suppression n'est jamais
+  définitive (corbeille Drive, récupérable ~30 jours).
+
+Le scope Drive demandé est `drive` (lecture ET écriture, pas seulement
+`drive.readonly`) — nécessaire pour agir sur n'importe quel fichier trouvé
+par la recherche, pas seulement ceux créés par Jarvis. La sécurité vient de
+la confirmation systématique, pas d'un scope restreint : même logique que
+`run_powershell` côté desktop (accès large, confirmation sur ce qui compte).
+Un compte connecté **avant** ce changement (scope lecture seule) doit être
+reconnecté depuis Intégrations pour obtenir les droits d'écriture.
+
+Ça ne fonctionne pas encore depuis la boucle vocale locale (le pilotage PC
+vocal reste volontairement 100 % local aujourd'hui, voir
+`docs/ROADMAP_MULTIDEVICE.md`) — sujet pour une prochaine étape si utile.
 
 > Voix personnalisée : le dossier `voice/` contient `jarvis-high.onnx` (Piper).
 > Pour l'utiliser, enregistrez-la dans votre instance Speaches puis pointez

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import AuthGate from "./components/AuthGate.jsx";
+import ConfirmationBanner from "./components/ConfirmationBanner.jsx";
 import Console from "./components/Console.jsx";
 import Devices from "./components/Devices.jsx";
 import Focus from "./components/Focus.jsx";
@@ -21,17 +22,26 @@ export default function App() {
     return <AuthGate onSubmit={login} />;
   }
 
+  let screen;
   if (view === "devices") {
-    return <Devices onNavigate={setView} onOpenFocus={openFocus} focusEnabled={!!focusDeviceId} />;
+    screen = <Devices onNavigate={setView} onOpenFocus={openFocus} focusEnabled={!!focusDeviceId} />;
+  } else if (view === "focus" && focusDeviceId) {
+    screen = <Focus deviceId={focusDeviceId} onNavigate={setView} />;
+  } else if (view === "routines") {
+    screen = <Routines onNavigate={setView} focusEnabled={!!focusDeviceId} />;
+  } else if (view === "integrations") {
+    screen = <Integrations onNavigate={setView} focusEnabled={!!focusDeviceId} />;
+  } else {
+    screen = <Console onNavigate={setView} focusEnabled={!!focusDeviceId} />;
   }
-  if (view === "focus" && focusDeviceId) {
-    return <Focus deviceId={focusDeviceId} onNavigate={setView} />;
-  }
-  if (view === "routines") {
-    return <Routines onNavigate={setView} focusEnabled={!!focusDeviceId} />;
-  }
-  if (view === "integrations") {
-    return <Integrations onNavigate={setView} focusEnabled={!!focusDeviceId} />;
-  }
-  return <Console onNavigate={setView} focusEnabled={!!focusDeviceId} />;
+
+  return (
+    <>
+      {/* Montée ici (pas dans un panneau précis) : une confirmation
+          d'écriture Drive doit rester visible quelle que soit la vue
+          active — voir ConfirmationBanner.jsx. */}
+      <ConfirmationBanner />
+      {screen}
+    </>
+  );
 }

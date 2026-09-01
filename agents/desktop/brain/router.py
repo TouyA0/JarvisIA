@@ -33,6 +33,8 @@ PC_COMMAND_KEYWORDS = [
     "qu'est-ce que j'ai", "qu'est ce que j'ai", "j'ai quoi",
     "au programme", "de prévu", "prévu aujourd'hui", "prévu demain",
     "prévu cette semaine",
+    # Drive (voir brain/tools.py::drive_search / drive_read)
+    "drive", "google drive", "document", "documents",
 ]
 
 

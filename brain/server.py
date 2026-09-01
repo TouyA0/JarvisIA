@@ -36,8 +36,18 @@ from brain import activity, config, device_store, pairing, routines, speech
 from brain.core import agent as pc_agent
 from brain.core.chat import ask_stream
 from brain.devices import Device, registry
-from brain.integrations import google_calendar, settings as integrations_settings
+from brain.integrations import confirm as integrations_confirm
+from brain.integrations import google_calendar, google_drive, google_oauth, settings as integrations_settings
 from brain.integrations import store as integrations_store
+
+# Un module par service Google, tous partagent la même mécanique OAuth
+# (google_oauth.py) et le même callback — seul auth-url/callback ont besoin
+# de savoir lequel appeler ; calendar_events/drive_search (brain/tools.py)
+# importent directement le module qui les concerne.
+_GOOGLE_SERVICES = {
+    google_calendar.SERVICE_TYPE: google_calendar,
+    google_drive.SERVICE_TYPE: google_drive,
+}
 
 config.ensure_dirs()
 
@@ -226,7 +236,7 @@ async def routine_status(routine_id: str) -> dict:
 @app.get("/api/integrations")
 async def list_integrations() -> list[dict]:
     """Tous les comptes tiers connectés (jamais les jetons), tous types
-    confondus — un seul type existe aujourd'hui (google_calendar)."""
+    confondus (google_calendar, google_drive…)."""
     return integrations_store.list_public()
 
 
@@ -258,12 +268,18 @@ async def clear_google_settings() -> dict:
 
 
 @app.get("/api/integrations/google/auth-url")
-async def google_auth_url() -> dict:
+async def google_auth_url(service: str = "google_calendar") -> dict:
     """URL de consentement Google à ouvrir dans un nouvel onglet — la
-    Console (Integrations.jsx) fait juste `window.open(url)`."""
-    if not google_calendar.configured():
-        raise HTTPException(400, "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET manquants dans .env")
-    return {"url": google_calendar.build_auth_url()}
+    Console (Integrations.jsx) fait juste `window.open(url)`. `service`
+    identifie le module à utiliser (google_calendar, google_drive…) ; il est
+    aussi encodé dans le `state` OAuth pour que le callback partagé (un seul
+    redirect_uri possible côté Google) sache où router le code reçu."""
+    module = _GOOGLE_SERVICES.get(service)
+    if not module:
+        raise HTTPException(400, f"service inconnu : {service!r}")
+    if not google_oauth.configured():
+        raise HTTPException(400, "Identifiants Google manquants — voir Paramètres Google dans la Console")
+    return {"url": module.build_auth_url()}
 
 
 @app.get("/api/integrations/google/callback")
@@ -271,7 +287,9 @@ async def google_callback(request: Request) -> Response:
     """Cible de la redirection Google après consentement — pas d'auth
     Console ici (voir middleware), et pas de JSON : cette route est ouverte
     par le navigateur, pas appelée en fetch. Répond avec une page qui se
-    referme et prévient l'onglet Console d'où la connexion a été lancée."""
+    referme et prévient l'onglet Console d'où la connexion a été lancée.
+    Le `state` (émis par google_oauth.build_auth_url) indique quel module
+    appeler — seul lui sait quel scope/quelle API a été demandé."""
     code = request.query_params.get("code")
     state = request.query_params.get("state", "")
     error = request.query_params.get("error")
@@ -294,9 +312,21 @@ setTimeout(() => window.close(), 1500);
         return _page(False, f"Connexion refusée par Google ({error}).")
     if not code:
         return _page(False, "Réponse Google incomplète (code manquant).")
+
+    service_type = google_oauth.consume_state(state)
+    if not service_type:
+        return _page(False, "État OAuth invalide ou expiré — relance la connexion depuis la Console.")
+    module = _GOOGLE_SERVICES.get(service_type)
+    if not module:
+        return _page(False, f"Service inconnu : {service_type!r}")
+
     try:
-        account = google_calendar.handle_callback(code, state)
-    except (ValueError, RuntimeError) as exc:
+        account = module.handle_callback(code)
+    except Exception as exc:
+        # RuntimeError attendu (Google refuse/jeton manquant) mais aussi
+        # requests.HTTPError si l'appel d'identification du compte échoue
+        # (_fetch_primary_email/_fetch_account_email) — dans tous les cas
+        # mieux vaut un message clair côté Console qu'une 500 muette.
         return _page(False, str(exc))
     return _page(True, f"Compte {account['label']} connecté.")
 
@@ -305,6 +335,22 @@ setTimeout(() => window.close(), 1500);
 async def remove_integration(account_id: str) -> dict:
     if not integrations_store.remove(account_id):
         raise HTTPException(404, f"compte {account_id!r} inconnu")
+    return {"ok": True}
+
+
+@app.get("/api/confirmations")
+async def list_confirmations() -> list[dict]:
+    """Actions d'écriture (Drive create/update/trash…) en attente d'un
+    humain — la Console web poll ceci pour afficher sa bannière de
+    confirmation (voir brain/integrations/confirm.py)."""
+    return integrations_confirm.list_pending()
+
+
+@app.post("/api/confirmations/{confirmation_id}/resolve")
+async def resolve_confirmation(confirmation_id: str, body: dict) -> dict:
+    approved = bool(body.get("approved"))
+    if not integrations_confirm.resolve(confirmation_id, approved):
+        raise HTTPException(404, "confirmation inconnue ou déjà expirée")
     return {"ok": True}
 
 

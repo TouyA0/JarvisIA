@@ -35,7 +35,7 @@ devient le canal d'affichage riche.
 |---|---------|-------|--------------------------|-----------|--------|
 | I1 | **Google Calendar** ✓ *(fait)* | OAuth2 (Calendar API, lecture), multi-comptes | « qu'est-ce que j'ai aujourd'hui/cette semaine ? », alerte 10 min avant un événement (à venir), briefing matinal (F6, à venir) | lecture seule ; création jamais implémentée pour l'instant | ▲▲ |
 | I2 | **Notion (calendrier + pages)** | Notion API (intégration interne, token) | si l'agenda réel vit dans une base Notion plutôt que Google Calendar : lire une base « Calendrier », lister les pages d'un projet, chercher une note | écriture (cocher une tâche, ajouter une ligne) seulement sur confirmation | ▲▲ |
-| I3 | **Google Drive** | OAuth2 (Drive API, scope lecture + upload restreint) | « cherche le fichier Y », « résume ce PDF », « ouvre mon dernier export », lister les fichiers modifiés récemment | upload/déplacement seulement sur confirmation ; jamais de suppression | ▲▲ |
+| I3 | **Google Drive** ✓ *(fait, lecture + écriture confirmée)* | OAuth2 (Drive API, scope `drive` complet) | recherche, lecture (Docs/Sheets/Slides/PDF/texte), ouverture (open_url), création/remplacement/corbeille — les 3 dernières via bannière de confirmation Console (brain/integrations/confirm.py) | écriture possible mais toujours confirmée à l'écran ; suppression = corbeille, jamais définitive | ▲▲ |
 | I4 | **Gmail** | OAuth2 (Gmail API, lecture + brouillon) | « j'ai des mails importants ? », « résume le mail de X », « prépare une réponse » (brouillon, jamais d'envoi auto) | brouillon oui, envoi jamais sans confirmation explicite à l'écran | ▲▲ |
 | I5 | **Zoho Mail** | IMAP (lecture) + API Zoho si dispo (envoi) | même chose que Gmail, sur la boîte pro/perso Zoho | brouillon/envoi = confirmation | ▲▲ |
 | I6 | **Spotify** | OAuth2 (Web API + Web Playback SDK) | « mets ma playlist détente », « c'est quoi ce titre ? », « pause », affichage pochette + titre en cours dans une carte | contrôle lecture = action directe (pas destructif) | ▲▲ |
@@ -116,7 +116,7 @@ déjà (`ROADMAP_MULTIDEVICE.md`). Le HUD desktop affiche un résumé compact +
 | `spotify_now_playing` | pochette, titre, artiste, barre de progression, contrôles | I6 |
 | `screenshot` | image capturée, zoomable | existant `tools/screen.py`, juste jamais **affiché**, seulement envoyé à Claude en interne |
 | `video_stream` | flux live (webcam ou partage d'écran) | §4 |
-| `confirmation` | déjà existant en HUD (`ui/dialogs.py`) — à généraliser en carte web aussi | `tools/safety.py` |
+| `confirmation` | HUD (`ui/dialogs.py`, bulle Qt) ✓ ; **web fait aussi** (`ConfirmationBanner.jsx` + `brain/integrations/confirm.py`, générique — pas juste Drive, réutilisable pour Gmail/Notion write plus tard) | `tools/safety.py` (desktop) / `confirm.py` (brain) |
 | `weather` | déjà affiché en HUD, à porter en carte web pour cohérence | `services/weather.py` |
 | `diagnostics` | CPU/RAM/réseau, déjà en HUD | `services/diagnostics.py` |
 | `file_preview` | PDF/image/texte résumé, aperçu | Drive + fichiers locaux |

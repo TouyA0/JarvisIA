@@ -5,14 +5,16 @@ import { useIsMobile } from "../lib/useIsMobile.js";
 
 const TYPE_LABELS = {
   google_calendar: "Google Calendar",
+  google_drive: "Google Drive",
 };
 
-// Catalogue affiché à droite — google_calendar est le seul branché, le
-// reste vient docs/ROADMAP_DISPLAY_INTEGRATIONS.md et attend son tour
-// (même socle, un module brain/integrations/<service>.py de plus).
+// Catalogue affiché à droite — google_calendar et google_drive sont
+// branchés (même Client ID/Secret Google, scopes distincts), le reste vient
+// docs/ROADMAP_DISPLAY_INTEGRATIONS.md et attend son tour (même socle, un
+// module brain/integrations/<service>.py de plus).
 const CATALOG = [
   { type: "google_calendar", label: "Google Calendar", available: true },
-  { type: "google_drive", label: "Google Drive", available: false },
+  { type: "google_drive", label: "Google Drive", available: true },
   { type: "gmail", label: "Gmail", available: false },
   { type: "zoho_mail", label: "Zoho Mail", available: false },
   { type: "spotify", label: "Spotify", available: false },
@@ -204,23 +206,24 @@ function CatalogRow({ entry, onConnect, busy, error }) {
 export default function Integrations({ onNavigate, focusEnabled }) {
   const { accounts, connectGoogle, remove, googleSettings, saveGoogleSettings, clearGoogleSettings } = useIntegrations();
   const isMobile = useIsMobile();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [busyType, setBusyType] = useState(null);
+  const [errors, setErrors] = useState({});
+  const GOOGLE_TYPES = new Set(["google_calendar", "google_drive"]);
 
   async function handleConnect(type) {
-    if (type !== "google_calendar") return;
+    if (!GOOGLE_TYPES.has(type)) return;
     if (!googleSettings.configured) {
-      setError("Renseigne d'abord Client ID / Client Secret ci-dessous (Paramètres Google).");
+      setErrors((e) => ({ ...e, [type]: "Renseigne d'abord Client ID / Client Secret ci-dessous (Paramètres Google)." }));
       return;
     }
-    setError("");
-    setBusy(true);
+    setErrors((e) => ({ ...e, [type]: "" }));
+    setBusyType(type);
     try {
-      await connectGoogle();
+      await connectGoogle(type);
     } catch (e) {
-      setError(e.message);
+      setErrors((err) => ({ ...err, [type]: e.message }));
     } finally {
-      setBusy(false);
+      setBusyType(null);
     }
   }
 
@@ -262,13 +265,14 @@ export default function Integrations({ onNavigate, focusEnabled }) {
               key={entry.type}
               entry={entry}
               onConnect={handleConnect}
-              busy={busy}
-              error={entry.type === "google_calendar" ? error : ""}
+              busy={busyType === entry.type}
+              error={errors[entry.type] || ""}
             />
           ))}
           <div style={{ fontSize: 11, color: "var(--faint)" }}>
-            Plusieurs comptes Google peuvent être connectés en parallèle — leurs
-            agendas sont fusionnés automatiquement.
+            Plusieurs comptes Google peuvent être connectés en parallèle, y compris
+            sur différents services (Calendar, Drive) — les résultats de chacun
+            sont fusionnés automatiquement.
           </div>
           <div style={{ marginTop: "auto" }}>
             <GoogleAppSettings status={googleSettings} onSave={saveGoogleSettings} onClear={clearGoogleSettings} />
