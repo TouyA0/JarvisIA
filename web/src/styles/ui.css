@@ -135,8 +135,8 @@
   gap: 3px;
   border: none;
   background: transparent;
-  color: var(--text-faint);
-  font-size: 10px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
   letter-spacing: 0.02em;
   padding: 0 2px;
 }
