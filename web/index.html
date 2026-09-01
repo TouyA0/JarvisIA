@@ -2,9 +2,24 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>J.A.R.V.I.S.</title>
+
+    <!-- Installation sur téléphone (C10) — l'interface mobile existait déjà
+         (useIsMobile.js, tabbar…), seule l'enveloppe manquait. Pas de
+         service worker : Chrome/Android n'en exige plus pour proposer
+         l'installation, et un mode hors-ligne n'aurait pas de sens ici —
+         Jarvis a besoin du brain en direct pour à peu près tout.
+         Note : Chrome sur Android n'affiche l'invite d'installation que sur
+         une origine sécurisée (HTTPS ou "localhost") — une adresse LAN en
+         http:// brut n'y a pas droit tant qu'aucun HTTPS n'est en place. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#0a0e18" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Jarvis" />
     <script>
       // Pose le thème avant le premier paint pour éviter un flash de la
       // palette par défaut (voir lib/useTheme.js).
