@@ -182,14 +182,14 @@ export default function Hud() {
   // le Pupitre n'en veut pas — il montre ce qui se passe maintenant, pas le
   // fil d'hier. Sans le filtre `historical`, il rouvrirait en affichant la
   // dernière réponse du journal comme si Jarvis venait de la prononcer.
-  const { status, messages: allMessages, activity, busy, ask } = useChatContext();
+  const { status, messages: allMessages, activity, busy, ask, setPhraseHandler, setDoneHandler } =
+    useChatContext();
   const messages = allMessages.filter((m) => !m.historical);
   const { cards, lastExchange, connected, dismiss, clearAll } = useCardFeed();
   const { devices } = useDevices();
 
   const lastLocalQuestionRef = useRef("");
   const localTurnAtRef = useRef(0);
-  const wasBusyRef = useRef(false);
   const lastWasVoiceRef = useRef(false);
   const [remote, setRemote] = useState(null);
 
@@ -199,12 +199,28 @@ export default function Hud() {
     send(text);
   }
 
-  // Instance partagée avec Console (montée dans App.jsx) : on enregistre
-  // notre gestionnaire à chaque rendu, pas dans un effet — une commande ne
-  // doit jamais pouvoir arriver avant que le Pupitre ait pris la main sur
-  // l'écoute (voir lib/VoiceContext.jsx).
+  // Relaie chaque phrase à la synthèse vocale dès son arrivée (si la
+  // question venait de la voix), au lieu d'attendre le bloc entier à
+  // chat.done comme avant — voir useVoice.js::speakPhrase.
+  function handlePhrase(text) {
+    if (lastWasVoiceRef.current) voice.speakPhrase(text);
+  }
+
+  function handleDone() {
+    if (lastWasVoiceRef.current) {
+      lastWasVoiceRef.current = false;
+      voice.speakEnd();
+    }
+  }
+
+  // Instance partagée avec Console (montée dans App.jsx) : on enregistre nos
+  // gestionnaires à chaque rendu, pas dans un effet — une commande ou une
+  // phrase ne doit jamais pouvoir arriver avant que le Pupitre ait pris la
+  // main (voir lib/VoiceContext.jsx et lib/ChatContext.jsx).
   const voice = useVoiceContext();
   voice.setCommandHandler(handleVoiceCommand);
+  setPhraseHandler(handlePhrase);
+  setDoneHandler(handleDone);
 
   function send(text) {
     lastLocalQuestionRef.current = text.trim();
@@ -221,19 +237,11 @@ export default function Hud() {
     setRemote(lastExchange);
   }, [lastExchange]);
 
-  // Lecture à voix haute uniquement si la question venait de la voix : une
-  // réponse à une question tapée ne doit pas se mettre à parler seule.
+  // Texte affiché à l'écran — la lecture à voix haute, elle, part
+  // maintenant phrase par phrase via handlePhrase/handleDone ci-dessus.
   const lastJarvis = [...messages].reverse().find((m) => m.role === "jarvis");
   const lastAnswerRef = useRef("");
   lastAnswerRef.current = lastJarvis?.text || "";
-  useEffect(() => {
-    if (wasBusyRef.current && !busy && lastWasVoiceRef.current) {
-      lastWasVoiceRef.current = false;
-      voice.speak(lastAnswerRef.current);
-    }
-    wasBusyRef.current = busy;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busy]);
 
   const online = status === "online";
   const devicesOnline = devices.filter((d) => d.status === "online").length;

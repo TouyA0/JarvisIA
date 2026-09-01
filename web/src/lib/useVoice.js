@@ -41,6 +41,16 @@ export function useVoice({ onCommand }) {
   const pausedRef = useRef(false); // pause externe (Jarvis parle) — distincte de la pause du détecteur
   const audioRef = useRef(null); // lecture TTS en cours, pour qu'Échap puisse la couper (voir stopSpeaking)
 
+  // File de synthèse : chaque phrase du tour en cours lance sa synthèse dès
+  // son arrivée (les fetches tournent donc en parallèle du réseau), et la
+  // lecture les enchaîne dans l'ordre dès que le premier segment est prêt —
+  // au lieu d'attendre le bloc entier comme avant. Même principe que le
+  // streaming phrase par phrase de agents/desktop/audio/tts.py côté PC.
+  const audioQueueRef = useRef([]); // Promise<Blob|null>[], dans l'ordre d'arrivée
+  const playingRef = useRef(false); // une boucle de lecture est déjà active
+  const turnEndedRef = useRef(true); // plus aucune phrase à attendre pour le tour en cours
+  const playResolveRef = useRef(null); // débloque la lecture en cours depuis stopSpeaking
+
   const handleDetected = useCallback(async (score) => {
     if (pausedRef.current) return; // Jarvis parle déjà, ignore ce déclenchement
     setWakeWordHeard(true);
@@ -161,55 +171,86 @@ export function useVoice({ onCommand }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Lit une réponse à voix haute (synthèse côté brain) puis reprend
-  // l'écoute — utilisée par Console.jsx et Hud.jsx après un tour déclenché
-  // à la voix. Centralisée ici (plutôt que dupliquée dans les deux écrans,
-  // comme avant) pour que `stopSpeaking` puisse couper la lecture en cours
-  // depuis n'importe où — voir raccourci Échap dans useGlobalShortcuts.js.
-  const speak = useCallback(
-    async (text) => {
-      if (!text) {
-        resume();
-        return;
-      }
-      try {
-        const res = await authFetch("/api/speech/synthesize", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text }),
-        });
-        if (!res.ok) {
-          resume();
-          return;
-        }
-        const blob = await res.blob();
+  const synthesize = useCallback(async (text) => {
+    try {
+      const res = await authFetch("/api/speech/synthesize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) return null;
+      return await res.blob();
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Draine la file dans l'ordre : chaque Promise a été lancée dès l'arrivée
+  // de sa phrase (voir speakPhrase), donc le segment suivant a de bonnes
+  // chances d'être déjà prêt — ou en cours — quand le précédent finit de
+  // jouer, sans le silence d'attente du bloc entier. Ne reprend l'écoute
+  // qu'une fois la file vide *et* le tour terminé (speakEnd), pour ne pas
+  // se redéclencher entre deux phrases du même tour.
+  const drainQueue = useCallback(async () => {
+    if (playingRef.current) return;
+    playingRef.current = true;
+    while (audioQueueRef.current.length) {
+      const blob = await audioQueueRef.current.shift();
+      if (blob) {
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
         audioRef.current = audio;
-        const finish = () => {
-          URL.revokeObjectURL(url);
-          if (audioRef.current === audio) audioRef.current = null;
-          resume();
-        };
-        audio.onended = finish;
-        audio.onerror = finish;
-        await audio.play();
-      } catch {
-        resume();
+        await new Promise((resolve) => {
+          playResolveRef.current = resolve;
+          audio.onended = resolve;
+          audio.onerror = resolve;
+          audio.play().catch(resolve);
+        });
+        playResolveRef.current = null;
+        URL.revokeObjectURL(url);
+        if (audioRef.current === audio) audioRef.current = null;
       }
-    },
+    }
+    playingRef.current = false;
+    if (turnEndedRef.current) resume();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [resume],
+  }, [resume]);
+
+  // Empile une phrase dès sa réception (Console.jsx/Hud.jsx la relaient
+  // depuis chat.phrase) : la synthèse démarre immédiatement, la lecture
+  // s'enchaîne dès que le segment précédent (ou rien) est prêt.
+  const speakPhrase = useCallback(
+    (text) => {
+      const trimmed = (text || "").trim();
+      if (!trimmed) return;
+      turnEndedRef.current = false;
+      audioQueueRef.current.push(synthesize(trimmed));
+      drainQueue();
+    },
+    [synthesize, drainQueue],
   );
 
+  // Signale la fin du tour (chat.done) : plus aucune phrase à attendre —
+  // reprend l'écoute dès que la file en cours se vide (immédiatement si
+  // elle est déjà vide, par exemple une réponse sans aucune phrase).
+  const speakEnd = useCallback(() => {
+    turnEndedRef.current = true;
+    if (!playingRef.current && audioQueueRef.current.length === 0) resume();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resume]);
+
   // Coupe la lecture en cours (Échap) sans attendre la fin naturelle du
-  // clip — reprend l'écoute comme si le clip s'était terminé normalement.
+  // clip, vide la file, et reprend l'écoute comme si le tour s'était
+  // terminé normalement.
   const stopSpeaking = useCallback(() => {
+    audioQueueRef.current = [];
+    turnEndedRef.current = true;
     const audio = audioRef.current;
-    if (!audio) return;
     audioRef.current = null;
-    audio.pause();
-    resume();
+    if (audio) audio.pause();
+    playResolveRef.current?.();
+    playResolveRef.current = null;
+    if (!playingRef.current) resume();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resume]);
 
@@ -217,6 +258,6 @@ export function useVoice({ onCommand }) {
 
   return {
     armed, status, error, lastTranscript, wakeWordHeard, lastScore,
-    arm, disarm, pause, resume, speak, stopSpeaking,
+    arm, disarm, pause, resume, speakPhrase, speakEnd, stopSpeaking,
   };
 }

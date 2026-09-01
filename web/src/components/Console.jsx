@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { ViewHeader } from "./AppShell.jsx";
 import CardView from "./cards/CardView.jsx";
 import Icon from "./ui/Icon.jsx";
@@ -262,11 +262,10 @@ function CardStrip({ cards, dismiss, clearAll }) {
 }
 
 export default function Console() {
-  const { status, messages, activity, busy, historyLoaded, ask, clear } = useChatContext();
+  const { status, messages, activity, busy, historyLoaded, ask, clear, setPhraseHandler, setDoneHandler } =
+    useChatContext();
   const { cards, dismiss, clearAll } = useCardFeed();
   const lastWasVoiceRef = useRef(false);
-  const wasBusyRef = useRef(false);
-  const lastAnswerRef = useRef("");
 
   // Déclaration de fonction (hoistée) : peut référencer `voice` avant sa
   // ligne `const` ci-dessous, tant qu'elle n'est appelée qu'après coup
@@ -278,30 +277,29 @@ export default function Console() {
     ask(text);
   }
 
-  // Instance partagée avec Hud (montée dans App.jsx) : on enregistre notre
-  // gestionnaire à chaque rendu, pas dans un effet — une commande ne doit
-  // jamais pouvoir arriver avant que la Conversation ait pris la main sur
-  // l'écoute (voir lib/VoiceContext.jsx).
+  // Relaie chaque phrase à la synthèse vocale dès son arrivée (si la
+  // question venait de la voix — une réponse à une question tapée ne doit
+  // pas se mettre à parler toute seule), au lieu d'attendre le bloc entier
+  // à chat.done comme avant — voir useVoice.js::speakPhrase.
+  function handlePhrase(text) {
+    if (lastWasVoiceRef.current) voice.speakPhrase(text);
+  }
+
+  function handleDone() {
+    if (lastWasVoiceRef.current) {
+      lastWasVoiceRef.current = false;
+      voice.speakEnd();
+    }
+  }
+
+  // Instance partagée avec Hud (montée dans App.jsx) : on enregistre nos
+  // gestionnaires à chaque rendu, pas dans un effet — une commande ou une
+  // phrase ne doit jamais pouvoir arriver avant que la Conversation ait
+  // pris la main (voir lib/VoiceContext.jsx et lib/ChatContext.jsx).
   const voice = useVoiceContext();
   voice.setCommandHandler(handleVoiceCommand);
-
-  // Garde sous la main le texte complet de la dernière réponse : c'est lui
-  // qu'on envoie à la synthèse vocale une fois le tour terminé.
-  const lastJarvis = [...messages].reverse().find((m) => m.role === "jarvis");
-  lastAnswerRef.current = lastJarvis?.text || "";
-
-  // Un tour vient de se terminer (busy: true → false) : si la question
-  // venait de la voix, on lit la réponse à voix haute puis on reprend
-  // l'écoute — sinon on reprend directement (une réponse à une question
-  // tapée ne doit pas se mettre à parler toute seule).
-  useEffect(() => {
-    if (wasBusyRef.current && !busy && lastWasVoiceRef.current) {
-      lastWasVoiceRef.current = false;
-      voice.speak(lastAnswerRef.current);
-    }
-    wasBusyRef.current = busy;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busy]);
+  setPhraseHandler(handlePhrase);
+  setDoneHandler(handleDone);
 
   const online = status === "online";
   const empty = messages.length === 0;

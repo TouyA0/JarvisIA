@@ -43,6 +43,19 @@ export function useChat() {
   // Identifiant du message de Jarvis en cours de rédaction : les phrases
   // arrivent une par une, il faut les concaténer dans la même bulle.
   const pendingRef = useRef(null);
+
+  // Écran actif (Console ou Hud) : relaie chaque phrase à la synthèse
+  // vocale dès son arrivée, plutôt que d'attendre le bloc entier — voir
+  // useVoice.js::speakPhrase. Assigné directement dans le corps du
+  // composant par l'écran actif, comme setCommandHandler côté voix.
+  const phraseHandlerRef = useRef(null);
+  const doneHandlerRef = useRef(null);
+  const setPhraseHandler = useCallback((fn) => {
+    phraseHandlerRef.current = fn;
+  }, []);
+  const setDoneHandler = useCallback((fn) => {
+    doneHandlerRef.current = fn;
+  }, []);
   useEffect(() => {
     // Chaque message restauré porte `historical: true` : le Pupitre
     // (Hud.jsx) filtre sur ce flag pour ne montrer que ce qui se passe
@@ -99,6 +112,10 @@ export function useChat() {
         // saisie, sinon la Console reste figée sur « Réflexion… ».
         setBusy(false);
         setActivity("");
+        if (pendingRef.current) {
+          pendingRef.current = null;
+          doneHandlerRef.current?.();
+        }
         // Le prochain essai relira le token à jour (mis à jour entre-temps
         // si Monsieur vient de se reconnecter via AuthGate) — pas besoin de
         // traiter ce cas à part, la boucle de reconnexion suffit.
@@ -116,6 +133,7 @@ export function useChat() {
                 : m,
             ),
           );
+          phraseHandlerRef.current?.(msg.text);
         } else if (msg.type === "chat.status") {
           setActivity(msg.text || "");
         } else if (msg.type === "chat.done") {
@@ -127,6 +145,7 @@ export function useChat() {
           pendingRef.current = null;
           setActivity("");
           setBusy(false);
+          doneHandlerRef.current?.();
         }
       };
     }
@@ -165,5 +184,15 @@ export function useChat() {
     setActivity("");
   }, []);
 
-  return { status, messages, activity, busy, historyLoaded, ask, clear };
+  return {
+    status,
+    messages,
+    activity,
+    busy,
+    historyLoaded,
+    ask,
+    clear,
+    setPhraseHandler,
+    setDoneHandler,
+  };
 }
