@@ -6,15 +6,18 @@ const POLL_MS = 3000;
 export function useIntegrations() {
   const [accounts, setAccounts] = useState([]);
   const [googleSettings, setGoogleSettings] = useState({ configured: false, source: null, client_id: null });
+  const [zohoSettings, setZohoSettings] = useState({ configured: false, client_id: null, region: null });
 
   const refresh = useCallback(async () => {
     try {
-      const [accountsRes, settingsRes] = await Promise.all([
+      const [accountsRes, googleRes, zohoRes] = await Promise.all([
         authFetch("/api/integrations"),
         authFetch("/api/integrations/google/settings"),
+        authFetch("/api/integrations/zoho/settings"),
       ]);
       if (accountsRes.ok) setAccounts(await accountsRes.json());
-      if (settingsRes.ok) setGoogleSettings(await settingsRes.json());
+      if (googleRes.ok) setGoogleSettings(await googleRes.json());
+      if (zohoRes.ok) setZohoSettings(await zohoRes.json());
     } catch {
       // brain injoignable — on garde la dernière liste connue
     }
@@ -26,10 +29,10 @@ export function useIntegrations() {
     return () => clearInterval(id);
   }, [refresh]);
 
-  // Le callback OAuth (brain/server.py::google_callback) prévient cet
-  // onglet via postMessage une fois la connexion terminée — plus réactif
-  // que d'attendre le prochain poll, et ça marche même si l'onglet popup
-  // se ferme avant.
+  // Le callback OAuth (brain/server.py::google_callback / zoho_callback)
+  // prévient cet onglet via postMessage une fois la connexion terminée —
+  // plus réactif que d'attendre le prochain poll, et ça marche même si
+  // l'onglet popup se ferme avant.
   useEffect(() => {
     function onMessage(event) {
       if (event.data && typeof event.data === "object" && "jarvisIntegration" in event.data) {
@@ -48,6 +51,16 @@ export function useIntegrations() {
     }
     const { url } = await res.json();
     window.open(url, "jarvis-google-auth", "width=480,height=680");
+  }, []);
+
+  const connectZoho = useCallback(async (service = "zoho_mail") => {
+    const res = await authFetch(`/api/integrations/zoho/auth-url?service=${encodeURIComponent(service)}`);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.detail || "Zoho non configuré");
+    }
+    const { url } = await res.json();
+    window.open(url, "jarvis-zoho-auth", "width=480,height=680");
   }, []);
 
   const remove = useCallback(
@@ -79,5 +92,30 @@ export function useIntegrations() {
     await refresh();
   }, [refresh]);
 
-  return { accounts, connectGoogle, remove, googleSettings, saveGoogleSettings, clearGoogleSettings };
+  const saveZohoSettings = useCallback(
+    async (clientId, clientSecret, region) => {
+      const res = await authFetch("/api/integrations/zoho/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, region }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "échec de l'enregistrement");
+      }
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const clearZohoSettings = useCallback(async () => {
+    await authFetch("/api/integrations/zoho/settings", { method: "DELETE" });
+    await refresh();
+  }, [refresh]);
+
+  return {
+    accounts, remove,
+    connectGoogle, googleSettings, saveGoogleSettings, clearGoogleSettings,
+    connectZoho, zohoSettings, saveZohoSettings, clearZohoSettings,
+  };
 }

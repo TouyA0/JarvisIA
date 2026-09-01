@@ -107,6 +107,12 @@ GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 GOOGLE_REDIRECT_URI = os.getenv(
     "GOOGLE_REDIRECT_URI", f"http://127.0.0.1:{PORT}/api/integrations/google/callback",
 )
+# Zoho Mail — client OAuth créé dans la Console API Zoho (api-console.zoho.<region>),
+# identifiants saisis depuis la Console web (voir settings.py::set_zoho_credentials),
+# pas de repli .env pour ce fournisseur (voir settings.py).
+ZOHO_REDIRECT_URI = os.getenv(
+    "ZOHO_REDIRECT_URI", f"http://127.0.0.1:{PORT}/api/integrations/zoho/callback",
+)
 # Fuseau pour délimiter "aujourd'hui"/"demain"/"cette semaine" (calendar_events) —
 # calculer ces bornes en UTC décalerait la journée de 1-2h par rapport à la
 # réalité locale (été/hiver), faisant rater ou déborder des événements en

@@ -39,6 +39,7 @@ from brain.devices import Device, registry
 from brain.integrations import confirm as integrations_confirm
 from brain.integrations import google_calendar, google_drive, google_gmail, google_oauth, settings as integrations_settings
 from brain.integrations import store as integrations_store
+from brain.integrations import zoho_mail, zoho_oauth
 
 # Un module par service Google, tous partagent la même mécanique OAuth
 # (google_oauth.py) et le même callback — seul auth-url/callback ont besoin
@@ -48,6 +49,11 @@ _GOOGLE_SERVICES = {
     google_calendar.SERVICE_TYPE: google_calendar,
     google_drive.SERVICE_TYPE: google_drive,
     google_gmail.SERVICE_TYPE: google_gmail,
+}
+# Même principe pour Zoho (aujourd'hui un seul service, zoho_mail — mais
+# Zoho a d'autres API sur le même mécanisme OAuth si un jour utile).
+_ZOHO_SERVICES = {
+    zoho_mail.SERVICE_TYPE: zoho_mail,
 }
 
 config.ensure_dirs()
@@ -69,11 +75,11 @@ async def _require_console_auth(request: Request, call_next):
     pas seulement via les boutons figés de Focus. /api/health reste ouvert
     (sondes de démarrage, aucune donnée sensible)."""
     path = request.url.path
-    # Google appelle cette route directement (redirection navigateur après
-    # consentement) : pas de moyen d'y joindre notre bearer token. Sûr quand
-    # même — voir google_calendar.handle_callback, le `state` à usage unique
-    # émis par nous seuls fait office de jeton anti-CSRF pour cet échange.
-    if path == "/api/integrations/google/callback":
+    # Google/Zoho appellent ces routes directement (redirection navigateur
+    # après consentement) : pas de moyen d'y joindre notre bearer token. Sûr
+    # quand même — le `state` à usage unique émis par nous seuls fait office
+    # de jeton anti-CSRF pour cet échange (google_oauth.py / zoho_oauth.py).
+    if path in ("/api/integrations/google/callback", "/api/integrations/zoho/callback"):
         return await call_next(request)
     if config.CONSOLE_PASSWORD and path.startswith("/api/") and path != "/api/health":
         auth = request.headers.get("authorization", "")
@@ -337,6 +343,82 @@ async def remove_integration(account_id: str) -> dict:
     if not integrations_store.remove(account_id):
         raise HTTPException(404, f"compte {account_id!r} inconnu")
     return {"ok": True}
+
+
+@app.get("/api/integrations/zoho/settings")
+async def zoho_settings() -> dict:
+    return integrations_settings.zoho_status()
+
+
+@app.post("/api/integrations/zoho/settings")
+async def set_zoho_settings(body: dict) -> dict:
+    client_id = (body.get("client_id") or "").strip()
+    client_secret = (body.get("client_secret") or "").strip()
+    region = (body.get("region") or "").strip()
+    if not client_id or not client_secret or not region:
+        raise HTTPException(400, "client_id, client_secret et region requis")
+    try:
+        integrations_settings.set_zoho_credentials(client_id, client_secret, region)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return integrations_settings.zoho_status()
+
+
+@app.delete("/api/integrations/zoho/settings")
+async def clear_zoho_settings() -> dict:
+    integrations_settings.clear_zoho_credentials()
+    return integrations_settings.zoho_status()
+
+
+@app.get("/api/integrations/zoho/auth-url")
+async def zoho_auth_url(service: str = "zoho_mail") -> dict:
+    module = _ZOHO_SERVICES.get(service)
+    if not module:
+        raise HTTPException(400, f"service inconnu : {service!r}")
+    if not zoho_oauth.configured():
+        raise HTTPException(400, "Identifiants Zoho manquants — voir Paramètres Zoho dans la Console")
+    return {"url": module.build_auth_url()}
+
+
+@app.get("/api/integrations/zoho/callback")
+async def zoho_callback(request: Request) -> Response:
+    """Cible de la redirection Zoho après consentement — même principe que
+    google_callback ci-dessus (pas d'auth Console, page auto-fermante)."""
+    code = request.query_params.get("code")
+    state = request.query_params.get("state", "")
+    error = request.query_params.get("error")
+
+    def _page(ok: bool, message: str) -> Response:
+        html = f"""<!doctype html><html><body style="background:#0a0e14;color:{'#5eead4' if ok else '#f87171'};
+font-family:system-ui;display:grid;place-items:center;height:100vh;margin:0">
+<div style="text-align:center">
+<p>{message}</p>
+<p style="opacity:.6;font-size:13px">Cet onglet peut être fermé.</p>
+</div>
+<script>
+if (window.opener) {{ window.opener.postMessage({{ jarvisIntegration: {str(ok).lower()} }}, "*"); }}
+setTimeout(() => window.close(), 1500);
+</script>
+</body></html>"""
+        return Response(content=html, media_type="text/html")
+
+    if error:
+        return _page(False, f"Connexion refusée par Zoho ({error}).")
+    if not code:
+        return _page(False, "Réponse Zoho incomplète (code manquant).")
+
+    service_type = zoho_oauth.consume_state(state)
+    if not service_type:
+        return _page(False, "État OAuth invalide ou expiré — relance la connexion depuis la Console.")
+    module = _ZOHO_SERVICES.get(service_type)
+    if not module:
+        return _page(False, f"Service inconnu : {service_type!r}")
+
+    try:
+        account = module.handle_callback(code)
+    except Exception as exc:
+        return _page(False, str(exc))
+    return _page(True, f"Compte {account['label']} connecté.")
 
 
 @app.get("/api/confirmations")

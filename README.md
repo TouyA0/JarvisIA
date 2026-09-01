@@ -235,6 +235,45 @@ reconnecté depuis Intégrations pour obtenir les droits d'écriture.
 vocal reste volontairement 100 % local aujourd'hui, voir
 `docs/ROADMAP_MULTIDEVICE.md`) — sujet pour une prochaine étape si utile.
 
+### Zoho Mail
+
+Fournisseur distinct de Google (compte, identifiants, écran de config
+séparés dans la Console — panneau **Intégrations**, bloc **Paramètres
+Zoho**) :
+
+1. [Console API Zoho](https://api-console.zoho.com/) (ou `.eu`/`.in`/`.com.au`/
+   `.jp`/`.ca` selon le datacenter de ton compte Zoho — **la région compte**,
+   se tromper fait échouer toute la connexion) → **Add Client** → **Server-based
+   Applications**.
+2. Dans *Authorized Redirect URIs*, colle exactement
+   `http://127.0.0.1:8420/api/integrations/zoho/callback` (ou la valeur de
+   `ZOHO_REDIRECT_URI` si changée).
+3. Ouvre la Console web → **Intégrations** → déplie **Paramètres Zoho** →
+   colle *Client ID*, *Client Secret*, choisis la **région** correspondant à
+   ton compte → **Enregistrer**.
+4. **Connecter** sous Zoho Mail → connecte-toi à ton compte Zoho → accepte.
+
+Une fois connecté, depuis la Console web :
+- « Jarvis, j'ai des mails sur Zoho ? », « résume le mail de X » → recherche puis lecture
+- « Jarvis, écris un mail à X sur Zoho... » → compose un message — **confirmation à
+  l'écran systématique**, y compris pour ce qui ressemblerait à un simple brouillon
+
+**Points de vigilance technique** : contrairement à Gmail (API très stable
+et bien documentée), Zoho Mail réserve deux pièges —
+1. **Domaine d'API à part** : Zoho Mail n'est pas servi sous le domaine
+   générique `api_domain` renvoyé par l'échange OAuth (celui-là pointe vers
+   `www.zohoapis.<région>`, le gateway commun aux autres produits Zoho) —
+   il a son propre domaine `mail.zoho.<région>`, reconstruit côté Jarvis à
+   partir de la région choisie en Paramètres Zoho (confirmé en pratique,
+   pas juste supposé).
+2. La frontière exacte "brouillon" / "envoi direct" de l'API Zoho est moins
+   nette que celle de Gmail dans sa documentation. Par prudence,
+   `zoho_compose` confirme systématiquement à l'écran avant d'agir, même
+   dans les cas où un simple brouillon suffirait avec Gmail.
+
+Si la connexion ou l'envoi échoue malgré tout, le message d'erreur inclut
+la réponse brute de Zoho pour diagnostiquer vite.
+
 > Voix personnalisée : le dossier `voice/` contient `jarvis-high.onnx` (Piper).
 > Pour l'utiliser, enregistrez-la dans votre instance Speaches puis pointez
 > `TTS_MODEL`/`TTS_VOICE` dessus dans `.env`.

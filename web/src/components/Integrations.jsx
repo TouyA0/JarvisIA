@@ -7,18 +7,19 @@ const TYPE_LABELS = {
   google_calendar: "Google Calendar",
   google_drive: "Google Drive",
   gmail: "Gmail",
+  zoho_mail: "Zoho Mail",
 };
 
-// Catalogue affiché à droite — google_calendar, google_drive et gmail sont
-// branchés (même Client ID/Secret Google, scopes distincts), le reste vient
-// docs/ROADMAP_DISPLAY_INTEGRATIONS.md et attend son tour (même socle, un
-// module brain/integrations/<service>.py de plus).
+// Catalogue affiché à droite — google_calendar/google_drive/gmail (Google,
+// un seul Client ID/Secret) et zoho_mail (Zoho, identifiants séparés) sont
+// branchés ; le reste vient docs/ROADMAP_DISPLAY_INTEGRATIONS.md et attend
+// son tour (même socle, un module brain/integrations/<service>.py de plus).
 const CATALOG = [
-  { type: "google_calendar", label: "Google Calendar", available: true },
-  { type: "google_drive", label: "Google Drive", available: true },
-  { type: "gmail", label: "Gmail", available: true },
-  { type: "zoho_mail", label: "Zoho Mail", available: false },
-  { type: "spotify", label: "Spotify", available: false },
+  { type: "google_calendar", label: "Google Calendar", provider: "google", available: true },
+  { type: "google_drive", label: "Google Drive", provider: "google", available: true },
+  { type: "gmail", label: "Gmail", provider: "google", available: true },
+  { type: "zoho_mail", label: "Zoho Mail", provider: "zoho", available: true },
+  { type: "spotify", label: "Spotify", provider: "spotify", available: false },
 ];
 
 function Topbar({ count }) {
@@ -85,6 +86,16 @@ function AccountCard({ account, onRemove }) {
   );
 }
 
+const _inputStyle = {
+  background: "var(--bg)",
+  border: "1px solid var(--stroke-soft)",
+  borderRadius: 8,
+  padding: "8px 10px",
+  fontSize: 12,
+  color: "var(--fg)",
+  fontFamily: "var(--font-mono)",
+};
+
 function GoogleAppSettings({ status, onSave, onClear }) {
   const [open, setOpen] = useState(false);
   const [clientId, setClientId] = useState("");
@@ -107,16 +118,6 @@ function GoogleAppSettings({ status, onSave, onClear }) {
     }
   }
 
-  const inputStyle = {
-    background: "var(--bg)",
-    border: "1px solid var(--stroke-soft)",
-    borderRadius: 8,
-    padding: "8px 10px",
-    fontSize: 12,
-    color: "var(--fg)",
-    fontFamily: "var(--font-mono)",
-  };
-
   return (
     <div style={{ borderTop: "1px solid var(--stroke-soft)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
       <button
@@ -137,8 +138,8 @@ function GoogleAppSettings({ status, onSave, onClear }) {
 
       {open && (
         <>
-          <input placeholder="Client ID" value={clientId} onChange={(e) => setClientId(e.target.value)} style={inputStyle} />
-          <input placeholder="Client Secret" type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} style={inputStyle} />
+          <input placeholder="Client ID" value={clientId} onChange={(e) => setClientId(e.target.value)} style={_inputStyle} />
+          <input placeholder="Client Secret" type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} style={_inputStyle} />
           {error && <div style={{ fontSize: 11, color: "#f87171" }}>{error}</div>}
           <div style={{ display: "flex", gap: 8 }}>
             <button
@@ -164,6 +165,90 @@ function GoogleAppSettings({ status, onSave, onClear }) {
             À créer une seule fois dans Google Cloud Console (voir README.md,
             section Google Calendar) — c'est la seule étape que Google
             n'autorise pas à faire depuis un site tiers.
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+const _ZOHO_REGIONS = ["com", "eu", "in", "com.au", "jp", "ca"];
+
+function ZohoAppSettings({ status, onSave, onClear }) {
+  const [open, setOpen] = useState(false);
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [region, setRegion] = useState("com");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSave() {
+    setError("");
+    setBusy(true);
+    try {
+      await onSave(clientId.trim(), clientSecret.trim(), region);
+      setClientId("");
+      setClientSecret("");
+      setOpen(false);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ borderTop: "1px solid var(--stroke-soft)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+      >
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--faint)" }}>
+          Paramètres Zoho
+        </span>
+        <span style={{ fontSize: 11, color: "var(--cyan)" }}>{open ? "−" : "+"}</span>
+      </button>
+
+      <div style={{ fontSize: 11, color: status.configured ? "var(--online)" : "var(--faint)" }}>
+        {status.configured
+          ? `Configuré (région .${status.region}) — ${status.client_id?.slice(0, 24)}…`
+          : "Non configuré — aucune connexion Zoho possible tant que ça n'est pas rempli."}
+      </div>
+
+      {open && (
+        <>
+          <input placeholder="Client ID" value={clientId} onChange={(e) => setClientId(e.target.value)} style={_inputStyle} />
+          <input placeholder="Client Secret" type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} style={_inputStyle} />
+          <select value={region} onChange={(e) => setRegion(e.target.value)} style={_inputStyle}>
+            {_ZOHO_REGIONS.map((r) => (
+              <option key={r} value={r}>.{r} ({r === "com" ? "US, par défaut" : r === "eu" ? "Europe" : r})</option>
+            ))}
+          </select>
+          {error && <div style={{ fontSize: 11, color: "#f87171" }}>{error}</div>}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={handleSave}
+              disabled={busy || !clientId.trim() || !clientSecret.trim()}
+              style={{
+                flex: 1, border: "1px solid var(--stroke)", borderRadius: 9, padding: "8px 0", fontSize: 12,
+                background: "var(--cyan-dim)", color: "var(--cyan)", cursor: "pointer", opacity: busy ? 0.6 : 1,
+              }}
+            >
+              Enregistrer
+            </button>
+            {status.configured && (
+              <button
+                onClick={onClear}
+                style={{ border: "1px solid var(--stroke-soft)", borderRadius: 9, padding: "8px 11px", fontSize: 12, background: "transparent", color: "var(--muted)", cursor: "pointer" }}
+              >
+                Effacer
+              </button>
+            )}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--faint)" }}>
+            À créer une seule fois dans la Console API Zoho (voir README.md,
+            section Zoho Mail). La région doit correspondre au datacenter de
+            ton compte Zoho, sinon la connexion échoue entièrement.
           </div>
         </>
       )}
@@ -204,23 +289,32 @@ function CatalogRow({ entry, onConnect, busy, error }) {
   );
 }
 
+const _CONNECTORS = {
+  google: { connectKey: "connectGoogle", settingsKey: "googleSettings", label: "Paramètres Google" },
+  zoho: { connectKey: "connectZoho", settingsKey: "zohoSettings", label: "Paramètres Zoho" },
+};
+
 export default function Integrations({ onNavigate, focusEnabled }) {
-  const { accounts, connectGoogle, remove, googleSettings, saveGoogleSettings, clearGoogleSettings } = useIntegrations();
+  const integrations = useIntegrations();
+  const { accounts, remove } = integrations;
   const isMobile = useIsMobile();
   const [busyType, setBusyType] = useState(null);
   const [errors, setErrors] = useState({});
-  const GOOGLE_TYPES = new Set(["google_calendar", "google_drive", "gmail"]);
 
   async function handleConnect(type) {
-    if (!GOOGLE_TYPES.has(type)) return;
-    if (!googleSettings.configured) {
-      setErrors((e) => ({ ...e, [type]: "Renseigne d'abord Client ID / Client Secret ci-dessous (Paramètres Google)." }));
+    const entry = CATALOG.find((c) => c.type === type);
+    const connector = entry && _CONNECTORS[entry.provider];
+    if (!connector) return;
+
+    const status = integrations[connector.settingsKey];
+    if (!status.configured) {
+      setErrors((e) => ({ ...e, [type]: `Renseigne d'abord Client ID / Client Secret ci-dessous (${connector.label}).` }));
       return;
     }
     setErrors((e) => ({ ...e, [type]: "" }));
     setBusyType(type);
     try {
-      await connectGoogle(type);
+      await integrations[connector.connectKey](type);
     } catch (e) {
       setErrors((err) => ({ ...err, [type]: e.message }));
     } finally {
@@ -235,7 +329,7 @@ export default function Integrations({ onNavigate, focusEnabled }) {
         <div style={{ flex: 1, padding: 22, overflow: isMobile ? "visible" : "auto", minWidth: 0 }}>
           {accounts.length === 0 ? (
             <div style={{ color: "var(--faint)", fontSize: 13 }}>
-              Aucun compte connecté — connecte Google Calendar {isMobile ? "en dessous" : "à droite"}.
+              Aucun compte connecté — ajoute-en un {isMobile ? "en dessous" : "à droite"}.
             </div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14 }}>
@@ -271,12 +365,13 @@ export default function Integrations({ onNavigate, focusEnabled }) {
             />
           ))}
           <div style={{ fontSize: 11, color: "var(--faint)" }}>
-            Plusieurs comptes Google peuvent être connectés en parallèle, y compris
-            sur différents services (Calendar, Drive) — les résultats de chacun
+            Plusieurs comptes peuvent être connectés en parallèle, y compris sur
+            différents services d'un même fournisseur — les résultats de chacun
             sont fusionnés automatiquement.
           </div>
-          <div style={{ marginTop: "auto" }}>
-            <GoogleAppSettings status={googleSettings} onSave={saveGoogleSettings} onClear={clearGoogleSettings} />
+          <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
+            <GoogleAppSettings status={integrations.googleSettings} onSave={integrations.saveGoogleSettings} onClear={integrations.clearGoogleSettings} />
+            <ZohoAppSettings status={integrations.zohoSettings} onSave={integrations.saveZohoSettings} onClear={integrations.clearZohoSettings} />
           </div>
         </div>
       </div>

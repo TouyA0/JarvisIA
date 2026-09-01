@@ -68,3 +68,42 @@ def google_status() -> dict:
         return {"configured": False, "source": None, "client_id": None}
     source = "console" if "google" in _load() else "env"
     return {"configured": True, "source": source, "client_id": client_id}
+
+
+# ── Zoho ─────────────────────────────────────────────────────────────────
+# Même principe que Google, mais Zoho n'a pas de .env de repli : un compte
+# Zoho est bien plus rare que Google dans ce projet, autant garder un seul
+# chemin de configuration (la Console) plutôt que dupliquer le mécanisme
+# .env pour un cas d'usage aussi ciblé. La région (com/eu/in/com.au/jp/ca)
+# est nécessaire : Zoho isole ses comptes par datacenter, se tromper de
+# région fait échouer l'authentification entière — voir README.md.
+_ZOHO_REGIONS = {"com", "eu", "in", "com.au", "jp", "ca"}
+
+
+def get_zoho_credentials() -> tuple[str, str, str]:
+    """(client_id, client_secret, region) — région vide si jamais configuré."""
+    data = _load().get("zoho", {})
+    if data.get("client_id") and data.get("client_secret_enc"):
+        return data["client_id"], crypto.decrypt(data["client_secret_enc"]), data.get("region", "com")
+    return "", "", "com"
+
+
+def set_zoho_credentials(client_id: str, client_secret: str, region: str) -> None:
+    if region not in _ZOHO_REGIONS:
+        raise ValueError(f"région Zoho inconnue : {region!r} (attendu : {', '.join(sorted(_ZOHO_REGIONS))})")
+    data = _load()
+    data["zoho"] = {"client_id": client_id, "client_secret_enc": crypto.encrypt(client_secret), "region": region}
+    _save(data)
+
+
+def clear_zoho_credentials() -> None:
+    data = _load()
+    data.pop("zoho", None)
+    _save(data)
+
+
+def zoho_status() -> dict:
+    client_id, client_secret, region = get_zoho_credentials()
+    if not (client_id and client_secret):
+        return {"configured": False, "client_id": None, "region": None}
+    return {"configured": True, "client_id": client_id, "region": region}

@@ -10,7 +10,7 @@ deux listes de schémas, et route chaque tool_use vers le bon exécuteur
 """
 from __future__ import annotations
 
-from brain.integrations import google_calendar, google_drive, google_gmail, store
+from brain.integrations import google_calendar, google_drive, google_gmail, store, zoho_mail
 
 BRAIN_TOOLS = [
     {
@@ -193,6 +193,57 @@ BRAIN_TOOLS = [
             "required": ["draft_id"],
         },
     },
+    {
+        "name": "zoho_search",
+        "description": (
+            "Cherche des mails dans la boîte Zoho Mail de Monsieur (tous les comptes "
+            "connectés, fusionnés). `query` = recherche libre (objet, expéditeur, contenu) ; "
+            "vide = boîte de réception récente. Chaque résultat inclut un `id` opaque à "
+            "réutiliser tel quel avec zoho_read ou zoho_compose (ne jamais le modifier)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Recherche libre. Omis = boîte de réception récente."},
+            },
+        },
+    },
+    {
+        "name": "zoho_read",
+        "description": (
+            "Lit le contenu complet d'un mail Zoho Mail (expéditeur, sujet, corps) à partir "
+            "de son `id` — utilise EXACTEMENT l'id retourné par zoho_search. Ne réponds "
+            "jamais à partir du seul aperçu de zoho_search."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string", "description": "Id du message, tel que retourné par zoho_search."},
+            },
+            "required": ["id"],
+        },
+    },
+    {
+        "name": "zoho_compose",
+        "description": (
+            "Compose un mail via Zoho Mail (nouveau message, pas de réponse dans un fil pour "
+            "l'instant). ATTENTION : contrairement à Gmail, l'API Zoho ne garantit pas une "
+            "séparation nette entre « brouillon » et « envoi » — ce mail peut partir "
+            "directement. Déclenche donc TOUJOURS une confirmation à l'écran avant d'agir, "
+            "qui le dit explicitement. Si refusée ou expirée, dis-le simplement, ne réessaie "
+            "pas seul."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "to": {"type": "string", "description": "Adresse email du destinataire."},
+                "subject": {"type": "string", "description": "Sujet du mail."},
+                "body": {"type": "string", "description": "Corps du mail, texte brut."},
+                "account": {"type": "string", "description": "Compte Zoho visé (email ou fragment), si Monsieur en a nommé un."},
+            },
+            "required": ["to", "subject", "body"],
+        },
+    },
 ]
 
 NAMES = {t["name"] for t in BRAIN_TOOLS}
@@ -341,5 +392,35 @@ def execute(name: str, args: dict):
         if "error" in result:
             return result["error"]
         return f"Envoyé : « {result['subject']} » à {result['to']}."
+
+    if name == "zoho_search":
+        if not zoho_mail.configured():
+            return "Zoho Mail n'est pas configuré, Monsieur — aucun compte connecté."
+        if not store.list_public("zoho_mail"):
+            return "Aucun compte Zoho Mail connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
+        messages = zoho_mail.search(args.get("query") or None)
+        return _format_messages(messages)
+
+    if name == "zoho_read":
+        if not store.list_public("zoho_mail"):
+            return "Aucun compte Zoho Mail connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
+        message_id = args.get("id", "")
+        if not message_id:
+            return "Id de message manquant, Monsieur — appelle d'abord zoho_search."
+        result = zoho_mail.read_message(message_id)
+        if "error" in result:
+            return result["error"]
+        text = result["text"]
+        if result["truncated"]:
+            text += "\n\n[… contenu tronqué, le mail est plus long que ce qui a été lu ici]"
+        return f"De : {result['from']}\nSujet : {result['subject']}\nDate : {result['date']}\n\n{text}"
+
+    if name == "zoho_compose":
+        if not store.list_public("zoho_mail"):
+            return "Aucun compte Zoho Mail connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
+        result = zoho_mail.create_draft(args.get("to", ""), args.get("subject", ""), args.get("body", ""), args.get("account"))
+        if "error" in result:
+            return result["error"]
+        return f"Composé : « {result['subject']} » à {result['to']} depuis {result['account']}."
 
     return f"Outil brain inconnu : {name}"

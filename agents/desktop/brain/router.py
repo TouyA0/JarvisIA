@@ -35,9 +35,9 @@ PC_COMMAND_KEYWORDS = [
     "prévu cette semaine",
     # Drive (voir brain/tools.py::drive_search / drive_read)
     "drive", "google drive", "document", "documents",
-    # Gmail (voir brain/tools.py::gmail_search / gmail_read / gmail_draft)
+    # Gmail / Zoho Mail (voir brain/tools.py::gmail_* / zoho_*)
     "mail", "mails", "email", "emails", "e-mail", "e-mails", "gmail",
-    "courriel", "courriels", "boîte mail", "boite mail", "brouillon",
+    "courriel", "courriels", "boîte mail", "boite mail", "brouillon", "zoho",
 ]
 
 

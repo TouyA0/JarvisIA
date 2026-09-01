@@ -47,17 +47,22 @@ def list_for(account_type: str) -> list[dict]:
     for a in _load()["accounts"]:
         if a["type"] != account_type:
             continue
-        result.append({**a, "refresh_token": crypto.decrypt(a["refresh_token_enc"])})
+        result.append({**a, "refresh_token": crypto.decrypt(a["refresh_token_enc"]), "extra": a.get("extra", {})})
     return result
 
 
-def add(account_type: str, label: str, refresh_token: str) -> dict:
+def add(account_type: str, label: str, refresh_token: str, extra: dict | None = None) -> dict:
+    """`extra` : métadonnées propres au fournisseur, non chiffrées (rien de
+    secret dedans — pour Zoho par ex. : région du datacenter, accountId
+    Zoho Mail nécessaire à toutes les requêtes). Stockées telles quelles,
+    renvoyées par list_for(), jamais par list_public()."""
     account = {
         "id": uuid.uuid4().hex,
         "type": account_type,
         "label": label,
         "connected_at": time.time(),
         "refresh_token_enc": crypto.encrypt(refresh_token),
+        "extra": extra or {},
     }
     with _lock:
         data = _load()
