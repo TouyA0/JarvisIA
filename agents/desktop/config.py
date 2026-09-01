@@ -124,6 +124,17 @@ WEATHER_REFRESH_MINUTES = 30
 BOOT_SOUND = os.getenv("BOOT_SOUND", "1") != "0"
 GLOBAL_HOTKEY = os.getenv("GLOBAL_HOTKEY", "1") != "0"   # Ctrl+Alt+J
 
+# ── Proactivité (F5/F6, voir agents/desktop/services/proactive.py) ──────────
+# Jarvis qui parle sans qu'on lui demande : alertes système (disque/RAM/
+# batterie), suggestion de coucher tardif, briefing matinal.
+PROACTIVE_ENABLED = os.getenv("PROACTIVE_ENABLED", "1") != "0"
+PROACTIVE_DISK_THRESHOLD = int(os.getenv("PROACTIVE_DISK_THRESHOLD", "90"))
+PROACTIVE_RAM_THRESHOLD = int(os.getenv("PROACTIVE_RAM_THRESHOLD", "90"))
+PROACTIVE_BEDTIME_HOUR = int(os.getenv("PROACTIVE_BEDTIME_HOUR", "23"))
+PROACTIVE_BEDTIME_MINUTE = int(os.getenv("PROACTIVE_BEDTIME_MINUTE", "30"))
+PROACTIVE_BRIEFING_HOUR = int(os.getenv("PROACTIVE_BRIEFING_HOUR", "8"))
+PROACTIVE_BRIEFING_MINUTE = int(os.getenv("PROACTIVE_BRIEFING_MINUTE", "0"))
+
 # ── Brain (connexion réseau, agent_client.py) ────────────────────────────────
 # Désactivé par défaut : le brain ne fait pas encore partie du lancement
 # quotidien (start_jarvis.bat ne le démarre pas). Activer avec BRAIN_ENABLED=1

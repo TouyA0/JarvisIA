@@ -20,6 +20,7 @@ data/cross_device_routines.json
 data/integrations.json
 data/integrations.key
 data/integrations_settings.json
+data/proactive_state.json
 
 # Audio d'entraînement wake word (volumineux)
 agents/desktop/wakeword/samples_jarvis/

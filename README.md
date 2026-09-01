@@ -157,6 +157,10 @@ Jarvis/
 | `WEATHER_LAT` / `WEATHER_LON` / `WEATHER_CITY` | Toulouse | météo |
 | `BOOT_SOUND` | `1` | son de mise sous tension |
 | `GLOBAL_HOTKEY` | `1` | Ctrl+Alt+J (HUD) et Ctrl+Alt+V (Vision ciblée) |
+| `PROACTIVE_ENABLED` | `1` | Jarvis parle sans qu'on lui demande (alertes système, coucher, briefing matinal) — voir ci-dessous |
+| `PROACTIVE_DISK_THRESHOLD` / `PROACTIVE_RAM_THRESHOLD` | `90` | seuil d'alerte disque C:\ / RAM, en % d'occupation |
+| `PROACTIVE_BEDTIME_HOUR` / `PROACTIVE_BEDTIME_MINUTE` | `23` / `30` | heure de la suggestion de coucher |
+| `PROACTIVE_BRIEFING_HOUR` / `PROACTIVE_BRIEFING_MINUTE` | `8` / `0` | heure du briefing matinal |
 | `BRAIN_ENABLED` | `0` | connecte ce PC au brain en tâche de fond (multi-appareils, voir `docs/ROADMAP_MULTIDEVICE.md`) — nécessite d'avoir appairé l'appareil au préalable via `python -m agents.desktop.agent_client` |
 | `BRAIN_URL` | `ws://127.0.0.1:8420/ws/agent` | adresse du brain, si `BRAIN_ENABLED=1` |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | — | intégration Google Calendar (panneau **Intégrations** de la Console web), voir ci-dessous |
@@ -409,6 +413,30 @@ Une fois connecté, depuis la Console web :
 verrouiller/armer, en revanche, jamais de confirmation (ça ne fait que
 sécuriser). Tout le reste (lumières, prises, volets, chauffage…) reste un
 contrôle direct sans friction, comme Spotify.
+
+### Proactivité
+
+Jarvis qui parle sans qu'on lui demande (F5/F6 de `docs/ROADMAP.md`,
+`agents/desktop/services/proactive.py`) — activé par défaut :
+
+- **Alertes système** — disque C:\ ou RAM au-delà du seuil configuré,
+  batterie faible sur portable (silencieux sur PC fixe, sans batterie
+  détectée). Chacune a son propre délai avant de pouvoir se répéter (1-2h
+  selon l'alerte), pour ne jamais devenir insistant.
+- **Suggestion de coucher** — une fois par jour, à l'heure configurée
+  (23h30 par défaut) : « Il est 23 heures 30, Monsieur. Puis-je suggérer
+  le repos ? »
+- **Briefing matinal** — une fois par jour, à l'heure configurée (8h par
+  défaut) : heure, météo, agenda du jour (si Google Calendar connecté),
+  nombre de mails non lus (si Gmail connecté). Chaque élément s'omet
+  silencieusement si l'intégration correspondante n'est pas configurée —
+  jamais d'erreur, juste un briefing plus court.
+
+Jarvis attend toujours d'avoir fini de parler avant d'annoncer quoi que ce
+soit spontanément — jamais de coupure en pleine réponse. L'état de chaque
+règle (dernière alerte, dernier briefing) est mémorisé dans
+`data/proactive_state.json` : redémarrer Jarvis ne répète pas une annonce
+déjà faite le jour même.
 
 > Voix personnalisée : le dossier `voice/` contient `jarvis-high.onnx` (Piper).
 > Pour l'utiliser, enregistrez-la dans votre instance Speaches puis pointez

@@ -519,7 +519,7 @@ def _boot() -> None:
     """Séquence de mise sous tension — chaque étape s'affiche dans le journal."""
     from agents.desktop.audio import capture, vad, wakeword
     from brain.core import modes, usage
-    from agents.desktop.services import bootsound, diagnostics, hotkey, timers, weather
+    from agents.desktop.services import bootsound, diagnostics, hotkey, proactive, timers, weather
 
     overlay.show(0)
     overlay.set_state("processing")
@@ -537,13 +537,14 @@ def _boot() -> None:
     diagnostics.start(overlay.update_diagnostics)
     weather.start_refresher(overlay.set_weather)
     timers.start(say, overlay.set_timer_chip)
+    proactive.start(say, overlay.add_system_message)
     if config.GLOBAL_HOTKEY:
         hotkey.start([
             (hotkey.MOD_CONTROL | hotkey.MOD_ALT, "J", overlay.focus_input),
             (hotkey.MOD_CONTROL | hotkey.MOD_ALT, "V",
              lambda: overlay.push_input(TOKEN_SNIP)),
         ])
-    overlay.add_system_message("Services en ligne — météo · diagnostics · minuteurs")
+    overlay.add_system_message("Services en ligne — météo · diagnostics · minuteurs · proactivité")
 
     # État initial du HUD
     active = modes.get_active_mode_data()

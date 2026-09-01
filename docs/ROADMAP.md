@@ -35,8 +35,8 @@ Légende effort : ▲ = un soir · ▲▲ = un week-end · ▲▲▲ = plusieurs
 | Prio | Feature | Pourquoi | Effort |
 |------|---------|----------|--------|
 | ★1 | **F1 — Voix Jarvis custom** | Le fichier est déjà dans `voice/` ; impact immersion maximal | ▲ |
-| ★2 | **F5 — Proactivité (alertes système + briefing)** | C'est ce qui transforme un assistant en JARVIS : il parle SANS qu'on demande | ▲▲ |
-| ★3 | **F2 — Recherche web + résumé vocal** | L'utilité quotidienne n°1 qui manque (« Jarvis, cherche… ») | ▲▲ |
+| ~~★2~~ | ~~F5 — Proactivité (alertes système + briefing)~~ ✓ *(fait)* | — | — |
+| ★3 | **F2 — Recherche web + résumé vocal** | L'utilité quotidienne n°1 qui manque (« Jarvis, cherche… ») — permettrait aussi les titres d'actu dans le briefing (F6) | ▲▲ |
 | ★4 | **F7 — Tool-use local Ollama** | Coût API → quasi zéro, latence réduite, vie privée | ▲▲ |
 | ★5 | **F4 — Wake word ONNX + bruits** | Fiabilité de la porte d'entrée + boot 3 s plus rapide, -500 Mo | ▲▲ |
 
@@ -67,12 +67,14 @@ Légende effort : ▲ = un soir · ▲▲ = un week-end · ▲▲▲ = plusieurs
   gratuite 2000 req/mois, ou DuckDuckGo) + `fetch_page` → l'agent cherche,
   lit, et résume à voix haute. Ouvre « Jarvis, c'est quoi la dernière version
   de Python ? », l'actu, les définitions…
-- **F5 · Proactivité** ▲▲ — un thread de règles qui surveille et PARLE seul :
-  disque > 90 %, RAM saturée, batterie portable, minuteur déjà fait ✓,
-  puis : « Il est 23 h 30, Monsieur. Puis-je suggérer le repos ? »
-  C'est le cœur de l'expérience Iron Man.
-- **F6 · Briefing matinal réel** ▲▲ — brancher la routine matin sur du vrai :
-  météo ✓ + agenda (F14) + titres d'actu (F2) + rappels du jour.
+- **F5 · Proactivité** ✓ *(fait)* — `agents/desktop/services/proactive.py` :
+  thread de règles qui surveille et PARLE seul, disque/RAM/batterie
+  (seuils + cooldown par règle), suggestion de coucher à heure configurée.
+  Rappels/minuteurs déjà faits séparément (`services/timers.py`).
+- **F6 · Briefing matinal réel** ✓ *(fait, sans les titres d'actu — F2 pas
+  fait)* — même module : heure + météo ✓ + agenda (F14 ✓) + mails non lus
+  (F15 ✓), une fois par jour à heure configurée. Titres d'actu à ajouter
+  quand F2 (recherche web) existera.
 - **F7 · Tool-use local** ▲▲ — qwen3 gère les tools dans Ollama : router
   d'abord les commandes PC vers le local, escalade vers Claude si échec ou
   tâche complexe. Coût mensuel divisé par 5-10.
@@ -88,16 +90,15 @@ Légende effort : ▲ = un soir · ▲▲ = un week-end · ▲▲▲ = plusieurs
 
 ### 📅 Intégrations quotidien
 
-- **F14 · Agenda** ▲▲ — API Google Calendar (ou export Notion Calendar) :
-  « qu'est-ce que j'ai aujourd'hui ? », alerte 10 min avant un cours.
-- **F15 · Emails** ▲▲ — IMAP lecture seule : « tu as 3 mails, dont un de
-  l'université » ; jamais d'envoi sans confirmation.
+- **F14 · Agenda** ✓ *(fait)* — Google Calendar, voir `docs/ROADMAP_DISPLAY_INTEGRATIONS.md` (I1).
+- **F15 · Emails** ✓ *(fait)* — Gmail + Zoho Mail, voir même doc (I4/I5).
 - **F16 · Notifications Windows** ▲▲▲ — UserNotificationListener (WinRT) lit
   les toasts (Discord, Teams…) → Jarvis annonce les messages importants.
-- **F17 · Spotify** ▲▲ — API Spotify : « mets ma playlist detente », « c'est
-  quoi ce titre ? ». Les touches média marchent déjà, ceci ajoute le choix.
-- **F18 · Transports Toulouse** ▲ — API Tisséo : « quand passe le prochain
-  bus ? » (config arrêt favori).
+  Toujours pas fait — seul item de cette section encore ouvert.
+- **F17 · Spotify** ✓ *(fait, code prêt)* — API Spotify, voir même doc (I6) ;
+  bloqué en pratique par le compte Free de Monsieur (Premium requis côté
+  Spotify), pas par le code.
+- **F18 · Transports Toulouse** ✓ *(fait)* — Tisséo, voir même doc (I11).
 - **F19 · Domotique** ✓ *(fait)* — Home Assistant REST, voir `docs/ROADMAP_DISPLAY_INTEGRATIONS.md` (I13).
 
 ### 🖥️ Contrôle PC avancé
