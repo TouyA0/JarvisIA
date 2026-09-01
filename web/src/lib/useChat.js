@@ -181,6 +181,46 @@ export function useChat() {
     return true;
   }, []);
 
+  /** Dépôt d'un fichier image pour analyse (C9) — HTTP, pas le WebSocket :
+   * pas de streaming côté brain/vision.py, une seule réponse. Même garde
+   * de tour-en-cours que ask(), même forme de messages (bulle utilisateur
+   * + bulle Jarvis en attente) pour rester cohérent dans le fil. */
+  const uploadImage = useCallback(async (file, question) => {
+    if (pendingRef.current) return false;
+    const trimmed = (question || "").trim();
+    const answerId = nextId();
+    pendingRef.current = answerId;
+    const at = Date.now();
+    const imageUrl = URL.createObjectURL(file);
+    setMessages((list) => [
+      ...list,
+      { id: nextId(), role: "user", text: trimmed || `Image jointe : ${file.name}`, at, imageUrl },
+      { id: answerId, role: "jarvis", text: "", at, pending: true },
+    ]);
+    setActivity("Analyse de l'image…");
+    setBusy(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      if (trimmed) form.append("question", trimmed);
+      const res = await authFetch("/api/vision/analyze", { method: "POST", body: form });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || "analyse impossible");
+      setMessages((list) =>
+        list.map((m) => (m.id === answerId ? { ...m, text: data.text, pending: false, source: "claude-vision" } : m)),
+      );
+    } catch (e) {
+      setMessages((list) =>
+        list.map((m) => (m.id === answerId ? { ...m, text: e.message || "Analyse impossible.", pending: false } : m)),
+      );
+    } finally {
+      pendingRef.current = null;
+      setActivity("");
+      setBusy(false);
+    }
+    return true;
+  }, []);
+
   /** Vide le fil affiché. Le journal côté brain n'est pas touché — c'est
    * la mémoire de Jarvis, pas un historique de navigateur à effacer. */
   const clear = useCallback(() => {
@@ -196,6 +236,7 @@ export function useChat() {
     busy,
     historyLoaded,
     ask,
+    uploadImage,
     clear,
     setPhraseHandler,
     setDoneHandler,

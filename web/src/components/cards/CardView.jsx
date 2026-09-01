@@ -157,11 +157,11 @@ export default function CardView({ card, onDismiss, readOnly = false }) {
       {!readOnly && card.type === "screenshot" && <ScreenshotActions data={card.data} toast={toast} />}
       {!readOnly && card.actions && card.actions.length > 0 && <CardActions actions={card.actions} toast={toast} />}
 
-      {card.type === "screenshot" && (
+      {(card.type === "screenshot" || card.type === "vision") && (
         <Modal open={zoomed} onClose={() => setZoomed(false)} title={card.title} wide>
           <img
             src={`data:${card.data.media_type || "image/jpeg"};base64,${card.data.image_b64}`}
-            alt="Capture d'écran"
+            alt={card.type === "vision" ? "Image déposée" : "Capture d'écran"}
             style={{ width: "100%", borderRadius: "var(--r-md)" }}
           />
         </Modal>

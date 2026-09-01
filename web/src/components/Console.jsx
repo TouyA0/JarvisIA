@@ -46,6 +46,13 @@ function Message({ message, activity }) {
         {!isUser && message.source && !message.pending && <span>· {message.source}</span>}
       </div>
       <div className="msg-bubble">
+        {message.imageUrl && (
+          <img
+            src={message.imageUrl}
+            alt="Image jointe"
+            style={{ maxWidth: 220, maxHeight: 220, borderRadius: "var(--r-md)", display: "block", marginBottom: "var(--sp-2)" }}
+          />
+        )}
         {empty ? (
           activity ? (
             <span className="msg-activity">
@@ -148,9 +155,10 @@ function VoiceBar({ voice }) {
   );
 }
 
-function Composer({ online, busy, onSend, voice }) {
+function Composer({ online, busy, onSend, onUploadImage, voice }) {
   const [value, setValue] = useState("");
   const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   // Hauteur ajustée aussi au montage : sans ça, un `rows={1}` mesuré par
   // le navigateur avant le chargement de la police laisse une ligne
@@ -180,6 +188,26 @@ function Composer({ online, busy, onSend, voice }) {
       : "mic--armed"
     : "";
 
+  // Dépôt d'image (C9) : le texte déjà tapé sert de question — « décris
+  // cette image » n'a pas besoin d'un second champ dédié, le composer
+  // suffit. Le <input type=file> reste cosmétiquement invisible, activé
+  // par le bouton trombone (pattern standard, pas de glisser-déposer :
+  // moins de code pour un geste que le clic couvre déjà).
+  function pickImage() {
+    fileInputRef.current?.click();
+  }
+
+  function onFileChosen(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // permet de rechoisir le même fichier une 2e fois
+    if (!file || busy || !online) return;
+    const text = value.trim();
+    if (onUploadImage(file, text)) {
+      setValue("");
+      requestAnimationFrame(() => autoSize(inputRef.current));
+    }
+  }
+
   return (
     <>
       <div className="composer">
@@ -192,6 +220,25 @@ function Composer({ online, busy, onSend, voice }) {
           title={`${voice.armed ? VOICE_LABELS[voice.status] : "Activer l'écoute vocale"} (Ctrl+Alt+J)`}
         >
           <Icon name="mic" size={20} />
+        </button>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="sr-only"
+          tabIndex={-1}
+          onChange={onFileChosen}
+        />
+        <button
+          type="button"
+          className="mic"
+          onClick={pickImage}
+          disabled={!online || busy}
+          aria-label="Joindre une image pour analyse"
+          title="Joindre une image pour analyse"
+        >
+          <Icon name="camera" size={19} />
         </button>
 
         <div className="composer-inner">
@@ -262,7 +309,7 @@ function CardStrip({ cards, dismiss, clearAll }) {
 }
 
 export default function Console() {
-  const { status, messages, activity, busy, historyLoaded, ask, clear, setPhraseHandler, setDoneHandler } =
+  const { status, messages, activity, busy, historyLoaded, ask, uploadImage, clear, setPhraseHandler, setDoneHandler } =
     useChatContext();
   const { cards, dismiss, clearAll } = useCardFeed();
   const lastWasVoiceRef = useRef(false);
@@ -365,7 +412,7 @@ export default function Console() {
         )}
 
         <VoiceBar voice={voice} />
-        <Composer online={online} busy={busy} onSend={ask} voice={voice} />
+        <Composer online={online} busy={busy} onSend={ask} onUploadImage={uploadImage} voice={voice} />
       </div>
     </>
   );

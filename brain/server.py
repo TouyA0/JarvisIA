@@ -20,7 +20,7 @@ import threading
 import time
 from typing import Any, Callable
 
-from fastapi import FastAPI, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
@@ -34,7 +34,7 @@ from agents.protocol.messages import (
     RegisterAck,
     parse_message,
 )
-from brain import activity, cards, config, device_store, diagnostics, notes, pairing, preferences, proactive, routines, speech, timers, weather
+from brain import activity, cards, config, device_store, diagnostics, notes, pairing, preferences, proactive, routines, speech, timers, vision, weather
 from brain import health as account_health
 from brain import tools as brain_tools
 from brain.core import agent as pc_agent
@@ -872,6 +872,25 @@ async def synthesize_speech(body: dict) -> Response:
     if audio is None:
         raise HTTPException(502, "synthèse vocale indisponible")
     return Response(content=audio, media_type="audio/mpeg")
+
+
+@app.post("/api/vision/analyze")
+async def analyze_image(file: UploadFile, question: str = Form("")) -> dict:
+    """Dépôt d'un fichier image pour analyse (C9) — voir brain/vision.py.
+    Émet aussi une carte (type "vision"), donc visible en direct sur
+    toutes les Consoles ouvertes, pas seulement celle qui a déposé."""
+    if not (file.content_type or "").startswith("image/"):
+        raise HTTPException(400, f"type de fichier non pris en charge : {file.content_type or 'inconnu'}")
+    image_bytes = await file.read()
+    try:
+        text = await asyncio.to_thread(
+            vision.analyze, image_bytes, file.content_type, question, file.filename or "",
+        )
+    except ValueError as exc:
+        raise HTTPException(413, str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(502, str(exc))
+    return {"text": text}
 
 
 # ── Système : mémoire, modes, consommation, journal ──────────────────────────

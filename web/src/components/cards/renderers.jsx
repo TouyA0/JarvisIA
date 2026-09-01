@@ -163,6 +163,21 @@ function Screenshot({ data, onZoom }) {
   );
 }
 
+/** Fichier déposé depuis le web pour analyse (C9, voir brain/vision.py) —
+ * même vignette zoomable que Screenshot, avec la réponse de Claude en
+ * dessous (une capture d'écran n'a que l'image, celle-ci a aussi le
+ * texte qui répond à la question posée en déposant le fichier). */
+function Vision({ data, onZoom }) {
+  return (
+    <div className="stack stack--tight">
+      <button type="button" className="card-shot" onClick={onZoom} aria-label="Agrandir l'image">
+        <img src={`data:${data.media_type || "image/jpeg"};base64,${data.image_b64}`} alt="Image déposée" />
+      </button>
+      <p className="card-text">{data.text}</p>
+    </div>
+  );
+}
+
 function Transport({ data }) {
   return (
     <Rows items={data.departures} empty="Aucun passage annoncé.">
@@ -335,6 +350,7 @@ export const CARD_META = {
   web_results: { icon: "search", source: "Recherche web" },
   timer: { icon: "clock", source: "Minuteur" },
   proactive: { icon: "alert", source: "Jarvis" },
+  vision: { icon: "eye", source: "Analyse d'image" },
 };
 
 export const RENDERERS = {
@@ -356,6 +372,7 @@ export const RENDERERS = {
   web_results: WebResults,
   timer: Timer,
   proactive: Proactive,
+  vision: Vision,
 };
 
 export { Fallback };
