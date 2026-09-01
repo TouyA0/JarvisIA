@@ -33,7 +33,7 @@ from agents.protocol.messages import (
     RegisterAck,
     parse_message,
 )
-from brain import activity, cards, config, device_store, pairing, routines, speech
+from brain import activity, cards, config, device_store, diagnostics, pairing, routines, speech, weather
 from brain import tools as brain_tools
 from brain.core import agent as pc_agent
 from brain.core import convlog
@@ -709,6 +709,56 @@ async def execute_tool(body: dict) -> dict:
         raise HTTPException(400, f"outil inconnu ou non actionnable depuis une carte : {tool!r}")
     result = await asyncio.to_thread(brain_tools.execute, tool, body.get("args") or {})
     return {"text": result if isinstance(result, str) else result.get("text", "")}
+
+
+_AMBIENT_TTL_S = 180  # (J3) quelques minutes — voir Hud.jsx::Ambient
+_ambient_cache: dict = {"at": 0.0, "data": None}
+
+
+def _ambient_snapshot() -> dict:
+    """Panorama silencieux du pupitre : météo, agenda du jour, santé
+    système — chacun optionnel selon ce qui est configuré/joignable, pour
+    qu'un compte Google absent ou l'API météo en panne n'empêche pas les
+    deux autres de s'afficher."""
+    out: dict = {}
+
+    w = weather.get()
+    if w and w["temp"] is not None:
+        out["weather"] = {
+            "temp": w["temp"], "description": weather.description(w["code"]),
+            "wind": w["wind"], "city": config.WEATHER_CITY,
+        }
+
+    if google_calendar.configured() and integrations_store.list_public("google_calendar"):
+        try:
+            time_min, time_max = google_calendar.range_for("today")
+            out["agenda"] = {"events": google_calendar.list_events(time_min, time_max), "range": "today"}
+        except Exception as exc:
+            print(f"[brain][ambient] agenda : {exc}")
+
+    try:
+        out["diagnostics"] = diagnostics.snapshot()
+    except Exception as exc:
+        print(f"[brain][ambient] diagnostics : {exc}")
+
+    return out
+
+
+@app.get("/api/ambient")
+async def ambient() -> dict:
+    """Ce que le pupitre affiche tant que personne n'a rien demandé (F29,
+    voir Hud.jsx::Ambient) — volontairement à part de `cards.emit` : un
+    rafraîchissement périodique de tous les pupitres ouverts ne doit ni
+    diffuser sur /ws/cards (ça illuminerait les autres écrans pour rien),
+    ni polluer le journal `cards-*.jsonl`. Cache en mémoire (quelques
+    minutes) pour ne pas retaper Google Calendar/psutil à chaque appel."""
+    now = time.time()
+    cached = _ambient_cache["data"]
+    if cached is not None and now - _ambient_cache["at"] < _AMBIENT_TTL_S:
+        return cached
+    data = await asyncio.to_thread(_ambient_snapshot)
+    _ambient_cache.update(at=now, data=data)
+    return data
 
 
 @app.get("/api/cards")

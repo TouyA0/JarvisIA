@@ -216,9 +216,11 @@ Deux cas d'usage différents à ne pas confondre :
   déjà noté en F29 (`ROADMAP.md`). Première marche posée : l'écran
   d'accueil de la Console est le **pupitre** (`web/src/components/Hud.jsx`)
   — réacteur, heure, mode en cours, appareils en ligne, et les cartes qui
-  s'y empilent. Reste à faire : un vrai mode plein écran sans navigation,
-  et un rafraîchissement autonome (agenda du jour affiché sans qu'on ait
-  rien demandé).
+  s'y empilent. Le panorama silencieux (météo + agenda du jour + santé
+  système, sans qu'on ait rien demandé) est fait : `GET /api/ambient`
+  (`brain/server.py`), en cache, lu par `useAmbient.js` et rendu par les
+  cartes existantes tant que le pupitre est au repos. Reste à faire : un
+  vrai mode plein écran sans navigation.
 - **Historique des cartes** — les cartes envoyées (mails lus, captures,
   événements consultés) restent consultables dans le panneau transmissions
   existant (F31), pas juste éphémères.

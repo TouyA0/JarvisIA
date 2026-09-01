@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import CardView from "./cards/CardView.jsx";
 import Icon from "./ui/Icon.jsx";
 import ModeSwitcher from "./ui/ModeSwitcher.jsx";
+import { useAmbient } from "../lib/useAmbient.js";
 import { useChatContext } from "../lib/ChatContext.jsx";
 import { useCardFeed } from "../lib/useCardFeed.js";
 import { useDevices } from "../lib/useDevices.js";
@@ -187,6 +188,7 @@ export default function Hud() {
   const messages = allMessages.filter((m) => !m.historical);
   const { cards, lastExchange, connected, dismiss, clearAll } = useCardFeed();
   const { devices } = useDevices();
+  const ambientCards = useAmbient();
 
   const lastLocalQuestionRef = useRef("");
   const localTurnAtRef = useRef(0);
@@ -298,19 +300,35 @@ export default function Hud() {
             </div>
           </section>
         ) : (
-          <div className="hud-suggestions">
-            {SUGGESTIONS.map((s) => (
-              <button
-                key={s}
-                type="button"
-                className="suggestion"
-                onClick={() => send(s)}
-                disabled={!online}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
+          <>
+            {/* Un écran laissé allumé dans une pièce doit dire quelque
+             * chose : météo, agenda du jour, santé système — tant que
+             * personne n'a rien demandé (F29). Lecture seule, à la
+             * différence des cartes du flux : rien ici n'a été "affiché"
+             * par une action de Monsieur, donc rien à écarter. */}
+            {ambientCards.length > 0 && (
+              <section className="hud-deck hud-deck--ambient" aria-label="Panorama">
+                <div className="hud-deck-grid">
+                  {ambientCards.map((card) => (
+                    <CardView key={card.id} card={card} readOnly />
+                  ))}
+                </div>
+              </section>
+            )}
+            <div className="hud-suggestions">
+              {SUGGESTIONS.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  className="suggestion"
+                  onClick={() => send(s)}
+                  disabled={!online}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </>
         )}
       </div>
 
