@@ -2,6 +2,10 @@
    barres de défilement). Tout ce qui est « vrai partout » vit ici ; les
    classes de composants sont dans ui.css. */
 
+:root {
+  color-scheme: dark;
+}
+
 *,
 *::before,
 *::after {
