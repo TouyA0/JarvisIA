@@ -4,6 +4,7 @@ import Icon from "./ui/Icon.jsx";
 import ModeSwitcher from "./ui/ModeSwitcher.jsx";
 import Reactor from "./ui/Reactor.jsx";
 import { useBrainStatus } from "../lib/useBrainStatus.js";
+import { useFullscreen } from "../lib/useFullscreen.js";
 import { useGlobalShortcuts } from "../lib/useGlobalShortcuts.js";
 import { useIsMobile } from "../lib/useIsMobile.js";
 import { useVoiceContext } from "../lib/VoiceContext.jsx";
@@ -48,6 +49,7 @@ export default function AppShell({ view, onNavigate, children }) {
   const isMobile = useIsMobile();
   const status = useBrainStatus();
   const voice = useVoiceContext();
+  const { isFullscreen } = useFullscreen();
   const mainRef = useRef(null);
   const announceRef = useRef(null);
   const isFirstRender = useRef(true);
@@ -110,20 +112,24 @@ export default function AppShell({ view, onNavigate, children }) {
         </main>
         <div className="sr-only" role="status" aria-live="polite" ref={announceRef} />
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />
-        <nav className="tabbar" aria-label="Navigation principale">
-          {NAV_ITEMS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className="tab"
-              aria-current={item.id === view ? "page" : undefined}
-              onClick={() => onNavigate(item.id)}
-            >
-              <NavIcon name={item.icon} />
-              {item.short}
-            </button>
-          ))}
-        </nav>
+        {/* En plein écran (J4), la barre d'onglets disparaît : rien à
+            poser sur une tablette fixée au mur ou un second écran. */}
+        {!isFullscreen && (
+          <nav className="tabbar" aria-label="Navigation principale">
+            {NAV_ITEMS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className="tab"
+                aria-current={item.id === view ? "page" : undefined}
+                onClick={() => onNavigate(item.id)}
+              >
+                <NavIcon name={item.icon} />
+                {item.short}
+              </button>
+            ))}
+          </nav>
+        )}
       </div>
     );
   }
@@ -133,53 +139,58 @@ export default function AppShell({ view, onNavigate, children }) {
       <a className="skip-link" href="#contenu">
         Aller au contenu
       </a>
-      <nav className="nav" aria-label="Navigation principale">
-        <div className="nav-brand">
-          <Reactor size={34} state={reactorState(status)} />
-          <span className="nav-brand-text">
-            <span className="nav-brand-title">J.A.R.V.I.S.</span>
-            <span className="nav-brand-sub">console</span>
-          </span>
-        </div>
-
-        <ul className="nav-list">
-          {NAV_ITEMS.map((item) => (
-            <li key={item.id}>
-              <button
-                type="button"
-                className="nav-item"
-                aria-current={item.id === view ? "page" : undefined}
-                onClick={() => onNavigate(item.id)}
-              >
-                <NavIcon name={item.icon} />
-                <span className="nav-item-label">{item.label}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-
-        <div className="nav-foot">
-          <ModeSwitcher variant="nav" />
-          <button
-            type="button"
-            className="nav-item"
-            onClick={() => setPaletteOpen(true)}
-          >
-            <Icon name="search" size={18} />
-            <span className="nav-item-label">Commandes</span>
-            <span className="kbd" aria-hidden="true" style={{ marginLeft: "auto" }}>
-              Ctrl+K
+      {/* Même principe côté bureau : le plein écran masque la barre
+          latérale entière, pas seulement la liste de navigation — voir
+          J4. */}
+      {!isFullscreen && (
+        <nav className="nav" aria-label="Navigation principale">
+          <div className="nav-brand">
+            <Reactor size={34} state={reactorState(status)} />
+            <span className="nav-brand-text">
+              <span className="nav-brand-title">J.A.R.V.I.S.</span>
+              <span className="nav-brand-sub">console</span>
             </span>
-          </button>
-          <div className="row" style={{ padding: "0 var(--sp-2)", gap: "var(--sp-2)" }}>
-            <span
-              className={`dot ${status === "online" ? "dot--ok" : status === "connecting" ? "dot--cyan" : "dot--danger"}`}
-              aria-hidden="true"
-            />
-            <span className="nav-item-note">{statusLabel}</span>
           </div>
-        </div>
-      </nav>
+
+          <ul className="nav-list">
+            {NAV_ITEMS.map((item) => (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  className="nav-item"
+                  aria-current={item.id === view ? "page" : undefined}
+                  onClick={() => onNavigate(item.id)}
+                >
+                  <NavIcon name={item.icon} />
+                  <span className="nav-item-label">{item.label}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          <div className="nav-foot">
+            <ModeSwitcher variant="nav" />
+            <button
+              type="button"
+              className="nav-item"
+              onClick={() => setPaletteOpen(true)}
+            >
+              <Icon name="search" size={18} />
+              <span className="nav-item-label">Commandes</span>
+              <span className="kbd" aria-hidden="true" style={{ marginLeft: "auto" }}>
+                Ctrl+K
+              </span>
+            </button>
+            <div className="row" style={{ padding: "0 var(--sp-2)", gap: "var(--sp-2)" }}>
+              <span
+                className={`dot ${status === "online" ? "dot--ok" : status === "connecting" ? "dot--cyan" : "dot--danger"}`}
+                aria-hidden="true"
+              />
+              <span className="nav-item-note">{statusLabel}</span>
+            </div>
+          </div>
+        </nav>
+      )}
 
       <main id="contenu" className="view" tabIndex={-1} ref={mainRef}>
         {children}

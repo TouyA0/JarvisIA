@@ -6,6 +6,7 @@ import { useAmbient } from "../lib/useAmbient.js";
 import { useChatContext } from "../lib/ChatContext.jsx";
 import { useCardFeed } from "../lib/useCardFeed.js";
 import { useDevices } from "../lib/useDevices.js";
+import { useFullscreen } from "../lib/useFullscreen.js";
 import { useVoiceContext } from "../lib/VoiceContext.jsx";
 
 /**
@@ -60,7 +61,7 @@ function useClock() {
 /** Bandeau permanent : l'information qui a sa place à l'écran même quand
  * personne ne parle — c'est ce qui fait la différence entre un assistant
  * et une fenêtre de messagerie. */
-function Ambient({ devicesOnline, connected }) {
+function Ambient({ devicesOnline, connected, isFullscreen, onToggleFullscreen }) {
   const now = useClock();
   return (
     <div className="hud-ambient">
@@ -78,6 +79,19 @@ function Ambient({ devicesOnline, connected }) {
       <span className={`hud-chip ${connected ? "hud-chip--ok" : "hud-chip--off"}`}>
         {connected ? "liaison établie" : "liaison rompue"}
       </span>
+      {/* J4 : rien à poser sur une tablette fixée au mur ou un second
+          écran tant que la barre latérale et la navigation restent — ce
+          bouton bascule le pupitre en plein écran, sans elles. */}
+      <button
+        type="button"
+        className="icon-btn icon-btn--sm"
+        onClick={onToggleFullscreen}
+        aria-pressed={isFullscreen}
+        aria-label={isFullscreen ? "Quitter le plein écran" : "Passer en plein écran"}
+        title={isFullscreen ? "Quitter le plein écran" : "Passer en plein écran"}
+      >
+        <Icon name={isFullscreen ? "collapse" : "expand"} size={16} />
+      </button>
     </div>
   );
 }
@@ -189,6 +203,7 @@ export default function Hud() {
   const { cards, lastExchange, connected, dismiss, clearAll } = useCardFeed();
   const { devices } = useDevices();
   const ambientCards = useAmbient();
+  const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
 
   const lastLocalQuestionRef = useRef("");
   const localTurnAtRef = useRef(0);
@@ -236,6 +251,23 @@ export default function Hud() {
     return ask(text);
   }
 
+  // Réveil à la voix (J4) : une tablette fixée au mur n'a ni clavier ni
+  // souris à portée. Passer en plein écran arme donc l'écoute du mot-clé
+  // si elle ne l'était pas déjà, pour qu'un simple « Jarvis » suffise —
+  // sans quoi le mode kiosque resterait sourd tant que personne n'a
+  // retrouvé la vue Conversation pour armer le micro à la main.
+  useEffect(() => {
+    if (isFullscreen && !voice.armed) voice.arm();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFullscreen]);
+
+  // Réveil au clic (J4) : un tapotement n'importe où sur le pupitre en
+  // plein écran arme l'écoute — le pendant tactile du wake word pour la
+  // même tablette sans clavier.
+  function handleKioskWake() {
+    if (isFullscreen && !voice.armed) voice.arm();
+  }
+
   // Un tour diffusé qui n'est pas le nôtre : Monsieur a parlé au PC fixe
   // (ou depuis une autre Console). On l'affiche à l'identique — c'est tout
   // l'intérêt d'un écran qui reste allumé dans la pièce.
@@ -272,8 +304,13 @@ export default function Hud() {
   const hasCards = cards.length > 0;
 
   return (
-    <div className="hud">
-      <Ambient devicesOnline={devicesOnline} connected={connected && online} />
+    <div className={`hud${isFullscreen ? " hud--kiosk" : ""}`} onClick={handleKioskWake}>
+      <Ambient
+        devicesOnline={devicesOnline}
+        connected={connected && online}
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={toggleFullscreen}
+      />
 
       <div className="hud-body">
         <Stage

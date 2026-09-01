@@ -574,3 +574,27 @@
     height: 60px;
   }
 }
+
+/* ── Plein écran (J4) ───────────────────────────────────────────────────
+   Une tablette fixée au mur ou un second écran se regarde de loin : pas
+   de barre latérale ni de navigation (déjà retirées par AppShell côté
+   JS), et ce qui reste — horloge, réacteur, cartes ambiantes — grossit et
+   se lit en une colonne plutôt qu'en grille. */
+.hud--kiosk .hud-clock {
+  font-size: clamp(2.4rem, 6vw, 4rem);
+}
+.hud--kiosk .hud-date {
+  font-size: var(--text-md);
+}
+.hud--kiosk .hud-reactor {
+  width: min(38vh, 320px);
+  height: min(38vh, 320px);
+}
+.hud--kiosk .hud-answer {
+  font-size: clamp(1.4rem, 3.4vw, 2.4rem);
+}
+.hud--kiosk .hud-deck--ambient .hud-deck-grid {
+  grid-template-columns: 1fr;
+  max-width: 640px;
+  margin: 0 auto;
+}
