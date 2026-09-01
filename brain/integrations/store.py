@@ -40,6 +40,16 @@ def list_public(account_type: str | None = None) -> list[dict]:
     ]
 
 
+def get(account_id: str) -> dict | None:
+    """Un compte complet (jeton déchiffré), quel que soit son type — pour
+    la sonde de santé (brain/health.py, C7), qui doit dispatcher sur
+    `account["type"]` sans le connaître d'avance."""
+    for a in _load()["accounts"]:
+        if a["id"] == account_id:
+            return {**a, "refresh_token": crypto.decrypt(a["refresh_token_enc"]), "extra": a.get("extra", {})}
+    return None
+
+
 def list_for(account_type: str) -> list[dict]:
     """Comptes complets (jeton déchiffré) pour un type donné — usage interne
     des modules d'intégration uniquement, jamais exposé tel quel à l'API."""

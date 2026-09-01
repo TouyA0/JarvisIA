@@ -5,6 +5,12 @@ const POLL_MS = 3000;
 
 export function useIntegrations() {
   const [accounts, setAccounts] = useState([]);
+  // Santé des comptes (C7) : jamais dans le poll rapide ci-dessous — sonder
+  // Google/Zoho/Spotify/Jellyfin/HA toutes les 3s serait à la fois inutile
+  // (le brain la met en cache 5 min de toute façon) et malpoli envers ces
+  // fournisseurs. Un seul chargement au montage ; `checkAccountHealth` pour
+  // forcer un compte précis (bouton « Vérifier » d'une carte).
+  const [health, setHealth] = useState({});
   const [googleSettings, setGoogleSettings] = useState({ configured: false, source: null, client_id: null });
   const [zohoSettings, setZohoSettings] = useState({ configured: false, client_id: null, region: null });
   const [spotifySettings, setSpotifySettings] = useState({ configured: false, client_id: null });
@@ -40,6 +46,26 @@ export function useIntegrations() {
     const id = setInterval(refresh, POLL_MS);
     return () => clearInterval(id);
   }, [refresh]);
+
+  const refreshHealth = useCallback(async () => {
+    try {
+      const res = await authFetch("/api/integrations/health");
+      if (res.ok) setHealth(await res.json());
+    } catch {
+      // brain injoignable — on garde le dernier état connu
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshHealth();
+  }, [refreshHealth]);
+
+  const checkAccountHealth = useCallback(async (id) => {
+    const res = await authFetch(`/api/integrations/${id}/health`, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    setHealth((prev) => ({ ...prev, [id]: data }));
+    return data;
+  }, []);
 
   // Le callback OAuth (brain/server.py::google_callback / zoho_callback)
   // prévient cet onglet via postMessage une fois la connexion terminée —
@@ -296,6 +322,7 @@ export function useIntegrations() {
 
   return {
     accounts, remove,
+    health, refreshHealth, checkAccountHealth,
     connectGoogle, googleSettings, saveGoogleSettings, clearGoogleSettings,
     connectZoho, zohoSettings, saveZohoSettings, clearZohoSettings,
     connectSpotify, spotifySettings, saveSpotifySettings, clearSpotifySettings,

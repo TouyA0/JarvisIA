@@ -35,6 +35,7 @@ from agents.protocol.messages import (
     parse_message,
 )
 from brain import activity, cards, config, device_store, diagnostics, notes, pairing, preferences, proactive, routines, speech, timers, weather
+from brain import health as account_health
 from brain import tools as brain_tools
 from brain.core import agent as pc_agent
 from brain.core import convlog
@@ -451,6 +452,22 @@ async def list_integrations() -> list[dict]:
     """Tous les comptes tiers connectés (jamais les jetons), tous types
     confondus (google_calendar, google_drive…)."""
     return integrations_store.list_public()
+
+
+@app.get("/api/integrations/health")
+async def integrations_health(force: bool = False) -> dict:
+    """Santé de tous les comptes connectés (C7) — sonde active (voir
+    brain/health.py), en cache 5 min sauf `force=true`. `healthy` vaut
+    `None` pour un type non sondable (tisseo : un arrêt favori, pas un
+    jeton), à ne pas confondre avec `False` (sondé, en échec)."""
+    return await asyncio.to_thread(account_health.check_all, force)
+
+
+@app.post("/api/integrations/{account_id}/health")
+async def integration_health(account_id: str, force: bool = True) -> dict:
+    """Un seul compte — le bouton « Vérifier » d'une carte n'a pas à
+    resonder tous les autres."""
+    return await asyncio.to_thread(account_health.check, account_id, force)
 
 
 @app.get("/api/integrations/google/settings")

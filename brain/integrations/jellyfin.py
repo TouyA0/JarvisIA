@@ -64,6 +64,14 @@ def connect(base_url: str, api_key: str, username: str | None = None) -> dict:
     return store.add(SERVICE_TYPE, label, api_key, {"base_url": base_url, "user_id": user_id})
 
 
+def probe(account: dict) -> None:
+    """Sonde de santé (C7, voir brain/health.py) — même endpoint que
+    connect(), lève si le serveur est injoignable ou la clé révoquée."""
+    resp = requests.get(f"{_base_url(account)}/System/Info", headers=_headers(account), timeout=6)
+    if resp.status_code != 200:
+        raise RuntimeError(f"Jellyfin a refusé la clé API ({resp.status_code})")
+
+
 def _pick_account(account_hint: str | None = None) -> dict | None:
     accounts = store.list_for(SERVICE_TYPE)
     if account_hint:

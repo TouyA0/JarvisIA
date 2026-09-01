@@ -51,6 +51,14 @@ def connect(base_url: str, token: str) -> dict:
     return store.add(SERVICE_TYPE, label, token, {"base_url": base_url})
 
 
+def probe(account: dict) -> None:
+    """Sonde de santé (C7, voir brain/health.py) — même endpoint que
+    connect(), lève si l'instance est injoignable ou le token révoqué."""
+    resp = requests.get(f"{_base_url(account)}/api/config", headers=_headers(account), timeout=6)
+    if resp.status_code != 200:
+        raise RuntimeError(f"Home Assistant a refusé le token ({resp.status_code})")
+
+
 def _pick_account(account_hint: str | None = None) -> dict | None:
     accounts = store.list_for(SERVICE_TYPE)
     if account_hint:

@@ -478,17 +478,68 @@ function ProviderHeader({ group, status, provider, onConfigure }) {
   );
 }
 
+/** Compte inconnu de `health` (pas encore sondé) : traité comme sain plutôt
+ * que d'afficher un état d'échec injustifié avant la première réponse. */
+function AccountRow({ account, health, onDisconnect, onCheck }) {
+  const [checking, setChecking] = useState(false);
+  const unhealthy = health?.healthy === false;
+
+  async function check() {
+    setChecking(true);
+    try {
+      await onCheck(account.id);
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  return (
+    <li className="account-row">
+      <span className={`dot ${unhealthy ? "dot--danger" : "dot--ok"}`} aria-hidden="true" />
+      <span className="spacer account-label">
+        {account.label}
+        {unhealthy && (
+          <span className="hint" style={{ display: "block" }} title={health.error || undefined}>
+            à reconnecter — jeton refusé
+          </span>
+        )}
+      </span>
+      <button
+        type="button"
+        className="icon-btn icon-btn--sm"
+        onClick={check}
+        disabled={checking}
+        aria-label={`Vérifier ${account.label}`}
+        title="Vérifier la connexion"
+      >
+        <Icon name="refresh" size={14} />
+      </button>
+      <button
+        type="button"
+        className="btn btn--ghost btn--sm"
+        onClick={() => onDisconnect(account)}
+        aria-label={`Déconnecter ${account.label}`}
+      >
+        Déconnecter
+      </button>
+    </li>
+  );
+}
+
 function ServiceCard({
   service,
   provider,
   providerReady,
   accounts,
+  health = {},
   onConnect,
   onConfigure,
   onDisconnect,
+  onCheckHealth,
   connecting,
 }) {
   const connected = accounts.length > 0;
+  const anyUnhealthy = accounts.some((a) => health[a.id]?.healthy === false);
 
   return (
     <div className="card card--interactive">
@@ -497,9 +548,12 @@ function ServiceCard({
           <Icon name={service.icon} size={17} />
         </span>
         <h3 className="card-title spacer">{service.label}</h3>
-        {connected && (
-          <StatusBadge tone="ok">{accounts.length > 1 ? `${accounts.length} comptes` : "connecté"}</StatusBadge>
-        )}
+        {connected &&
+          (anyUnhealthy ? (
+            <StatusBadge tone="warn">à reconnecter</StatusBadge>
+          ) : (
+            <StatusBadge tone="ok">{accounts.length > 1 ? `${accounts.length} comptes` : "connecté"}</StatusBadge>
+          ))}
       </div>
 
       <p className="card-sub" style={{ whiteSpace: "normal", overflow: "visible" }}>
@@ -509,18 +563,7 @@ function ServiceCard({
       {accounts.length > 0 && (
         <ul className="account-list">
           {accounts.map((a) => (
-            <li key={a.id} className="account-row">
-              <span className="dot dot--ok" aria-hidden="true" />
-              <span className="spacer account-label">{a.label}</span>
-              <button
-                type="button"
-                className="btn btn--ghost btn--sm"
-                onClick={() => onDisconnect(a)}
-                aria-label={`Déconnecter ${a.label}`}
-              >
-                Déconnecter
-              </button>
-            </li>
+            <AccountRow key={a.id} account={a} health={health[a.id]} onDisconnect={onDisconnect} onCheck={onCheckHealth} />
           ))}
         </ul>
       )}
@@ -682,10 +725,12 @@ export default function Integrations() {
                         provider={provider}
                         providerReady={!!status?.configured}
                         accounts={service.noAccounts ? [] : accountsFor(service.type)}
+                        health={api.health}
                         connecting={connecting === service.type}
                         onConnect={handleConnect}
                         onConfigure={(s) => setDialog({ kind: "service", service: s })}
                         onDisconnect={handleDisconnect}
+                        onCheckHealth={api.checkAccountHealth}
                       />
                     ))}
                   </div>
