@@ -5,12 +5,25 @@ import Reactor from "./ui/Reactor.jsx";
 /** Recouvre tout l'écran tant que le brain répond 401 — voir
  * useConsoleAuth.js. Un seul champ, pas de compte : le mot de passe
  * lui-même sert de token (CONSOLE_PASSWORD côté brain). */
+const ERROR_LABELS = {
+  rejected: "Mot de passe refusé.",
+  unreachable: "Le brain ne répond pas.",
+};
+
 export default function AuthGate({ onSubmit }) {
   const [value, setValue] = useState("");
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
 
-  function submit(e) {
+  async function submit(e) {
     e.preventDefault();
-    if (value.trim()) onSubmit(value);
+    if (!value.trim() || pending) return;
+    setPending(true);
+    setError("");
+    const result = await onSubmit(value);
+    setPending(false);
+    if (result === "rejected") setValue("");
+    if (result !== "ok") setError(ERROR_LABELS[result] || ERROR_LABELS.unreachable);
   }
 
   return (
@@ -62,10 +75,19 @@ export default function AuthGate({ onSubmit }) {
               value={value}
               onChange={(e) => setValue(e.target.value)}
             />
+            {error && (
+              <span className="hint" style={{ color: "var(--danger-text)" }}>
+                {error}
+              </span>
+            )}
           </div>
-          <button type="submit" className="btn btn--primary btn--block" disabled={!value.trim()}>
+          <button
+            type="submit"
+            className="btn btn--primary btn--block"
+            disabled={!value.trim() || pending}
+          >
             <Icon name="power" size={16} />
-            Entrer
+            {pending ? "Vérification…" : "Entrer"}
           </button>
         </form>
       </main>
