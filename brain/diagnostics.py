@@ -15,7 +15,7 @@ pas du poste de travail — distinction à garder en tête si ça arrive.
 """
 from __future__ import annotations
 
-from brain.core import usage
+from brain.core import convlog, usage
 
 
 def snapshot() -> dict:
@@ -28,12 +28,18 @@ def snapshot() -> dict:
     except Exception:
         disk = 0
     s = usage.summary()
+    # Taux réel local (Ollama) / Claude sur la boucle à outils (F7 phase 2),
+    # pas une estimation — lu depuis le journal des échanges.
+    agent_stats = convlog.agent_tool_stats()
     return {
         "cpu": cpu,
         "mem": mem,
         "disk": disk,
         "month_cost_usd": s["month_cost_usd"],
         "month_calls": s["month_calls"],
+        "local_calls": agent_stats["local_calls"],
+        "claude_calls": agent_stats["claude_calls"],
+        "local_rate": agent_stats["local_rate"],
     }
 
 

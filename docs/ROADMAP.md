@@ -37,7 +37,7 @@ Légende effort : ▲ = un soir · ▲▲ = un week-end · ▲▲▲ = plusieurs
 | ★1 | **F1 — Voix Jarvis custom** | Le fichier est déjà dans `voice/` ; impact immersion maximal | ▲ |
 | ~~★2~~ | ~~F5 — Proactivité (alertes système + briefing)~~ ✓ *(fait)* | — | — |
 | ~~★3~~ | ~~F2 — Recherche web + résumé vocal~~ ✓ *(fait)* | — | — |
-| ★4 | **F7 — Tool-use local Ollama** | Coût API → quasi zéro, latence réduite, vie privée | ▲▲ |
+| ~~★4~~ | ~~F7 — Tool-use local Ollama~~ ✓ *(fait)* | — | — |
 | ★5 | **F4 — Wake word ONNX + bruits** | Fiabilité de la porte d'entrée + boot 3 s plus rapide, -500 Mo | ▲▲ |
 
 ---
@@ -77,17 +77,20 @@ Légende effort : ▲ = un soir · ▲▲ = un week-end · ▲▲▲ = plusieurs
   module : heure + météo ✓ + agenda (F14 ✓) + mails non lus (F15 ✓), une
   fois par jour à heure configurée. Titres d'actu : F2 (recherche web) est
   fait, mais pas encore branché dans le briefing lui-même.
-- **F7 · Tool-use local** ▲▲ *(phases 1 et 2 faites — rapport complet et
-  résultats mesurés : voir artefact "Tool-Use Local" partagé en session,
-  et `scripts/test_ollama_tools.py`)* — qwen3:14b tente en premier les
-  outils sans confirmation (météo, diagnostics, agenda, mails en lecture,
-  recherche web, Tisséo, Jellyfin), escalade silencieuse vers Claude en cas
-  d'échec ou hors périmètre (`brain/core/agent.py::_ask_local_with_tools`,
-  miroir `agents/desktop/brain/agent.py`). Effet de bord positif côté
-  voix : ces sujets n'étaient auparavant PAS pilotables à la voix du tout
-  (l'agent Claude vocal n'avait que les outils PC, jamais les outils brain)
-  — ils le deviennent via ce chemin local. Phase 3 (extension du
-  sous-ensemble, mesuré via la phase 4) restante.
+- **F7 · Tool-use local** ✓ *(fait — les 4 phases prévues sont faites ;
+  rapport complet et résultats mesurés : voir artefact "Tool-Use Local"
+  partagé en session, et `scripts/test_ollama_tools.py`)* — qwen3:14b tente
+  en premier les outils sans confirmation (météo, diagnostics, agenda,
+  mails en lecture, recherche web, Tisséo, Jellyfin), escalade silencieuse
+  vers Claude en cas d'échec ou hors périmètre
+  (`brain/core/agent.py::_ask_local_with_tools`, miroir
+  `agents/desktop/brain/agent.py`). Effet de bord positif côté voix : ces
+  sujets n'étaient auparavant PAS pilotables à la voix du tout (l'agent
+  Claude vocal n'avait que les outils PC, jamais les outils brain) — ils
+  le deviennent via ce chemin local. Taux local/Claude réel visible dans
+  la carte "diagnostics" (`brain/core/convlog.py::agent_tool_stats()`),
+  sans nouveau déclencheur à apprendre — c'est ce chiffre qui dira s'il
+  faut élargir le sous-ensemble de 14 outils actuel au-delà de ce chantier.
 - **F8 · Mémoire RAG** ▲▲▲ — embeddings locaux (`nomic-embed-text` via
   Ollama) sur mémoire + notes + logs de conversation → « qu'est-ce que
   j'avais noté sur le projet ICT ? », « de quoi on a parlé hier ? ».

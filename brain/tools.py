@@ -983,10 +983,13 @@ def execute(name: str, args: dict):
     if name == "system_diagnostics":
         d = diagnostics.snapshot()
         cards.emit("diagnostics", "État du système", d, subtitle=f"CPU {d['cpu']}% · RAM {d['mem']}%")
-        return (
+        text = (
             f"CPU à {d['cpu']}%, RAM à {d['mem']}%, disque à {d['disk']}%. "
             f"{d['month_calls']} appels API ce mois-ci, {d['month_cost_usd'] * 0.92:.2f} euros, Monsieur."
         )
+        if d["local_rate"] is not None:
+            text += f" {d['local_rate']}% des commandes traitées en local ce mois-ci."
+        return text
 
     if name == "web_search":
         if not brave_search.configured():

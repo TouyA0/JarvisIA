@@ -23,6 +23,42 @@ def log_exchange(question: str, answer: str, source: str = "") -> None:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
+def agent_tool_stats(months: int = 1) -> dict:
+    """Compte les tours de la boucle à outils (F7) par source, sur les
+    `months` derniers fichiers mensuels — ignore la conversation pure
+    (source="ollama"/"claude"), seule la boucle à outils (agenda, mails,
+    météo, pilotage PC…) nous intéresse ici. Sert la carte "diagnostics"
+    (voir brain/diagnostics.py) : c'est le chiffre réel qui dit si le
+    sous-ensemble local (F7 phase 2) mérite d'être étendu."""
+    files = sorted(config.LOGS_DIR.glob("conversations-*.jsonl"), reverse=True)[:months]
+    local = claude = 0
+    for path in files:
+        try:
+            with open(path, encoding="utf-8") as f:
+                lines = f.readlines()
+        except OSError:
+            continue
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            src = entry.get("source")
+            if src == "ollama-agent":
+                local += 1
+            elif src == "claude-agent":
+                claude += 1
+    total = local + claude
+    return {
+        "local_calls": local,
+        "claude_calls": claude,
+        "local_rate": round(local / total * 100) if total else None,
+    }
+
+
 def recent(limit: int = 40) -> list[dict]:
     """Les `limit` derniers échanges, du plus ancien au plus récent.
 

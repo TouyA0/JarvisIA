@@ -267,6 +267,7 @@ function Meter({ label, value }) {
 }
 
 function Diagnostics({ data }) {
+  const hasAgentStats = data.local_rate !== null && data.local_rate !== undefined;
   return (
     <div className="card-prose">
       <Meter label="CPU" value={data.cpu} />
@@ -276,6 +277,11 @@ function Diagnostics({ data }) {
         {data.month_calls} appel{data.month_calls > 1 ? "s" : ""} API ce mois-ci ·{" "}
         {(data.month_cost_usd * 0.92).toFixed(2)} €
       </p>
+      {hasAgentStats && (
+        <p className="card-row-sub">
+          Outils : {data.local_calls} en local · {data.claude_calls} via Claude ({data.local_rate}% local)
+        </p>
+      )}
     </div>
   );
 }
