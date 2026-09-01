@@ -39,7 +39,7 @@ devient le canal d'affichage riche.
 | I4 | **Gmail** ✓ *(fait)* | OAuth2 (gmail.readonly + gmail.compose) | recherche (syntaxe Gmail native), lecture, brouillon (sans confirmation), envoi via bannière de confirmation (gmail_search/gmail_read/gmail_draft/gmail_send) | brouillon libre, envoi toujours confirmé à l'écran | ▲▲ |
 | I5 | **Zoho Mail** ✓ *(fait, API Zoho pas IMAP)* | OAuth2 Zoho (accounts.READ + messages.READ/CREATE), multi-datacenter | recherche, lecture, composition — zoho_search/zoho_read/zoho_compose | composition toujours confirmée (brouillon ET envoi confondus, frontière API Zoho moins nette que Gmail — voir README) | ▲▲ |
 | I6 | **Spotify** ✓ *(fait, texte — pas de carte pochette)* | OAuth2 Web API | spotify_now_playing/spotify_play/spotify_control/spotify_volume — « mets ma playlist détente » résout via playlists perso puis catalogue public | contrôle lecture = action directe, aucune confirmation | ▲▲ |
-| I7 | **Google Contacts** (bonus) | OAuth2 (People API) | « le numéro de X », résolution de nom pour un futur envoi de message | lecture seule | ▲ |
+| I7 | **Google Contacts** ✓ *(fait)* | OAuth2 (People API) | contacts_search — « le numéro de X », résolution de nom pour Gmail/Zoho ; filtre local plutôt que l'index searchContacts (souvent en retard après un ajout récent) | lecture seule | ▲ |
 | I8 | **GitHub notifications** (bonus, si pertinent pour toi) | REST API (token) | « des PR en attente ? », « des issues qui me sont assignées ? » | lecture seule | ▲ |
 | I9 | **Discord** (bonus) | déjà évoqué en F16 (notifications Windows) — alternative : bot lecture seule sur tes serveurs perso | « un message important sur Discord ? » | lecture seule | ▲▲ |
 

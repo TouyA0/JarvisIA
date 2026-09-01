@@ -162,7 +162,7 @@ Jarvis/
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | — | intégration Google Calendar (panneau **Intégrations** de la Console web), voir ci-dessous |
 | `GOOGLE_REDIRECT_URI` | `http://127.0.0.1:8420/api/integrations/google/callback` | à ne changer que si le brain n'écoute pas sur `127.0.0.1:8420` |
 
-### Google (Calendar, Drive, Gmail)
+### Google (Calendar, Drive, Gmail, Contacts)
 
 Panneau **Intégrations** de la Console web (`ROADMAP_DISPLAY_INTEGRATIONS.md`)
 — comptes multiples supportés par service, résultats fusionnés
@@ -172,9 +172,10 @@ place une fois, ~5 min :
 
 1. [Google Cloud Console](https://console.cloud.google.com/) → nouveau
    projet (ou existant) → **APIs & Services** → activer **Google Calendar
-   API**, **Google Drive API** ET **Gmail API** (les trois, même si tu ne
-   comptes utiliser qu'un service pour l'instant — inactive, l'API bloque
-   juste silencieusement les appels le jour où tu voudras un autre).
+   API**, **Google Drive API**, **Gmail API** ET **People API** (les
+   quatre, même si tu ne comptes utiliser qu'un service pour l'instant —
+   inactive, l'API bloque juste silencieusement les appels le jour où tu
+   voudras un autre).
 2. **APIs & Services → OAuth consent screen** → type *External* (ou
    *Internal* si Workspace), ajoute-toi comme utilisateur de test si l'app
    reste en mode test (largement suffisant pour un usage perso) — ajoute
@@ -193,7 +194,8 @@ place une fois, ~5 min :
    brain ; le réglage saisi dans la Console reste prioritaire si les deux
    existent.)
 5. Toujours dans **Intégrations** → **Connecter** sous Google Calendar,
-   Google Drive et/ou Gmail → choisis le compte Google → accepte. Répète
+   Google Drive, Gmail et/ou Google Contacts → choisis le compte Google →
+   accepte. Répète
    pour chaque compte et chaque service à connecter — tout se passe depuis
    le site, aucun fichier à éditer après l'étape 4. Un même compte Google
    demande une connexion séparée par service (jetons indépendants, scopes
@@ -222,6 +224,8 @@ pilotage PC vers l'agent à outils) :
   **brouillon** (jamais envoyé automatiquement, aucune confirmation nécessaire pour
   un brouillon) ; « envoie-le » → confirmation obligatoire (destinataire + sujet
   affichés) avant l'envoi réel, irréversible
+- « Jarvis, le numéro de X ? » / « l'email de X ? » → recherche dans les contacts
+  connectés (lecture seule, aucune écriture possible)
 
 Le scope Drive demandé est `drive` (lecture ET écriture, pas seulement
 `drive.readonly`) — nécessaire pour agir sur n'importe quel fichier trouvé

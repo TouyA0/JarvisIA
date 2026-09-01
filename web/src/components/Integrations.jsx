@@ -7,18 +7,21 @@ const TYPE_LABELS = {
   google_calendar: "Google Calendar",
   google_drive: "Google Drive",
   gmail: "Gmail",
+  google_contacts: "Google Contacts",
   zoho_mail: "Zoho Mail",
   spotify: "Spotify",
 };
 
-// Catalogue affiché à droite — google_calendar/google_drive/gmail (Google,
-// un seul Client ID/Secret), zoho_mail (Zoho) et spotify (Spotify) sont
-// branchés ; le reste vient docs/ROADMAP_DISPLAY_INTEGRATIONS.md et attend
-// son tour (même socle, un module brain/integrations/<service>.py de plus).
+// Catalogue affiché à droite — google_calendar/google_drive/gmail/
+// google_contacts (Google, un seul Client ID/Secret), zoho_mail (Zoho) et
+// spotify (Spotify) sont branchés ; le reste vient
+// docs/ROADMAP_DISPLAY_INTEGRATIONS.md et attend son tour (même socle, un
+// module brain/integrations/<service>.py de plus).
 const CATALOG = [
   { type: "google_calendar", label: "Google Calendar", provider: "google", available: true },
   { type: "google_drive", label: "Google Drive", provider: "google", available: true },
   { type: "gmail", label: "Gmail", provider: "google", available: true },
+  { type: "google_contacts", label: "Google Contacts", provider: "google", available: true },
   { type: "zoho_mail", label: "Zoho Mail", provider: "zoho", available: true },
   { type: "spotify", label: "Spotify", provider: "spotify", available: true },
 ];

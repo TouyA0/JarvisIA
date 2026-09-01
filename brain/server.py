@@ -37,7 +37,7 @@ from brain.core import agent as pc_agent
 from brain.core.chat import ask_stream
 from brain.devices import Device, registry
 from brain.integrations import confirm as integrations_confirm
-from brain.integrations import google_calendar, google_drive, google_gmail, google_oauth, settings as integrations_settings
+from brain.integrations import google_calendar, google_contacts, google_drive, google_gmail, google_oauth, settings as integrations_settings
 from brain.integrations import spotify, spotify_oauth
 from brain.integrations import store as integrations_store
 from brain.integrations import zoho_mail, zoho_oauth
@@ -50,6 +50,7 @@ _GOOGLE_SERVICES = {
     google_calendar.SERVICE_TYPE: google_calendar,
     google_drive.SERVICE_TYPE: google_drive,
     google_gmail.SERVICE_TYPE: google_gmail,
+    google_contacts.SERVICE_TYPE: google_contacts,
 }
 # Même principe pour Zoho (aujourd'hui un seul service, zoho_mail — mais
 # Zoho a d'autres API sur le même mécanisme OAuth si un jour utile).

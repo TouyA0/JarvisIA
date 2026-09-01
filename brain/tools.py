@@ -10,7 +10,7 @@ deux listes de schémas, et route chaque tool_use vers le bon exécuteur
 """
 from __future__ import annotations
 
-from brain.integrations import google_calendar, google_drive, google_gmail, spotify, store, zoho_mail
+from brain.integrations import google_calendar, google_contacts, google_drive, google_gmail, spotify, store, zoho_mail
 
 BRAIN_TOOLS = [
     {
@@ -289,6 +289,22 @@ BRAIN_TOOLS = [
             "required": ["percent"],
         },
     },
+    {
+        "name": "contacts_search",
+        "description": (
+            "Cherche un contact par nom dans les carnets d'adresses Google connectés "
+            "(tous comptes confondus) — retourne téléphone(s), email(s), organisation. "
+            "Utilise pour « le numéro de X », « l'email de X », avant d'appeler quelqu'un "
+            "ou d'envoyer un message si Monsieur ne donne qu'un nom."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Nom (ou fragment de nom) à chercher."},
+            },
+            "required": ["query"],
+        },
+    },
 ]
 
 NAMES = {t["name"] for t in BRAIN_TOOLS}
@@ -337,6 +353,19 @@ def _format_messages(messages: list[dict]) -> str:
         flag = " ●non lu" if m.get("unread") else ""
         mid = f" (id: {m['id']})" if m.get("id") else ""
         lines.append(f"- {m['subject']} — de {m['from']}{flag}{acct} : {m['snippet']}{mid}")
+    return "\n".join(lines)
+
+
+def _format_contacts(contacts: list[dict]) -> str:
+    if not contacts:
+        return "Aucun contact trouvé, Monsieur."
+    lines = []
+    for c in contacts:
+        acct = f" [{c['account']}]" if len(contacts) > 1 and len({ct['account'] for ct in contacts}) > 1 else ""
+        phones = ", ".join(c["phones"]) if c.get("phones") else "pas de téléphone"
+        emails = f" — {', '.join(c['emails'])}" if c.get("emails") else ""
+        org = f" ({c['organization']})" if c.get("organization") else ""
+        lines.append(f"- {c['name']}{org}{acct} : {phones}{emails}")
     return "\n".join(lines)
 
 
@@ -502,5 +531,13 @@ def execute(name: str, args: dict):
         if "error" in result:
             return result["error"]
         return f"Volume Spotify réglé à {result['percent']}%."
+
+    if name == "contacts_search":
+        if not google_contacts.configured():
+            return "Google Contacts n'est pas configuré, Monsieur — aucun compte connecté."
+        if not store.list_public("google_contacts"):
+            return "Aucun compte Google Contacts connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
+        contacts = google_contacts.search(args.get("query", ""))
+        return _format_contacts(contacts)
 
     return f"Outil brain inconnu : {name}"
