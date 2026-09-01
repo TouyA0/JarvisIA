@@ -1,9 +1,12 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import CommandPalette from "./ui/CommandPalette.jsx";
 import Icon from "./ui/Icon.jsx";
 import ModeSwitcher from "./ui/ModeSwitcher.jsx";
 import Reactor from "./ui/Reactor.jsx";
 import { useBrainStatus } from "../lib/useBrainStatus.js";
+import { useGlobalShortcuts } from "../lib/useGlobalShortcuts.js";
 import { useIsMobile } from "../lib/useIsMobile.js";
+import { useVoiceContext } from "../lib/VoiceContext.jsx";
 
 /**
  * Coquille de l'application : navigation, identité, état du brain.
@@ -44,9 +47,36 @@ function NavIcon({ name }) {
 export default function AppShell({ view, onNavigate, children }) {
   const isMobile = useIsMobile();
   const status = useBrainStatus();
+  const voice = useVoiceContext();
   const mainRef = useRef(null);
   const announceRef = useRef(null);
   const isFirstRender = useRef(true);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  useGlobalShortcuts({ voice, onOpenPalette: () => setPaletteOpen(true) });
+
+  // Écrans + bascule micro : les seules commandes qui existent pour
+  // l'instant. Pas de « effacer l'affichage » ni d'action propre à un
+  // écran — la palette est un raccourci de navigation globale, pas un
+  // second menu contextuel pour chaque vue.
+  const commands = useMemo(
+    () => [
+      ...NAV_ITEMS.map((item) => ({
+        id: `nav-${item.id}`,
+        label: `Aller à ${item.label}`,
+        icon: item.icon === "reactor" ? "power" : item.icon,
+        hint: item.id === view ? "écran actuel" : undefined,
+        run: () => onNavigate(item.id),
+      })),
+      {
+        id: "voice-toggle",
+        label: voice.armed ? "Couper l'écoute vocale" : "Activer l'écoute vocale",
+        icon: "mic",
+        run: () => (voice.armed ? voice.disarm() : voice.arm()),
+      },
+    ],
+    [view, onNavigate, voice],
+  );
 
   const statusLabel =
     status === "online" ? "Brain connecté" : status === "connecting" ? "Connexion…" : "Brain injoignable";
@@ -79,6 +109,7 @@ export default function AppShell({ view, onNavigate, children }) {
           {children}
         </main>
         <div className="sr-only" role="status" aria-live="polite" ref={announceRef} />
+        <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />
         <nav className="tabbar" aria-label="Navigation principale">
           {NAV_ITEMS.map((item) => (
             <button
@@ -129,6 +160,17 @@ export default function AppShell({ view, onNavigate, children }) {
 
         <div className="nav-foot">
           <ModeSwitcher variant="nav" />
+          <button
+            type="button"
+            className="nav-item"
+            onClick={() => setPaletteOpen(true)}
+          >
+            <Icon name="search" size={18} />
+            <span className="nav-item-label">Commandes</span>
+            <span className="kbd" aria-hidden="true" style={{ marginLeft: "auto" }}>
+              Ctrl+K
+            </span>
+          </button>
           <div className="row" style={{ padding: "0 var(--sp-2)", gap: "var(--sp-2)" }}>
             <span
               className={`dot ${status === "online" ? "dot--ok" : status === "connecting" ? "dot--cyan" : "dot--danger"}`}
@@ -143,6 +185,7 @@ export default function AppShell({ view, onNavigate, children }) {
         {children}
       </main>
       <div className="sr-only" role="status" aria-live="polite" ref={announceRef} />
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />
     </div>
   );
 }

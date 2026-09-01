@@ -3,7 +3,6 @@ import { ViewHeader } from "./AppShell.jsx";
 import CardView from "./cards/CardView.jsx";
 import Icon from "./ui/Icon.jsx";
 import StatusBadge from "./ui/StatusBadge.jsx";
-import { authFetch } from "../lib/consoleAuth.js";
 import { useChatContext } from "../lib/ChatContext.jsx";
 import { useCardFeed } from "../lib/useCardFeed.js";
 import { useVoiceContext } from "../lib/VoiceContext.jsx";
@@ -95,7 +94,15 @@ function Thread({ messages, activity }) {
   let lastDay = "";
 
   return (
-    <div className="thread" ref={scrollerRef} onScroll={onScroll}>
+    <div
+      className="thread"
+      ref={scrollerRef}
+      onScroll={onScroll}
+      role="log"
+      aria-live="polite"
+      aria-relevant="additions"
+      aria-label="Fil de conversation"
+    >
       <div className="thread-inner">
         {messages.map((m) => {
           const day = dayKey(m.at);
@@ -182,7 +189,7 @@ function Composer({ online, busy, onSend, voice }) {
           onClick={() => (voice.armed ? voice.disarm() : voice.arm())}
           aria-pressed={voice.armed}
           aria-label={voice.armed ? "Couper l'écoute vocale" : "Activer l'écoute vocale"}
-          title={voice.armed ? VOICE_LABELS[voice.status] : "Activer l'écoute vocale"}
+          title={`${voice.armed ? VOICE_LABELS[voice.status] : "Activer l'écoute vocale"} (Ctrl+Alt+J)`}
         >
           <Icon name="mic" size={20} />
         </button>
@@ -290,7 +297,7 @@ export default function Console() {
   useEffect(() => {
     if (wasBusyRef.current && !busy && lastWasVoiceRef.current) {
       lastWasVoiceRef.current = false;
-      speakAnswer(lastAnswerRef.current, voice);
+      voice.speak(lastAnswerRef.current);
     }
     wasBusyRef.current = busy;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -358,36 +365,4 @@ export default function Console() {
       </div>
     </>
   );
-}
-
-async function speakAnswer(text, voice) {
-  if (!text) {
-    voice.resume();
-    return;
-  }
-  try {
-    const res = await authFetch("/api/speech/synthesize", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-    if (!res.ok) {
-      voice.resume();
-      return;
-    }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    audio.onended = () => {
-      URL.revokeObjectURL(url);
-      voice.resume();
-    };
-    audio.onerror = () => {
-      URL.revokeObjectURL(url);
-      voice.resume();
-    };
-    await audio.play();
-  } catch {
-    voice.resume();
-  }
 }

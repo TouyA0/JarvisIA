@@ -704,6 +704,69 @@
   border-top: 1px solid var(--line);
 }
 
+/* ══ Palette de commandes ════════════════════════════════════════════ */
+.command-palette {
+  width: min(480px, 100%);
+  max-height: min(70dvh, 420px);
+  align-self: flex-start;
+  margin-top: 12dvh;
+}
+.command-palette-input {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+  border-bottom: 1px solid var(--line);
+  color: var(--text-faint);
+}
+.command-palette-input input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  font: inherit;
+  font-size: var(--text-md);
+  color: var(--text);
+}
+.command-palette-input input::placeholder {
+  color: var(--text-faint);
+}
+.command-palette-list {
+  overflow-y: auto;
+  padding: var(--sp-2);
+}
+.command-palette-empty {
+  padding: var(--sp-4) var(--sp-3);
+  color: var(--text-faint);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+.command-palette-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border-radius: var(--r-md);
+  color: var(--text);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.command-palette-item svg {
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+.command-palette-item--active {
+  background: var(--cyan-dim);
+}
+.command-palette-item--active svg {
+  color: var(--cyan);
+}
+.command-palette-hint {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+}
+
 /* ══ Notifications ═══════════════════════════════════════════════════ */
 .toasts {
   position: fixed;

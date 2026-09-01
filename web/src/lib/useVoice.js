@@ -39,6 +39,7 @@ export function useVoice({ onCommand }) {
   const mediaStreamRef = useRef(null);
   const armedRef = useRef(false);
   const pausedRef = useRef(false); // pause externe (Jarvis parle) — distincte de la pause du détecteur
+  const audioRef = useRef(null); // lecture TTS en cours, pour qu'Échap puisse la couper (voir stopSpeaking)
 
   const handleDetected = useCallback(async (score) => {
     if (pausedRef.current) return; // Jarvis parle déjà, ignore ce déclenchement
@@ -160,10 +161,62 @@ export function useVoice({ onCommand }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Lit une réponse à voix haute (synthèse côté brain) puis reprend
+  // l'écoute — utilisée par Console.jsx et Hud.jsx après un tour déclenché
+  // à la voix. Centralisée ici (plutôt que dupliquée dans les deux écrans,
+  // comme avant) pour que `stopSpeaking` puisse couper la lecture en cours
+  // depuis n'importe où — voir raccourci Échap dans useGlobalShortcuts.js.
+  const speak = useCallback(
+    async (text) => {
+      if (!text) {
+        resume();
+        return;
+      }
+      try {
+        const res = await authFetch("/api/speech/synthesize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        if (!res.ok) {
+          resume();
+          return;
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audioRef.current = audio;
+        const finish = () => {
+          URL.revokeObjectURL(url);
+          if (audioRef.current === audio) audioRef.current = null;
+          resume();
+        };
+        audio.onended = finish;
+        audio.onerror = finish;
+        await audio.play();
+      } catch {
+        resume();
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [resume],
+  );
+
+  // Coupe la lecture en cours (Échap) sans attendre la fin naturelle du
+  // clip — reprend l'écoute comme si le clip s'était terminé normalement.
+  const stopSpeaking = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audioRef.current = null;
+    audio.pause();
+    resume();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resume]);
+
   useEffect(() => () => disarm(), [disarm]);
 
   return {
     armed, status, error, lastTranscript, wakeWordHeard, lastScore,
-    arm, disarm, pause, resume,
+    arm, disarm, pause, resume, speak, stopSpeaking,
   };
 }

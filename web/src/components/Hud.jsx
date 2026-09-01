@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import CardView from "./cards/CardView.jsx";
 import Icon from "./ui/Icon.jsx";
 import ModeSwitcher from "./ui/ModeSwitcher.jsx";
-import { authFetch } from "../lib/consoleAuth.js";
 import { useChatContext } from "../lib/ChatContext.jsx";
 import { useCardFeed } from "../lib/useCardFeed.js";
 import { useDevices } from "../lib/useDevices.js";
@@ -148,6 +147,7 @@ function Composer({ online, busy, onSend, voice }) {
         onClick={() => (voice.armed ? voice.disarm() : voice.arm())}
         aria-pressed={voice.armed}
         aria-label={voice.armed ? "Couper l'écoute vocale" : "Activer l'écoute vocale"}
+        title={`${voice.armed ? "Couper l'écoute vocale" : "Activer l'écoute vocale"} (Ctrl+Alt+J)`}
       >
         <Icon name="mic" size={22} />
       </button>
@@ -229,7 +229,7 @@ export default function Hud() {
   useEffect(() => {
     if (wasBusyRef.current && !busy && lastWasVoiceRef.current) {
       lastWasVoiceRef.current = false;
-      speakAnswer(lastAnswerRef.current, voice);
+      voice.speak(lastAnswerRef.current);
     }
     wasBusyRef.current = busy;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -330,36 +330,4 @@ export default function Hud() {
       <Composer online={online} busy={busy} onSend={send} voice={voice} />
     </div>
   );
-}
-
-async function speakAnswer(text, voice) {
-  if (!text) {
-    voice.resume();
-    return;
-  }
-  try {
-    const res = await authFetch("/api/speech/synthesize", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-    if (!res.ok) {
-      voice.resume();
-      return;
-    }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    audio.onended = () => {
-      URL.revokeObjectURL(url);
-      voice.resume();
-    };
-    audio.onerror = () => {
-      URL.revokeObjectURL(url);
-      voice.resume();
-    };
-    await audio.play();
-  } catch {
-    voice.resume();
-  }
 }
