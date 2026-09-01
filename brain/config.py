@@ -134,3 +134,14 @@ TIMEZONE = os.getenv("TIMEZONE", "Europe/Paris")
 WEATHER_LAT = float(os.getenv("WEATHER_LAT", "43.6047"))
 WEATHER_LON = float(os.getenv("WEATHER_LON", "1.4442"))
 WEATHER_CITY = os.getenv("WEATHER_CITY", "Toulouse")
+
+# Proactivité (brain/proactive.py, C3) — mêmes clés .env et mêmes valeurs
+# par défaut que agents/desktop/config.py : un seul réglage pour les deux,
+# pas deux seuils à tenir synchronisés à la main.
+PROACTIVE_ENABLED = os.getenv("PROACTIVE_ENABLED", "1") != "0"
+PROACTIVE_DISK_THRESHOLD = int(os.getenv("PROACTIVE_DISK_THRESHOLD", "90"))
+PROACTIVE_RAM_THRESHOLD = int(os.getenv("PROACTIVE_RAM_THRESHOLD", "90"))
+PROACTIVE_BEDTIME_HOUR = int(os.getenv("PROACTIVE_BEDTIME_HOUR", "23"))
+PROACTIVE_BEDTIME_MINUTE = int(os.getenv("PROACTIVE_BEDTIME_MINUTE", "30"))
+PROACTIVE_BRIEFING_HOUR = int(os.getenv("PROACTIVE_BRIEFING_HOUR", "8"))
+PROACTIVE_BRIEFING_MINUTE = int(os.getenv("PROACTIVE_BRIEFING_MINUTE", "0"))

@@ -303,6 +303,14 @@ function Timer() {
   return <p className="card-text card-empty">Écoulé.</p>;
 }
 
+/** Émise par brain/proactive.py (C3) : alerte système, suggestion de
+ * coucher, briefing matinal — ce que Jarvis dit sans qu'on lui demande.
+ * Le sous-titre de la carte porte déjà le même texte ; ce corps le répète
+ * en plus grand, c'est la seule information qu'il y ait à montrer. */
+function Proactive({ data }) {
+  return <p className="card-text">{data.text}</p>;
+}
+
 function Fallback({ data }) {
   return <pre className="card-text card-raw">{JSON.stringify(data, null, 1)}</pre>;
 }
@@ -326,6 +334,7 @@ export const CARD_META = {
   file_preview: { icon: "copy", source: "Fichier" },
   web_results: { icon: "search", source: "Recherche web" },
   timer: { icon: "clock", source: "Minuteur" },
+  proactive: { icon: "alert", source: "Jarvis" },
 };
 
 export const RENDERERS = {
@@ -346,6 +355,7 @@ export const RENDERERS = {
   file_preview: DocumentCard,
   web_results: WebResults,
   timer: Timer,
+  proactive: Proactive,
 };
 
 export { Fallback };

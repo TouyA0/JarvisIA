@@ -287,15 +287,16 @@ export default function Hud() {
   const { status, messages: allMessages, activity, busy, ask, setPhraseHandler, setDoneHandler } =
     useChatContext();
   const messages = allMessages.filter((m) => !m.historical);
-  // Notification navigateur à l'échéance d'un minuteur/rappel (C1) — la
-  // permission, elle, est demandée au moment où Monsieur en pose un
-  // (System.jsx), un vrai geste utilisateur, pas ici en silence.
-  const notifyTimer = useCallback((card) => {
-    if (card.type !== "timer") return;
+  // Notification navigateur à l'échéance d'un minuteur/rappel (C1) ou d'une
+  // alerte proactive (C3) — la permission, elle, est demandée au moment où
+  // Monsieur pose un minuteur (System.jsx), un vrai geste utilisateur, pas
+  // ici en silence.
+  const notifyCard = useCallback((card) => {
+    if (card.type !== "timer" && card.type !== "proactive") return;
     if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
     new Notification(card.title, { body: card.subtitle, icon: "/favicon.svg", tag: card.id });
   }, []);
-  const { cards, lastExchange, connected, dismiss, clearAll } = useCardFeed(notifyTimer);
+  const { cards, lastExchange, connected, dismiss, clearAll } = useCardFeed(notifyCard);
   const { timers } = useTimers();
   const { devices } = useDevices();
   const ambientCards = useAmbient();

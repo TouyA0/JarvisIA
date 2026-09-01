@@ -33,7 +33,7 @@ from agents.protocol.messages import (
     RegisterAck,
     parse_message,
 )
-from brain import activity, cards, config, device_store, diagnostics, notes, pairing, routines, speech, timers, weather
+from brain import activity, cards, config, device_store, diagnostics, notes, pairing, proactive, routines, speech, timers, weather
 from brain import tools as brain_tools
 from brain.core import agent as pc_agent
 from brain.core import convlog
@@ -70,6 +70,7 @@ _ZOHO_SERVICES = {
 
 config.ensure_dirs()
 timers.start()
+proactive.start()
 
 app = FastAPI(title="Jarvis Brain")
 
