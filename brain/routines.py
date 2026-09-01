@@ -1,5 +1,6 @@
 """Routines cross-appareils : séquences d'actions dispatchées sur
-plusieurs appareils via brain/devices.py.
+plusieurs appareils via brain/devices.py, ou exécutées directement par le
+brain lui-même (C5, voir `run()`).
 
 Déclenchement manuel (bouton « Lancer » côté web) ou programmé (C4,
 `schedule`) — un déclencheur horaire optionnel par routine, vérifié par
@@ -8,6 +9,13 @@ j'arrive ») reste hors de portée : rien dans ce projet ne détecte encore
 de présence (pas de géofencing, pas de scan réseau) — un déclencheur ne
 peut s'accrocher qu'à un signal qui existe déjà. Voir
 docs/ROADMAP_MULTIDEVICE.md.
+
+Deux natures d'étape (C5) : `{"device_id": ..., "tool": ..., "args": {}}`
+dispatché à un appareil précis (capture, verrouillage, ouvrir une page…),
+ou `{"tool": ..., "args": {}}` SANS device_id, qui appelle un outil brain
+directement (agenda, mail, musique, domotique — brain/tools.py) — même
+registre que les tool_use de Claude, `tool` doit donc être dans
+brain_tools.NAMES.
 
 À ne pas confondre avec agents/desktop/services/routines.py : format et
 fichier différents, celui-ci vit côté brain et cible plusieurs appareils.
@@ -21,6 +29,7 @@ import time
 import uuid
 
 from brain import activity, config
+from brain import tools as brain_tools
 from brain.devices import registry
 
 _lock = threading.Lock()
@@ -111,7 +120,21 @@ async def run(routine_id: str) -> None:
 
     for i, step in enumerate(steps):
         _running[routine_id]["step_index"] = i
-        device_id, tool, args = step["device_id"], step["tool"], step.get("args", {})
+        device_id, tool, args = step.get("device_id"), step["tool"], step.get("args", {})
+
+        if not device_id:
+            # Outil brain (C5) : exécuté sur CE process, pas dispatché à un
+            # appareil — to_thread() car brain_tools.execute() est
+            # synchrone et peut bloquer sur un appel réseau (Google, HA…).
+            try:
+                await asyncio.to_thread(brain_tools.execute, tool, args)
+                activity.record("brain", tool, ok=True, error=None)
+            except Exception as exc:
+                activity.record("brain", tool, ok=False, error=str(exc))
+                _running[routine_id].update(status="error", error=str(exc))
+                return
+            continue
+
         try:
             result = await registry.dispatch(device_id, tool, args)
         except KeyError:

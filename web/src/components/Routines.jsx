@@ -14,22 +14,62 @@ import { useRoutines } from "../lib/useRoutines.js";
 // dans le builder) — même logique de prudence que Focus.jsx : une routine
 // s'exécute d'un clic, sans confirmation étape par étape, donc pas de
 // commande arbitraire ici.
+//
+// `needsDevice` distingue les deux natures d'étape (C5) : les trois
+// premières sont dispatchées à un appareil précis (agents/desktop) ; les
+// quatre suivantes appellent un outil brain directement (agenda, mail,
+// musique, domotique — brain/tools.py), sans appareil à choisir : elles
+// tournent sur le brain lui-même, où qu'il soit. Curation délibérément
+// restreinte à des outils sûrs sans confirmation d'écran requise (pas de
+// drive_delete, gmail_send… — voir brain/tools.py pour la liste complète).
 const STEP_KINDS = [
-  { id: "capture", label: "Capturer l'écran", tool: "take_screenshot", icon: "camera" },
+  { id: "capture", label: "Capturer l'écran", tool: "take_screenshot", icon: "camera", needsDevice: true },
   {
     id: "lock",
     label: "Verrouiller la session",
     tool: "run_powershell",
     icon: "lock",
+    needsDevice: true,
     args: { command: "rundll32.exe user32.dll,LockWorkStation" },
   },
-  { id: "open_url", label: "Ouvrir une page web", tool: "open_url", icon: "link", needsUrl: true },
+  { id: "open_url", label: "Ouvrir une page web", tool: "open_url", icon: "link", needsDevice: true, needsUrl: true },
+  { id: "agenda", label: "Lire l'agenda", tool: "calendar_events", icon: "clock", needsRange: true },
+  {
+    id: "mail",
+    label: "Vérifier les mails non lus",
+    tool: "gmail_search",
+    icon: "chat",
+    args: { query: "is:unread" },
+  },
+  { id: "music", label: "Lancer de la musique", tool: "spotify_play", icon: "play", needsQuery: true },
+  { id: "home", label: "Piloter la maison", tool: "ha_control", icon: "power", needsHome: true },
 ];
 
-/** Une étape enregistrée ne garde que `tool` + `args` : on retrouve son
- * libellé lisible ici, sinon les cartes affichent « run_powershell ». */
+const AGENDA_RANGES = [
+  { v: "today", label: "Aujourd'hui" },
+  { v: "tomorrow", label: "Demain" },
+  { v: "week", label: "Cette semaine" },
+];
+const HOME_ACTIONS = [
+  { v: "on", label: "Allumer" },
+  { v: "off", label: "Éteindre" },
+  { v: "toggle", label: "Basculer" },
+];
+
+/** Une étape enregistrée ne garde que `tool` + `args` (+ `device_id` s'il y
+ * en a un) : on retrouve son libellé lisible ici, sinon les cartes
+ * affichent « run_powershell » ou « calendar_events ». */
 function stepLabel(step) {
   if (step.tool === "open_url") return `Ouvrir ${step.args?.url || "une page"}`;
+  if (step.tool === "calendar_events") {
+    const range = AGENDA_RANGES.find((r) => r.v === step.args?.range)?.label || "Aujourd'hui";
+    return `Lire l'agenda (${range.toLowerCase()})`;
+  }
+  if (step.tool === "spotify_play") return `Jouer « ${step.args?.query || "…"} »`;
+  if (step.tool === "ha_control") {
+    const action = HOME_ACTIONS.find((a) => a.v === step.args?.action)?.label || "Piloter";
+    return `${action} ${step.args?.entity || ""}`.trim();
+  }
   const kind = STEP_KINDS.find((k) => k.tool === step.tool);
   return kind ? kind.label : step.tool;
 }
@@ -163,7 +203,7 @@ function RoutineCard({ routine, devices, onRun, onDelete, onSchedule }) {
   const run = routine.run_status;
   const running = run?.status === "running";
   const failed = run?.status === "error";
-  const deviceName = (id) => devices.find((d) => d.device_id === id)?.name || "appareil inconnu";
+  const deviceName = (id) => (id ? devices.find((d) => d.device_id === id)?.name || "appareil inconnu" : "Jarvis");
 
   return (
     <div className={`card ${running ? "card--active" : ""}`.trim()}>
@@ -226,6 +266,10 @@ function BuilderDialog({ open, onClose, devices, onCreate }) {
   const [kind, setKind] = useState(STEP_KINDS[0].id);
   const [deviceId, setDeviceId] = useState("");
   const [url, setUrl] = useState("");
+  const [agendaRange, setAgendaRange] = useState("today");
+  const [musicQuery, setMusicQuery] = useState("");
+  const [homeEntity, setHomeEntity] = useState("");
+  const [homeAction, setHomeAction] = useState("on");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
@@ -244,6 +288,10 @@ function BuilderDialog({ open, onClose, devices, onCreate }) {
     setKind(STEP_KINDS[0].id);
     setDeviceId("");
     setUrl("");
+    setAgendaRange("today");
+    setMusicQuery("");
+    setHomeEntity("");
+    setHomeAction("on");
     setError("");
     setScheduleEnabled(false);
     setScheduleTime("08:00");
@@ -251,7 +299,7 @@ function BuilderDialog({ open, onClose, devices, onCreate }) {
   }
 
   function addStep() {
-    if (!deviceId) {
+    if (currentKind.needsDevice && !deviceId) {
       setError("Choisissez l'appareil qui exécutera cette étape.");
       return;
     }
@@ -259,16 +307,31 @@ function BuilderDialog({ open, onClose, devices, onCreate }) {
       setError("Indiquez l'adresse de la page à ouvrir.");
       return;
     }
+    if (currentKind.needsQuery && !musicQuery.trim()) {
+      setError("Indiquez ce qu'il faut jouer.");
+      return;
+    }
+    if (currentKind.needsHome && !homeEntity.trim()) {
+      setError("Indiquez le nom de l'appareil domotique.");
+      return;
+    }
     setError("");
+    const args = currentKind.needsUrl
+      ? { url: url.trim() }
+      : currentKind.needsRange
+        ? { range: agendaRange }
+        : currentKind.needsQuery
+          ? { query: musicQuery.trim() }
+          : currentKind.needsHome
+            ? { entity: homeEntity.trim(), action: homeAction }
+            : currentKind.args || {};
     setSteps((prev) => [
       ...prev,
-      {
-        device_id: deviceId,
-        tool: currentKind.tool,
-        args: currentKind.needsUrl ? { url: url.trim() } : currentKind.args || {},
-      },
+      currentKind.needsDevice ? { device_id: deviceId, tool: currentKind.tool, args } : { tool: currentKind.tool, args },
     ]);
     setUrl("");
+    setMusicQuery("");
+    setHomeEntity("");
   }
 
   function move(index, delta) {
@@ -297,7 +360,7 @@ function BuilderDialog({ open, onClose, devices, onCreate }) {
     }
   }
 
-  const deviceName = (id) => devices.find((d) => d.device_id === id)?.name || id;
+  const deviceName = (id) => (id ? devices.find((d) => d.device_id === id)?.name || id : "Jarvis");
 
   return (
     <Modal
@@ -326,7 +389,9 @@ function BuilderDialog({ open, onClose, devices, onCreate }) {
       {devices.length === 0 && (
         <div className="alert alert--warn">
           <Icon name="alert" size={16} />
-          Aucun appareil appairé : une routine a besoin d'au moins un appareil pour s'exécuter.
+          Aucun appareil appairé : les étapes sur un appareil précis (capture, verrouillage, ouvrir une page)
+          resteront indisponibles, mais celles exécutées par Jarvis lui-même (agenda, mail, musique,
+          domotique) le sont déjà.
         </div>
       )}
 
@@ -403,15 +468,6 @@ function BuilderDialog({ open, onClose, devices, onCreate }) {
         }}
       >
         <h3 className="section-label">Ajouter une étape</h3>
-        <SelectField label="Appareil" value={deviceId} onChange={(e) => setDeviceId(e.target.value)}>
-          <option value="">Choisir…</option>
-          {devices.map((d) => (
-            <option key={d.device_id} value={d.device_id}>
-              {d.name}
-              {d.status === "online" ? "" : " (hors ligne)"}
-            </option>
-          ))}
-        </SelectField>
         <SelectField label="Action" value={kind} onChange={(e) => setKind(e.target.value)}>
           {STEP_KINDS.map((k) => (
             <option key={k.id} value={k.id}>
@@ -419,15 +475,62 @@ function BuilderDialog({ open, onClose, devices, onCreate }) {
             </option>
           ))}
         </SelectField>
+        {currentKind?.needsDevice ? (
+          <SelectField label="Appareil" value={deviceId} onChange={(e) => setDeviceId(e.target.value)}>
+            <option value="">Choisir…</option>
+            {devices.map((d) => (
+              <option key={d.device_id} value={d.device_id}>
+                {d.name}
+                {d.status === "online" ? "" : " (hors ligne)"}
+              </option>
+            ))}
+          </SelectField>
+        ) : (
+          <p className="hint">Exécuté par Jarvis lui-même — pas besoin d'appareil pour cette action.</p>
+        )}
         {currentKind?.needsUrl && (
           <TextField label="Adresse" placeholder="https://…" value={url} onChange={(e) => setUrl(e.target.value)} />
+        )}
+        {currentKind?.needsRange && (
+          <SelectField label="Période" value={agendaRange} onChange={(e) => setAgendaRange(e.target.value)}>
+            {AGENDA_RANGES.map((r) => (
+              <option key={r.v} value={r.v}>
+                {r.label}
+              </option>
+            ))}
+          </SelectField>
+        )}
+        {currentKind?.needsQuery && (
+          <TextField
+            label="Ce qu'il faut jouer"
+            placeholder="playlist détente, titre, artiste…"
+            value={musicQuery}
+            onChange={(e) => setMusicQuery(e.target.value)}
+          />
+        )}
+        {currentKind?.needsHome && (
+          <>
+            <TextField
+              label="Appareil domotique"
+              placeholder="lumière du salon, volet…"
+              value={homeEntity}
+              onChange={(e) => setHomeEntity(e.target.value)}
+            />
+            <SelectField label="Effet" value={homeAction} onChange={(e) => setHomeAction(e.target.value)}>
+              {HOME_ACTIONS.map((a) => (
+                <option key={a.v} value={a.v}>
+                  {a.label}
+                </option>
+              ))}
+            </SelectField>
+          </>
         )}
         {error && (
           <p className="field-error" role="alert">
             {error}
           </p>
         )}
-        <button type="button" className="btn" onClick={addStep} disabled={devices.length === 0}>
+        <button type="button" className="btn" onClick={addStep} disabled={currentKind?.needsDevice && devices.length === 0}>
           <Icon name="plus" size={16} />
           Ajouter cette étape
         </button>

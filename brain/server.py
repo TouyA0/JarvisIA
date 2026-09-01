@@ -286,6 +286,12 @@ async def create_routine(body: dict) -> dict:
         raise HTTPException(400, "nom manquant")
     if not steps:
         raise HTTPException(400, "au moins une étape requise")
+    for step in steps:
+        # Sans device_id, une étape appelle un outil brain directement
+        # (C5) — même liste que les tool_use de Claude (brain_tools.NAMES),
+        # pas de commande arbitraire par ce biais.
+        if not step.get("device_id") and step.get("tool") not in brain_tools.NAMES:
+            raise HTTPException(400, f"outil brain inconnu ou non autorisé : {step.get('tool')!r}")
     return routines.create(name, steps, _parse_schedule(body))
 
 
