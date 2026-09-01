@@ -41,7 +41,8 @@ devient le canal d'affichage riche.
 | I6 | **Spotify** ✓ *(fait, texte — pas de carte pochette)* | OAuth2 Web API | spotify_now_playing/spotify_play/spotify_control/spotify_volume — « mets ma playlist détente » résout via playlists perso puis catalogue public | contrôle lecture = action directe, aucune confirmation | ▲▲ |
 | I7 | **Google Contacts** ✓ *(fait)* | OAuth2 (People API) | contacts_search — « le numéro de X », résolution de nom pour Gmail/Zoho ; filtre local plutôt que l'index searchContacts (souvent en retard après un ajout récent) | lecture seule | ▲ |
 | I8 | **GitHub notifications** (bonus, si pertinent pour toi) | REST API (token) | « des PR en attente ? », « des issues qui me sont assignées ? » | lecture seule | ▲ |
-| I9 | **Discord** (bonus) | déjà évoqué en F16 (notifications Windows) — alternative : bot lecture seule sur tes serveurs perso | « un message important sur Discord ? » | lecture seule | ▲▲ |
+| I9 | **Discord** (bonus, écarté) | nécessiterait un bot (pas d'accès aux DM, seulement les serveurs invités) — proposé, décliné par Monsieur (pas l'usage voulu) | — | — | — |
+| I10 | **Jellyfin** ✓ *(fait)* | serveur perso, clé API — pas d'OAuth, connexion directe (base_url + clé + utilisateur optionnel) | jellyfin_search/jellyfin_now_playing/jellyfin_continue_watching/jellyfin_recently_added | lecture seule ; pas de contrôle de lecture à distance | ▲ |
 
 **Notion vs Google Calendar** : si ton agenda réel est dans Notion Calendar,
 commence par I2 seul (une seule source de vérité). Si tu utilises aussi

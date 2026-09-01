@@ -76,6 +76,24 @@ export function useIntegrations() {
     window.open(url, "jarvis-spotify-auth", "width=480,height=680");
   }, []);
 
+  // Jellyfin : pas d'OAuth (serveur perso), un seul aller-retour avec la
+  // clé API directement — voir brain/server.py::connect_jellyfin.
+  const connectJellyfin = useCallback(
+    async (baseUrl, apiKey, username) => {
+      const res = await authFetch("/api/integrations/jellyfin/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base_url: baseUrl, api_key: apiKey, username: username || undefined }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "échec de la connexion");
+      }
+      await refresh();
+    },
+    [refresh],
+  );
+
   const remove = useCallback(
     async (id) => {
       await authFetch(`/api/integrations/${id}`, { method: "DELETE" });
@@ -152,5 +170,6 @@ export function useIntegrations() {
     connectGoogle, googleSettings, saveGoogleSettings, clearGoogleSettings,
     connectZoho, zohoSettings, saveZohoSettings, clearZohoSettings,
     connectSpotify, spotifySettings, saveSpotifySettings, clearSpotifySettings,
+    connectJellyfin,
   };
 }

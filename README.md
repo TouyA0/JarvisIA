@@ -305,6 +305,30 @@ quelque part (app ouverte sur le téléphone, le PC, une enceinte connectée…)
 — sans ça Spotify refuse toute commande de lecture, Jarvis le dit clairement
 plutôt que d'échouer en silence.
 
+### Jellyfin
+
+Serveur personnel, pas de fournisseur tiers — **pas d'OAuth**, une simple
+clé API. Panneau **Intégrations** → bloc **Jellyfin** :
+
+1. Dans ton tableau de bord Jellyfin (en tant qu'admin) → **Tableau de
+   bord** → **Clés API** → **+** → nomme-la (« Jarvis » par ex.) → copie la
+   clé générée.
+2. Console web → Intégrations → déplie **Jellyfin** → renseigne l'URL du
+   serveur (ex. `http://192.168.1.50:8096`, l'adresse locale suffit si le
+   brain tourne sur le même réseau), colle la clé API, et — si ton serveur
+   a plusieurs comptes utilisateurs — précise le nom de celui à utiliser
+   (reprise de lecture et nouveautés sont scopées par utilisateur ; sans
+   ce champ, Jarvis prend le premier compte trouvé) → **Connecter**.
+
+Une fois connecté, depuis la Console web :
+- « Jarvis, j'ai quoi comme films avec X ? », « cherche la série Y » → recherche bibliothèque
+- « Jarvis, qu'est-ce qui joue sur Jellyfin ? » → sessions actives, tous appareils
+- « Jarvis, qu'est-ce que j'étais en train de regarder ? » → reprise de lecture
+- « Jarvis, qu'est-ce qu'il y a de nouveau sur Jellyfin ? » → derniers ajouts
+
+Lecture seule — pas de contrôle de lecture à distance (pause/lancer sur un
+appareil précis) pour l'instant, contrairement à Spotify.
+
 > Voix personnalisée : le dossier `voice/` contient `jarvis-high.onnx` (Piper).
 > Pour l'utiliser, enregistrez-la dans votre instance Speaches puis pointez
 > `TTS_MODEL`/`TTS_VOICE` dessus dans `.env`.

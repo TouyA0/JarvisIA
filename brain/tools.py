@@ -10,7 +10,7 @@ deux listes de schémas, et route chaque tool_use vers le bon exécuteur
 """
 from __future__ import annotations
 
-from brain.integrations import google_calendar, google_contacts, google_drive, google_gmail, spotify, store, zoho_mail
+from brain.integrations import google_calendar, google_contacts, google_drive, google_gmail, jellyfin, spotify, store, zoho_mail
 
 BRAIN_TOOLS = [
     {
@@ -305,6 +305,32 @@ BRAIN_TOOLS = [
             "required": ["query"],
         },
     },
+    {
+        "name": "jellyfin_search",
+        "description": "Cherche un film, une série, un épisode ou une piste audio dans la bibliothèque Jellyfin de Monsieur. Utilise pour « j'ai quoi comme films avec X ? », « cherche la série Y ».",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Titre ou terme à chercher."},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "jellyfin_now_playing",
+        "description": "Ce qui est en cours de lecture sur le serveur Jellyfin de Monsieur (tous appareils). Utilise pour « qu'est-ce qui joue sur Jellyfin ? ».",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "jellyfin_continue_watching",
+        "description": "Liste « reprendre la lecture » de Jellyfin — ce que Monsieur a commencé sans finir. Utilise pour « qu'est-ce que j'étais en train de regarder ? ».",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "jellyfin_recently_added",
+        "description": "Derniers films/séries/épisodes ajoutés à la bibliothèque Jellyfin. Utilise pour « qu'est-ce qu'il y a de nouveau sur Jellyfin ? ».",
+        "input_schema": {"type": "object", "properties": {}},
+    },
 ]
 
 NAMES = {t["name"] for t in BRAIN_TOOLS}
@@ -366,6 +392,34 @@ def _format_contacts(contacts: list[dict]) -> str:
         emails = f" — {', '.join(c['emails'])}" if c.get("emails") else ""
         org = f" ({c['organization']})" if c.get("organization") else ""
         lines.append(f"- {c['name']}{org}{acct} : {phones}{emails}")
+    return "\n".join(lines)
+
+
+def _jellyfin_error(items: list[dict]) -> str | None:
+    if items and "error" in items[0]:
+        return items[0]["error"]
+    return None
+
+
+def _format_jellyfin_items(items: list[dict]) -> str:
+    if not items:
+        return "Rien trouvé, Monsieur."
+    lines = []
+    for it in items:
+        title = it["name"] if it.get("series") is None else f"{it['series']} — {it['name']}"
+        year = f" ({it['year']})" if it.get("year") else ""
+        lines.append(f"- {title}{year} [{it.get('type', '')}]")
+    return "\n".join(lines)
+
+
+def _format_jellyfin_sessions(sessions: list[dict]) -> str:
+    if not sessions:
+        return "Rien ne joue actuellement sur Jellyfin, Monsieur."
+    lines = []
+    for s in sessions:
+        title = s["title"] if not s.get("series") else f"{s['series']} — {s['title']}"
+        state = "en pause" if s.get("paused") else "en lecture"
+        lines.append(f"- {title} ({state}) — {s.get('user', '')} sur {s.get('device', '')}")
     return "\n".join(lines)
 
 
@@ -539,5 +593,29 @@ def execute(name: str, args: dict):
             return "Aucun compte Google Contacts connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
         contacts = google_contacts.search(args.get("query", ""))
         return _format_contacts(contacts)
+
+    if name == "jellyfin_search":
+        if not store.list_public("jellyfin"):
+            return "Aucun serveur Jellyfin connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
+        items = jellyfin.search(args.get("query", ""))
+        return _jellyfin_error(items) or _format_jellyfin_items(items)
+
+    if name == "jellyfin_now_playing":
+        if not store.list_public("jellyfin"):
+            return "Aucun serveur Jellyfin connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
+        sessions = jellyfin.now_playing()
+        return _jellyfin_error(sessions) or _format_jellyfin_sessions(sessions)
+
+    if name == "jellyfin_continue_watching":
+        if not store.list_public("jellyfin"):
+            return "Aucun serveur Jellyfin connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
+        items = jellyfin.continue_watching()
+        return _jellyfin_error(items) or _format_jellyfin_items(items)
+
+    if name == "jellyfin_recently_added":
+        if not store.list_public("jellyfin"):
+            return "Aucun serveur Jellyfin connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
+        items = jellyfin.recently_added()
+        return _jellyfin_error(items) or _format_jellyfin_items(items)
 
     return f"Outil brain inconnu : {name}"

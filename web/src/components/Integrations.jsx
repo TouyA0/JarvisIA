@@ -10,6 +10,7 @@ const TYPE_LABELS = {
   google_contacts: "Google Contacts",
   zoho_mail: "Zoho Mail",
   spotify: "Spotify",
+  jellyfin: "Jellyfin",
 };
 
 // Catalogue affiché à droite — google_calendar/google_drive/gmail/
@@ -335,6 +336,72 @@ function SpotifyAppSettings({ status, onSave, onClear }) {
   );
 }
 
+function JellyfinConnect({ onConnect }) {
+  const [open, setOpen] = useState(false);
+  const [baseUrl, setBaseUrl] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [username, setUsername] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  // Pas d'OAuth (serveur perso) : un seul formulaire, connexion directe —
+  // pas de bloc "Paramètres" séparé comme pour Google/Zoho/Spotify.
+  async function handleConnect() {
+    setError("");
+    setBusy(true);
+    try {
+      await onConnect(baseUrl.trim(), apiKey.trim(), username.trim());
+      setBaseUrl("");
+      setApiKey("");
+      setUsername("");
+      setOpen(false);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ borderTop: "1px solid var(--stroke-soft)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+      >
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--faint)" }}>
+          Jellyfin
+        </span>
+        <span style={{ fontSize: 11, color: "var(--cyan)" }}>{open ? "−" : "+"}</span>
+      </button>
+
+      {open && (
+        <>
+          <input placeholder="URL du serveur (http://192.168.1.x:8096)" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} style={_inputStyle} />
+          <input placeholder="Clé API" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} style={_inputStyle} />
+          <input placeholder="Utilisateur Jellyfin (optionnel)" value={username} onChange={(e) => setUsername(e.target.value)} style={_inputStyle} />
+          {error && <div style={{ fontSize: 11, color: "#f87171" }}>{error}</div>}
+          <button
+            onClick={handleConnect}
+            disabled={busy || !baseUrl.trim() || !apiKey.trim()}
+            style={{
+              border: "1px solid var(--stroke)", borderRadius: 9, padding: "8px 0", fontSize: 12,
+              background: "var(--cyan-dim)", color: "var(--cyan)", cursor: "pointer", opacity: busy ? 0.6 : 1,
+            }}
+          >
+            Connecter
+          </button>
+          <div style={{ fontSize: 11, color: "var(--faint)" }}>
+            Clé API générée depuis ton tableau de bord Jellyfin (Admin → Clés
+            API). Sans nom d'utilisateur, Jellyfin prend le premier compte
+            trouvé sur le serveur — précise-le si plusieurs comptes existent
+            (reprise de lecture / nouveautés en dépendent).
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function CatalogRow({ entry, onConnect, busy, error }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -453,6 +520,7 @@ export default function Integrations({ onNavigate, focusEnabled }) {
             <GoogleAppSettings status={integrations.googleSettings} onSave={integrations.saveGoogleSettings} onClear={integrations.clearGoogleSettings} />
             <ZohoAppSettings status={integrations.zohoSettings} onSave={integrations.saveZohoSettings} onClear={integrations.clearZohoSettings} />
             <SpotifyAppSettings status={integrations.spotifySettings} onSave={integrations.saveSpotifySettings} onClear={integrations.clearSpotifySettings} />
+            <JellyfinConnect onConnect={integrations.connectJellyfin} />
           </div>
         </div>
       </div>

@@ -38,6 +38,7 @@ from brain.core.chat import ask_stream
 from brain.devices import Device, registry
 from brain.integrations import confirm as integrations_confirm
 from brain.integrations import google_calendar, google_contacts, google_drive, google_gmail, google_oauth, settings as integrations_settings
+from brain.integrations import jellyfin
 from brain.integrations import spotify, spotify_oauth
 from brain.integrations import store as integrations_store
 from brain.integrations import zoho_mail, zoho_oauth
@@ -489,6 +490,22 @@ setTimeout(() => window.close(), 1500);
     except Exception as exc:
         return _page(False, str(exc))
     return _page(True, f"Compte {account['label']} connecté.")
+
+
+@app.post("/api/integrations/jellyfin/connect")
+async def connect_jellyfin(body: dict) -> dict:
+    """Pas d'OAuth ici — serveur perso, clé API saisie directement (voir
+    jellyfin.py::connect). Un seul aller-retour, pas de popup/callback."""
+    base_url = (body.get("base_url") or "").strip()
+    api_key = (body.get("api_key") or "").strip()
+    username = (body.get("username") or "").strip() or None
+    if not base_url or not api_key:
+        raise HTTPException(400, "base_url et api_key requis")
+    try:
+        account = jellyfin.connect(base_url, api_key, username)
+    except RuntimeError as exc:
+        raise HTTPException(400, str(exc))
+    return account
 
 
 @app.get("/api/confirmations")
