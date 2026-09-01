@@ -6,6 +6,7 @@ import Console from "./components/Console.jsx";
 import Devices from "./components/Devices.jsx";
 import Hud from "./components/Hud.jsx";
 import Integrations from "./components/Integrations.jsx";
+import Notes from "./components/Notes.jsx";
 import Routines from "./components/Routines.jsx";
 import System from "./components/System.jsx";
 import { ConfirmProvider } from "./components/ui/Confirm.jsx";
@@ -19,6 +20,7 @@ const SCREENS = {
   hud: Hud,
   console: Console,
   devices: Devices,
+  notes: Notes,
   routines: Routines,
   integrations: Integrations,
   system: System,

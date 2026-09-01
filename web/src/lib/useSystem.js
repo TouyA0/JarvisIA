@@ -150,6 +150,38 @@ export function useConversationLog(limit = 60) {
   return { entries, loaded, refresh };
 }
 
+/** Notes (C2) — carnet horodaté (brain/notes.py), auparavant écrit
+ * uniquement à la voix sur le PC fixe et jamais relisible ailleurs. */
+export function useNotes() {
+  const [notes, setNotes] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+
+  const refresh = useCallback(async () => {
+    try {
+      setNotes(await getJson("/api/notes?limit=200"));
+    } catch {
+      // brain injoignable — on garde la dernière liste connue
+    } finally {
+      setLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const add = useCallback(
+    async (text) => {
+      const data = await sendJson("/api/notes", "POST", { text });
+      await refresh();
+      return data;
+    },
+    [refresh],
+  );
+
+  return { notes, loaded, add, refresh };
+}
+
 /** Cartes passées (au-delà des 30 gardées en mémoire par useCardFeed) —
  * relit le journal disque du brain (brain/cards.py::history). Les captures
  * d'écran y perdent leur image (jamais écrite sur disque), le Fallback

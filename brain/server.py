@@ -33,7 +33,7 @@ from agents.protocol.messages import (
     RegisterAck,
     parse_message,
 )
-from brain import activity, cards, config, device_store, diagnostics, pairing, routines, speech, timers, weather
+from brain import activity, cards, config, device_store, diagnostics, notes, pairing, routines, speech, timers, weather
 from brain import tools as brain_tools
 from brain.core import agent as pc_agent
 from brain.core import convlog
@@ -308,6 +308,22 @@ async def cancel_timer(timer_id: str) -> dict:
 @app.delete("/api/timers")
 async def cancel_all_timers() -> dict:
     return {"cancelled": timers.cancel_all()}
+
+
+@app.get("/api/notes")
+async def list_notes(limit: int = 200) -> list[dict]:
+    return notes.list_notes(max(1, min(limit, 1000)))
+
+
+@app.post("/api/notes")
+async def add_note(body: dict) -> dict:
+    text = (body.get("text") or "").strip()
+    if not text:
+        raise HTTPException(400, "texte manquant")
+    try:
+        return notes.add(text)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
 
 
 @app.get("/api/integrations")
@@ -991,6 +1007,18 @@ async def ws_chat(websocket: WebSocket) -> None:
             timer_reply = timers.handle(question)
             if timer_reply:
                 await websocket.send_json({"type": "chat.phrase", "text": timer_reply})
+                await websocket.send_json({"type": "chat.done", "source": "direct"})
+                continue
+
+            # Prise de note (C2) : même principe.
+            if notes.is_note_command(question):
+                content = notes.extract_content(question)
+                if content:
+                    notes.add(content)
+                    note_reply = f"Noté, Monsieur : « {content[:60]} »."
+                else:
+                    note_reply = "Je n'ai pas saisi le contenu de la note, Monsieur."
+                await websocket.send_json({"type": "chat.phrase", "text": note_reply})
                 await websocket.send_json({"type": "chat.done", "source": "direct"})
                 continue
 

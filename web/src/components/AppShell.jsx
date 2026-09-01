@@ -27,6 +27,7 @@ const NAV_ITEMS = [
   { id: "hud", label: "Pupitre", icon: "reactor", short: "Pupitre" },
   { id: "console", label: "Conversation", icon: "chat", short: "Parler" },
   { id: "devices", label: "Appareils", icon: "devices", short: "Appareils" },
+  { id: "notes", label: "Notes", icon: "note", short: "Notes" },
   { id: "routines", label: "Routines", icon: "routines", short: "Routines" },
   { id: "integrations", label: "Intégrations", icon: "integrations", short: "Comptes" },
   { id: "system", label: "Système", icon: "system", short: "Système" },

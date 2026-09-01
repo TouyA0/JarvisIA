@@ -15,6 +15,9 @@ import pathlib
 ROOT = pathlib.Path(__file__).resolve().parent.parent      # …/Jarvis
 DATA_DIR = ROOT / "data"
 LOGS_DIR = DATA_DIR / "logs"
+# Même dossier que agents/desktop/config.py::NOTES_DIR — un seul carnet,
+# lu/écrit par les deux (voir brain/notes.py, C2).
+NOTES_DIR = DATA_DIR / "notes"
 
 MEMORY_FILE = DATA_DIR / "memory.json"
 MODES_FILE = DATA_DIR / "modes.json"
@@ -35,7 +38,7 @@ INTEGRATIONS_KEY_FILE = DATA_DIR / "integrations.key"
 
 
 def ensure_dirs() -> None:
-    for d in (DATA_DIR, LOGS_DIR):
+    for d in (DATA_DIR, LOGS_DIR, NOTES_DIR):
         d.mkdir(parents=True, exist_ok=True)
 
 
