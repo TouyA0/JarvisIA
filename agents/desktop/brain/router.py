@@ -27,6 +27,12 @@ PC_COMMAND_KEYWORDS = [
     "glisse", "fais défiler", "scroll", "maximise", "minimise", "plein écran",
     "github", "profil", "onglet", "site", "page", "url", "lien", "navigue", "va sur",
     "presse-papier", "qu'est-ce que tu vois", "regarde mon écran",
+    # Agenda (Google Calendar, voir brain/tools.py::calendar_events)
+    "agenda", "calendrier", "rendez-vous", "réunion", "réunions",
+    "événement", "évènement", "emploi du temps", "planning",
+    "qu'est-ce que j'ai", "qu'est ce que j'ai", "j'ai quoi",
+    "au programme", "de prévu", "prévu aujourd'hui", "prévu demain",
+    "prévu cette semaine",
 ]
 
 

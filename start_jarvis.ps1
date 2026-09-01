@@ -21,6 +21,20 @@ function Write-Ok($msg)   { Write-Host "   OK   $msg" -ForegroundColor Green }
 function Write-Warn($msg) { Write-Host "   !!   $msg" -ForegroundColor Yellow }
 function Write-Err($msg)  { Write-Host "   X    $msg" -ForegroundColor Red }
 
+function Install-Requirements($file, $label) {
+    # -q et pas de --upgrade : si tout est déjà installé aux bonnes versions,
+    # pip ne touche le réseau pour rien et répond en ~1s. Ne bloque jamais le
+    # démarrage sur un échec (offline, miroir PyPI down...) — juste un avertissement,
+    # Jarvis tourne très probablement déjà avec les deps d'une session précédente.
+    try {
+        python -m pip install -q -r $file
+        if ($LASTEXITCODE -eq 0) { Write-Ok "Dépendances $label à jour." }
+        else { Write-Warn "pip install a échoué pour $label (code $LASTEXITCODE) — poursuite avec les paquets déjà installés." }
+    } catch {
+        Write-Warn "Impossible de vérifier les dépendances $label : $_"
+    }
+}
+
 function Get-EnvValue($key, $default) {
     $envFile = Join-Path $ProjectDir ".env"
     if (Test-Path $envFile) {
@@ -149,6 +163,7 @@ $brainReady = Test-HttpOk "http://localhost:$brainPort/api/health"
 if ($brainReady) {
     Write-Ok "Brain déjà actif sur le port $brainPort."
 } else {
+    Install-Requirements "brain\requirements.txt" "brain"
     Write-Warn "Brain non démarré. Lancement dans sa propre fenêtre..."
     # Fenêtre séparée (pas Start-Job) : le brain a ses propres logs utiles
     # à surveiller (voir docs/ROADMAP_MULTIDEVICE.md, bugs de host binding /
@@ -172,6 +187,10 @@ if ($brainReady) {
 Write-Host ""
 
 # --- 4. Jarvis ---
+Write-Step "Dépendances agent desktop..."
+Install-Requirements "requirements.txt" "agent desktop"
+Write-Host ""
+
 Write-Step "Lancement de Jarvis..."
 Write-Host ""
 python jarvis.py

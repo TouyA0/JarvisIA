@@ -36,6 +36,8 @@ from brain import activity, config, device_store, pairing, routines, speech
 from brain.core import agent as pc_agent
 from brain.core.chat import ask_stream
 from brain.devices import Device, registry
+from brain.integrations import google_calendar, settings as integrations_settings
+from brain.integrations import store as integrations_store
 
 config.ensure_dirs()
 
@@ -56,6 +58,12 @@ async def _require_console_auth(request: Request, call_next):
     pas seulement via les boutons figés de Focus. /api/health reste ouvert
     (sondes de démarrage, aucune donnée sensible)."""
     path = request.url.path
+    # Google appelle cette route directement (redirection navigateur après
+    # consentement) : pas de moyen d'y joindre notre bearer token. Sûr quand
+    # même — voir google_calendar.handle_callback, le `state` à usage unique
+    # émis par nous seuls fait office de jeton anti-CSRF pour cet échange.
+    if path == "/api/integrations/google/callback":
+        return await call_next(request)
     if config.CONSOLE_PASSWORD and path.startswith("/api/") and path != "/api/health":
         auth = request.headers.get("authorization", "")
         token = auth[7:] if auth.lower().startswith("bearer ") else ""
@@ -213,6 +221,91 @@ async def run_routine(routine_id: str) -> dict:
 @app.get("/api/routines/{routine_id}/status")
 async def routine_status(routine_id: str) -> dict:
     return routines.status(routine_id) or {"status": "idle"}
+
+
+@app.get("/api/integrations")
+async def list_integrations() -> list[dict]:
+    """Tous les comptes tiers connectés (jamais les jetons), tous types
+    confondus — un seul type existe aujourd'hui (google_calendar)."""
+    return integrations_store.list_public()
+
+
+@app.get("/api/integrations/google/settings")
+async def google_settings() -> dict:
+    """Configuré ou non, et d'où vient le réglage (Console ou .env) — jamais
+    le client secret lui-même, voir integrations_settings.google_status."""
+    return integrations_settings.google_status()
+
+
+@app.post("/api/integrations/google/settings")
+async def set_google_settings(body: dict) -> dict:
+    """Enregistre le Client ID / Client Secret Google saisis dans la
+    Console — évite d'avoir à éditer .env à la main (voir README.md pour
+    comment les obtenir, cette étape-là reste dans Google Cloud Console,
+    aucune API tierce ne permet de la sauter)."""
+    client_id = (body.get("client_id") or "").strip()
+    client_secret = (body.get("client_secret") or "").strip()
+    if not client_id or not client_secret:
+        raise HTTPException(400, "client_id et client_secret requis")
+    integrations_settings.set_google_credentials(client_id, client_secret)
+    return integrations_settings.google_status()
+
+
+@app.delete("/api/integrations/google/settings")
+async def clear_google_settings() -> dict:
+    integrations_settings.clear_google_credentials()
+    return integrations_settings.google_status()
+
+
+@app.get("/api/integrations/google/auth-url")
+async def google_auth_url() -> dict:
+    """URL de consentement Google à ouvrir dans un nouvel onglet — la
+    Console (Integrations.jsx) fait juste `window.open(url)`."""
+    if not google_calendar.configured():
+        raise HTTPException(400, "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET manquants dans .env")
+    return {"url": google_calendar.build_auth_url()}
+
+
+@app.get("/api/integrations/google/callback")
+async def google_callback(request: Request) -> Response:
+    """Cible de la redirection Google après consentement — pas d'auth
+    Console ici (voir middleware), et pas de JSON : cette route est ouverte
+    par le navigateur, pas appelée en fetch. Répond avec une page qui se
+    referme et prévient l'onglet Console d'où la connexion a été lancée."""
+    code = request.query_params.get("code")
+    state = request.query_params.get("state", "")
+    error = request.query_params.get("error")
+
+    def _page(ok: bool, message: str) -> Response:
+        html = f"""<!doctype html><html><body style="background:#0a0e14;color:{'#5eead4' if ok else '#f87171'};
+font-family:system-ui;display:grid;place-items:center;height:100vh;margin:0">
+<div style="text-align:center">
+<p>{message}</p>
+<p style="opacity:.6;font-size:13px">Cet onglet peut être fermé.</p>
+</div>
+<script>
+if (window.opener) {{ window.opener.postMessage({{ jarvisIntegration: {str(ok).lower()} }}, "*"); }}
+setTimeout(() => window.close(), 1500);
+</script>
+</body></html>"""
+        return Response(content=html, media_type="text/html")
+
+    if error:
+        return _page(False, f"Connexion refusée par Google ({error}).")
+    if not code:
+        return _page(False, "Réponse Google incomplète (code manquant).")
+    try:
+        account = google_calendar.handle_callback(code, state)
+    except (ValueError, RuntimeError) as exc:
+        return _page(False, str(exc))
+    return _page(True, f"Compte {account['label']} connecté.")
+
+
+@app.delete("/api/integrations/{account_id}")
+async def remove_integration(account_id: str) -> dict:
+    if not integrations_store.remove(account_id):
+        raise HTTPException(404, f"compte {account_id!r} inconnu")
+    return {"ok": True}
 
 
 @app.post("/api/speech/transcribe")

@@ -19,7 +19,7 @@ import asyncio
 import time
 from typing import Callable, Optional
 
-from brain import config, state
+from brain import config, state, tools as brain_tools
 from brain.clients import get_anthropic
 from brain.core import history, prompts, usage
 from brain.devices import registry
@@ -92,7 +92,13 @@ async def ask_with_tools(question: str, device_id: str) -> str | None:
     # doit pouvoir démarrer sans ça — seul cet appel échouerait, pas le
     # process entier.
     from agents.desktop.tools.registry import to_claude_tools
-    claude_tools = to_claude_tools(cached=True)
+    # Outils pilotage PC (dispatchés sur l'appareil) + outils natifs brain
+    # (comptes externes, ex : calendar_events) — un seul appel Claude voit
+    # les deux, la boucle tool_use ci-dessous route chaque appel vers le
+    # bon exécuteur selon son nom (brain_tools.NAMES).
+    claude_tools = to_claude_tools(cached=False) + brain_tools.to_claude_tools()
+    if claude_tools:
+        claude_tools[-1]["cache_control"] = {"type": "ephemeral"}
     static_prompt, dynamic_prompt = prompts.get_system_prompt()
     static_text = static_prompt + "\n\n" + prompts.AGENT_INSTRUCTIONS
     system = [{"type": "text", "text": static_text, "cache_control": {"type": "ephemeral"}}]
@@ -160,9 +166,13 @@ async def ask_with_tools(question: str, device_id: str) -> str | None:
             for block in response.content:
                 if block.type != "tool_use":
                     continue
-                print(f"[Outil réseau] {block.name}({block.input}) → {device_id}")
                 _notify(f"OUTIL : {block.name}")
-                result = await _dispatch_tool(device_id, block.name, block.input)
+                if block.name in brain_tools.NAMES:
+                    print(f"[Outil brain] {block.name}({block.input})")
+                    result = await asyncio.to_thread(brain_tools.execute, block.name, block.input)
+                else:
+                    print(f"[Outil réseau] {block.name}({block.input}) → {device_id}")
+                    result = await _dispatch_tool(device_id, block.name, block.input)
                 tool_call_count += 1
 
                 tool_results.append({

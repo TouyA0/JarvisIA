@@ -8,6 +8,7 @@ const BASE_ITEMS = [
   { id: "devices", enabled: true },
   { id: "focus", enabled: false },
   { id: "routines", enabled: true },
+  { id: "integrations", enabled: true },
 ];
 
 function DockShape({ id, active }) {
@@ -29,6 +30,14 @@ function DockShape({ id, active }) {
           borderBottom: `12px solid ${color}`,
         }}
       />
+    );
+  }
+  if (id === "integrations") {
+    return (
+      <div style={{ width: 13, height: 13, position: "relative" }}>
+        <div style={{ position: "absolute", top: 0, left: 0, width: 7, height: 7, borderRadius: "50%", border: `1.5px solid ${color}` }} />
+        <div style={{ position: "absolute", bottom: 0, right: 0, width: 7, height: 7, borderRadius: "50%", border: `1.5px solid ${color}` }} />
+      </div>
     );
   }
   return <div style={{ width: 12, height: 12, borderRadius: "50%", background: color }} />;

@@ -27,6 +27,11 @@ DEVICES_FILE = DATA_DIR / "devices.json"
 # celui-ci cible plusieurs appareils via dispatch réseau, l'autre est
 # mono-appareil et exécuté en local par l'agent desktop.
 CROSS_DEVICE_ROUTINES_FILE = DATA_DIR / "cross_device_routines.json"
+# Comptes tiers connectés (Google Calendar…) — jetons chiffrés, voir
+# brain/integrations/. Jamais versionné (.gitignore), clé de chiffrement
+# auto-générée à côté au premier lancement (data/integrations.key).
+INTEGRATIONS_FILE = DATA_DIR / "integrations.json"
+INTEGRATIONS_KEY_FILE = DATA_DIR / "integrations.key"
 
 
 def ensure_dirs() -> None:
@@ -90,3 +95,20 @@ PORT = int(os.getenv("BRAIN_PORT", "8420"))
 # "peut piloter le PC" — vide = auth désactivée (pratique en dev local),
 # à définir dans .env dès que le brain est exposé au-delà de 127.0.0.1.
 CONSOLE_PASSWORD = os.getenv("CONSOLE_PASSWORD", "")
+
+# ── Intégrations externes (Google Calendar…) ────────────────────────────────
+# Client OAuth "Application Web" créé dans Google Cloud Console (API
+# Calendar activée), avec GOOGLE_REDIRECT_URI déclaré tel quel comme URI de
+# redirection autorisée. Voir docs/ROADMAP_DISPLAY_INTEGRATIONS.md pour la
+# marche à suivre complète. Vide = le panneau Intégrations de la Console
+# affiche "non configuré" au lieu du bouton de connexion.
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_REDIRECT_URI = os.getenv(
+    "GOOGLE_REDIRECT_URI", f"http://127.0.0.1:{PORT}/api/integrations/google/callback",
+)
+# Fuseau pour délimiter "aujourd'hui"/"demain"/"cette semaine" (calendar_events) —
+# calculer ces bornes en UTC décalerait la journée de 1-2h par rapport à la
+# réalité locale (été/hiver), faisant rater ou déborder des événements en
+# bordure de journée.
+TIMEZONE = os.getenv("TIMEZONE", "Europe/Paris")

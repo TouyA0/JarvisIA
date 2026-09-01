@@ -3,6 +3,7 @@ import AuthGate from "./components/AuthGate.jsx";
 import Console from "./components/Console.jsx";
 import Devices from "./components/Devices.jsx";
 import Focus from "./components/Focus.jsx";
+import Integrations from "./components/Integrations.jsx";
 import Routines from "./components/Routines.jsx";
 import { useConsoleAuth } from "./lib/useConsoleAuth.js";
 
@@ -28,6 +29,9 @@ export default function App() {
   }
   if (view === "routines") {
     return <Routines onNavigate={setView} focusEnabled={!!focusDeviceId} />;
+  }
+  if (view === "integrations") {
+    return <Integrations onNavigate={setView} focusEnabled={!!focusDeviceId} />;
   }
   return <Console onNavigate={setView} focusEnabled={!!focusDeviceId} />;
 }

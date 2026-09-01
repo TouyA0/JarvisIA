@@ -159,6 +159,47 @@ Jarvis/
 | `GLOBAL_HOTKEY` | `1` | Ctrl+Alt+J (HUD) et Ctrl+Alt+V (Vision ciblée) |
 | `BRAIN_ENABLED` | `0` | connecte ce PC au brain en tâche de fond (multi-appareils, voir `docs/ROADMAP_MULTIDEVICE.md`) — nécessite d'avoir appairé l'appareil au préalable via `python -m agents.desktop.agent_client` |
 | `BRAIN_URL` | `ws://127.0.0.1:8420/ws/agent` | adresse du brain, si `BRAIN_ENABLED=1` |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | — | intégration Google Calendar (panneau **Intégrations** de la Console web), voir ci-dessous |
+| `GOOGLE_REDIRECT_URI` | `http://127.0.0.1:8420/api/integrations/google/callback` | à ne changer que si le brain n'écoute pas sur `127.0.0.1:8420` |
+
+### Google Calendar
+
+Panneau **Intégrations** de la Console web (`ROADMAP_DISPLAY_INTEGRATIONS.md`)
+— comptes multiples supportés, agendas fusionnés automatiquement. Mise en
+place (une fois, ~5 min) :
+
+1. [Google Cloud Console](https://console.cloud.google.com/) → nouveau
+   projet (ou existant) → **APIs & Services** → activer **Google Calendar
+   API**.
+2. **APIs & Services → OAuth consent screen** → type *External* (ou
+   *Internal* si Workspace), ajoute-toi comme utilisateur de test si l'app
+   reste en mode test (largement suffisant pour un usage perso).
+3. **APIs & Services → Identifiants → Créer des identifiants → ID client
+   OAuth**, type **Application Web**. Dans *URI de redirection autorisés*,
+   colle exactement `http://127.0.0.1:8420/api/integrations/google/callback`
+   (ou la valeur de `GOOGLE_REDIRECT_URI` si tu l'as changée).
+4. Ouvre la Console web → **Intégrations** → déplie **Paramètres Google** en
+   bas à droite → colle le *Client ID* et le *Client Secret* → **Enregistrer**.
+   (Alternative équivalente : les mettre dans `.env` —
+   `GOOGLE_CLIENT_ID=...` / `GOOGLE_CLIENT_SECRET=...` — et redémarrer le
+   brain ; le réglage saisi dans la Console reste prioritaire si les deux
+   existent.)
+5. Toujours dans **Intégrations** → **Connecter** sous Google Calendar →
+   choisis le compte Google → accepte. Répète pour chaque compte Google
+   supplémentaire à connecter — tout se passe depuis le site, aucun fichier
+   à éditer après l'étape 4.
+
+Seule l'étape 1-3 (créer le client OAuth dans Google Cloud Console) ne peut
+pas se faire depuis Jarvis : Google n'expose aucune API pour ça, c'est un
+geste unique et obligatoire dans leur propre console, quelle que soit
+l'application tierce.
+
+Une fois connecté : « Jarvis, qu'est-ce que j'ai aujourd'hui ? » (et
+demain/cette semaine) fonctionne **depuis la Console web** (le chat y
+dispatche déjà le pilotage PC vers l'agent à outils). Ça ne fonctionne pas
+encore depuis la boucle vocale locale (le pilotage PC vocal reste
+volontairement 100 % local aujourd'hui, voir `docs/ROADMAP_MULTIDEVICE.md`)
+— sujet pour une prochaine étape si utile.
 
 > Voix personnalisée : le dossier `voice/` contient `jarvis-high.onnx` (Piper).
 > Pour l'utiliser, enregistrez-la dans votre instance Speaches puis pointez
