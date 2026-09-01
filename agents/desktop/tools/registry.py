@@ -244,6 +244,11 @@ def execute(name: str, args: dict, turn_state: dict | None = None):
         return input_ctl.mouse_click(args.get("x", 0), args.get("y", 0), args.get("button", "left"))
     elif name == "take_screenshot":
         return screen.take_screenshot()
+    elif name == "capture_frame":
+        # Volontairement absent de PC_TOOLS/to_claude_tools : Claude n'a
+        # aucune raison d'appeler ça, seul brain/server.py::stream_frame
+        # dispatche ce tool (partage d'écran live, voir Focus.jsx).
+        return screen.capture_frame()
     elif name == "scroll_page":
         return input_ctl.scroll(args.get("direction", "down"), args.get("clicks", 3))
     elif name == "get_browser_url":

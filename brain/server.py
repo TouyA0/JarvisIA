@@ -219,6 +219,26 @@ async def device_activity(device_id: str) -> list[dict]:
     return activity.for_device(device_id)
 
 
+@app.post("/api/devices/{device_id}/stream/frame")
+async def stream_frame(device_id: str) -> dict:
+    """Une image du partage d'écran live (voir Focus.jsx) — appelé en
+    boucle par la Console pendant que la fenêtre est ouverte (§4 V1 de
+    docs/ROADMAP_DISPLAY_INTEGRATIONS.md). Volontairement séparé de
+    /dispatch : pas de passage par activity.record (des dizaines d'images
+    par minute pollueraient le journal d'activité pour rien) et un tool
+    dédié plus léger côté agent (capture_frame, pas take_screenshot —
+    voir agents/desktop/tools/screen.py)."""
+    try:
+        result = await registry.dispatch(device_id, "capture_frame", {}, timeout=5.0)
+    except KeyError:
+        raise HTTPException(404, f"appareil {device_id!r} non connecté")
+    except asyncio.TimeoutError:
+        raise HTTPException(504, "l'appareil n'a pas répondu à temps")
+    if not result.ok:
+        raise HTTPException(502, result.error or "capture refusée")
+    return result.result or {}
+
+
 @app.get("/api/routines")
 async def list_routines() -> list[dict]:
     return routines.list_routines()

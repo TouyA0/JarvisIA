@@ -193,7 +193,7 @@ Deux cas d'usage différents à ne pas confondre :
 
 | # | Feature | Détail | Effort |
 |---|---------|--------|--------|
-| V1 | Partage d'écran live (pull, sur demande) | Console web ouvre un flux quand on clique « voir l'écran », l'agent stream tant que la fenêtre est ouverte, coupe sinon | ▲▲ |
+| V1 | Partage d'écran live (pull, sur demande) ✓ *(fait)* | Focus.jsx → « Voir l'écran en direct » : polling ~800ms sur `POST /api/devices/{id}/stream/frame` (pas de WebRTC/canal dédié — plus simple, suffisant pour du visuel, pas du temps réel 30fps) ; nouveau tool agent léger `capture_frame` (960px, absent de PC_TOOLS — jamais exposé à Claude), séparé de `take_screenshot`/`activity.record` pour ne pas noyer le journal | ▲▲ |
 | V2 | Enregistrement court à la demande | « enregistre les 30 prochaines secondes d'écran » → mp4 sauvegardé + carte `video_stream` en lecture | ▲▲ |
 | V3 | Webcam ponctuelle | « regarde-moi » → une frame webcam analysée en vision, pas de flux permanent | ▲ |
 | V4 | Webcam live / présence | hors scope tant que non demandé explicitement — vie privée | ▲▲▲, à éviter par défaut |

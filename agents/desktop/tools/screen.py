@@ -13,9 +13,19 @@ import subprocess
 
 from agents.desktop.tools.safety import wrap_untrusted
 
-# Largeur maxi de l'image envoyée à Claude. 1280 px ≈ ~1200 tokens de vision :
-# assez précis pour lire l'écran, sans faire exploser le coût de chaque capture.
-_MAX_IMAGE_WIDTH = 1280
+# Largeur maxi de l'image envoyée à Claude — 1568 px correspond au seuil
+# documenté par Anthropic au-delà duquel Claude ne gagne plus rien en
+# précision (l'image est redimensionnée côté API de toute façon), donc pas
+# de perte de qualité côté vision à monter jusque-là.
+_MAX_IMAGE_WIDTH = 1568
+# Qualité JPEG : le coût en tokens de vision de Claude dépend des DIMENSIONS
+# de l'image, pas de sa compression — remonter la qualité est donc gratuit
+# côté API. 60 rendait le texte flou à l'écran une fois affiché en grand
+# dans une carte (voir docs/ROADMAP_DISPLAY_INTEGRATIONS.md, capture
+# affichée directement depuis F-screenshot-1) ; 85 reste raisonnable en
+# poids pour une action ponctuelle (pas un flux répété — voir capture_frame
+# plus bas pour ce cas-là).
+_JPEG_QUALITY = 85
 
 
 def take_screenshot() -> dict:
@@ -32,7 +42,7 @@ def take_screenshot() -> dict:
             img = screenshot.resize((_MAX_IMAGE_WIDTH, int(h / scale)))
 
         buf = io.BytesIO()
-        img.convert("RGB").save(buf, format="JPEG", quality=60)
+        img.convert("RGB").save(buf, format="JPEG", quality=_JPEG_QUALITY)
         image_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
 
         result = subprocess.run(
@@ -61,6 +71,37 @@ def take_screenshot() -> dict:
         return {"text": text, "image_b64": image_b64, "media_type": "image/jpeg"}
     except Exception as e:
         return {"text": f"Erreur screenshot : {e}"}
+
+
+_STREAM_MAX_WIDTH = 1280  # aligné sur take_screenshot depuis que 960/qualité 45
+# s'est révélé franchement pixelisé une fois affiché en grand dans Focus.jsx
+# (`width: 100%` agrandit une petite image = flou d'upscale, pas juste un
+# problème de compression) — la bande passante reste correcte en LAN/local,
+# le compromis penche du côté lisibilité.
+
+
+def capture_frame(quality: int = 65) -> dict:
+    """Capture allégée pour le partage d'écran live (voir
+    docs/ROADMAP_DISPLAY_INTEGRATIONS.md §4, V1) : juste l'image, sans le
+    listage des fenêtres ni la détection d'URL navigateur de
+    take_screenshot() — ces deux PowerShell coûtent une bonne partie du
+    temps d'une capture et ne servent à rien pour un flux régulier destiné
+    à être juste regardé. Jamais exposé à Claude (absent de PC_TOOLS/
+    to_claude_tools) : uniquement dispatché directement par
+    brain/server.py::stream_frame pour la vue Focus."""
+    try:
+        import pyautogui
+        screenshot = pyautogui.screenshot()
+        w, h = screenshot.size
+        img = screenshot
+        if w > _STREAM_MAX_WIDTH:
+            scale = w / _STREAM_MAX_WIDTH
+            img = screenshot.resize((_STREAM_MAX_WIDTH, int(h / scale)))
+        buf = io.BytesIO()
+        img.convert("RGB").save(buf, format="JPEG", quality=quality)
+        return {"image_b64": base64.b64encode(buf.getvalue()).decode("ascii"), "media_type": "image/jpeg"}
+    except Exception as e:
+        return {"text": f"Erreur capture_frame : {e}"}
 
 
 def read_screen() -> str:

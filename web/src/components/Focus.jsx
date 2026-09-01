@@ -37,7 +37,10 @@ function formatTime(ts) {
 }
 
 export default function Focus({ deviceId, onBack }) {
-  const { device, activityLog, screenshot, busy, error, capture, lock, dispatch } = useFocusDevice(deviceId);
+  const {
+    device, activityLog, screenshot, busy, error, capture, lock, dispatch,
+    liveFrame, live, liveError, startLive, stopLive,
+  } = useFocusDevice(deviceId);
   const confirm = useConfirm();
   const toast = useToast();
   const [urlOpen, setUrlOpen] = useState(false);
@@ -45,6 +48,15 @@ export default function Focus({ deviceId, onBack }) {
   const [zoomed, setZoomed] = useState(false);
 
   const online = device?.status === "online";
+  const displayedFrame = live ? liveFrame : screenshot;
+
+  function toggleLive() {
+    if (live) {
+      stopLive();
+    } else {
+      startLive();
+    }
+  }
 
   async function handleLock() {
     const ok = await confirm({
@@ -94,6 +106,16 @@ export default function Focus({ deviceId, onBack }) {
                 {busy ? <span className="spinner" aria-hidden="true" /> : <Icon name="camera" size={16} />}
                 Capturer l'écran
               </button>
+              <button
+                type="button"
+                className={`btn ${live ? "btn--danger" : ""}`.trim()}
+                onClick={toggleLive}
+                disabled={!online}
+                aria-pressed={live}
+              >
+                <Icon name={live ? "x" : "eye"} size={16} />
+                {live ? "Arrêter le direct" : "Voir l'écran en direct"}
+              </button>
               <button type="button" className="btn" onClick={() => setUrlOpen(true)} disabled={busy || !online}>
                 <Icon name="link" size={16} />
                 Ouvrir une page
@@ -110,9 +132,15 @@ export default function Focus({ deviceId, onBack }) {
                 {error}
               </div>
             )}
+            {liveError && (
+              <div className="alert alert--danger" role="alert">
+                <Icon name="alert" size={16} />
+                Direct interrompu : {liveError}
+              </div>
+            )}
 
-            {screenshot ? (
-              <figure style={{ margin: 0 }}>
+            {displayedFrame ? (
+              <figure style={{ margin: 0, position: "relative" }}>
                 <button
                   type="button"
                   onClick={() => setZoomed(true)}
@@ -120,18 +148,34 @@ export default function Focus({ deviceId, onBack }) {
                   aria-label="Agrandir la capture"
                 >
                   <img
-                    src={`data:image/jpeg;base64,${screenshot}`}
+                    src={`data:image/jpeg;base64,${displayedFrame}`}
                     alt={`Écran de ${device?.name || "l'appareil"}`}
                     style={{
                       width: "100%",
                       borderRadius: "var(--r-lg)",
-                      border: "1px solid var(--line-strong)",
+                      border: `1px solid ${live ? "var(--cyan)" : "var(--line-strong)"}`,
                       boxShadow: "var(--shadow-md)",
                     }}
                   />
                 </button>
+                {live && (
+                  <span
+                    className="row"
+                    style={{
+                      position: "absolute", top: "var(--sp-3)", left: "var(--sp-3)",
+                      gap: "var(--sp-1)", alignItems: "center", padding: "4px 10px",
+                      borderRadius: "var(--r-full, 999px)", background: "rgba(0,0,0,.55)",
+                      color: "#fff", fontSize: "var(--text-xs)", fontFamily: "var(--font-mono)",
+                    }}
+                  >
+                    <span className="dot dot--danger dot--pulse" aria-hidden="true" />
+                    EN DIRECT
+                  </span>
+                )}
                 <figcaption className="hint" style={{ marginTop: "var(--sp-2)" }}>
-                  Cliquez sur l'image pour l'agrandir.
+                  {live
+                    ? "Flux en direct — l'agent est interrogé environ toutes les 800 ms."
+                    : "Cliquez sur l'image pour l'agrandir."}
                 </figcaption>
               </figure>
             ) : (
@@ -221,9 +265,9 @@ export default function Focus({ deviceId, onBack }) {
       </Modal>
 
       <Modal open={zoomed} onClose={() => setZoomed(false)} title="Capture d'écran" wide>
-        {screenshot && (
+        {displayedFrame && (
           <img
-            src={`data:image/jpeg;base64,${screenshot}`}
+            src={`data:image/jpeg;base64,${displayedFrame}`}
             alt={`Écran de ${device?.name || "l'appareil"}`}
             style={{ width: "100%", borderRadius: "var(--r-md)" }}
           />
