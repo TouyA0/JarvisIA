@@ -5,6 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>J.A.R.V.I.S.</title>
+    <script>
+      // Pose le thème avant le premier paint pour éviter un flash de la
+      // palette par défaut (voir lib/useTheme.js).
+      (function () {
+        try {
+          var t = localStorage.getItem("jarvis-theme");
+          if (t && t !== "default") document.documentElement.setAttribute("data-theme", t);
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

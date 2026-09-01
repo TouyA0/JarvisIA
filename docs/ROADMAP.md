@@ -138,8 +138,14 @@ Légende effort : ▲ = un soir · ▲▲ = un week-end · ▲▲▲ = plusieurs
   panneau transmissions (les JSONL sont déjà là).
 - **F32 · Sous-titres** ▲ — bandeau texte pendant que Jarvis parle (déjà
   affiché dans la bulle ; version overlay grand format).
-- **F33 · Thèmes** ▲ — Mark 42 (rouge/or), War Machine (gris), Vision
-  (pourpre) : la palette est déjà centralisée dans `theme.py`.
+- **F33 · Thèmes** ✓ *(fait côté web)* — Mark 42 (rouge/or), War Machine
+  (gris), Vision (pourpre), sélecteur dans Système → Thème
+  (`web/src/lib/useTheme.js`, blocs `[data-theme]` dans
+  `web/src/styles/tokens.css`) : seule la teinte change (accent + surfaces),
+  luminosité/chroma identiques à la palette d'origine donc les contrastes
+  texte/fond restent valides sur les trois thèmes. Persisté en local
+  (par appareil). Le HUD Qt (`agents/desktop/ui/theme.py`) garde sa palette
+  fixe — non fait côté desktop.
 - **F34 · Graphe de coût** ▲ — coût API par jour dans le panneau diagnostics
   (l'historique mensuel existe dans `usage.json`).
 

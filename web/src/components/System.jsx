@@ -7,6 +7,7 @@ import { useConfirm } from "./ui/Confirm.jsx";
 import { useToast } from "./ui/Toast.jsx";
 import { reportAuthFailure } from "../lib/consoleAuth.js";
 import { useCardHistory, useConversationLog, useMemoryFacts, useModes, useUsage } from "../lib/useSystem.js";
+import { useTheme } from "../lib/useTheme.js";
 
 /**
  * Vue Système : ce que Jarvis coûte, ce qu'il retient, dans quel mode il
@@ -158,6 +159,62 @@ function ModesSection() {
                   ))}
                 </span>
               )}
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+// Aperçu de l'accent de chaque thème — mêmes teintes que styles/tokens.css
+// (:root[data-theme="…"] { --cyan: … }), dupliquées ici en dur : un swatch
+// doit rester visible même pour le thème qui n'est pas actif, donc on ne
+// peut pas lire la variable CSS calculée (elle ne vaut que pour le DOM
+// actuellement dans cet état).
+const THEME_SWATCHES = {
+  default: "oklch(0.86 0.13 210)",
+  mark42: "oklch(0.78 0.16 40)",
+  warmachine: "oklch(0.82 0.025 250)",
+  vision: "oklch(0.78 0.15 320)",
+};
+
+function ThemeSection() {
+  const { theme, setTheme, themes } = useTheme();
+
+  return (
+    <section className="stack">
+      <h2 className="section-label">Thème</h2>
+      <p className="hint">
+        L'identité visuelle du pupitre et de la Console. Se change aussi depuis n'importe quel appareil —
+        c'est une préférence locale, pas un réglage synchronisé.
+      </p>
+      <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }}>
+        {themes.map((t) => {
+          const active = theme === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              className={`card card--interactive ${active ? "card--active" : ""}`.trim()}
+              style={{ textAlign: "left", cursor: "pointer" }}
+              onClick={() => !active && setTheme(t.id)}
+              aria-pressed={active}
+            >
+              <div className="card-head">
+                <span
+                  className="dot"
+                  aria-hidden="true"
+                  style={{
+                    marginTop: 3,
+                    background: THEME_SWATCHES[t.id],
+                    boxShadow: `0 0 8px ${THEME_SWATCHES[t.id]}`,
+                  }}
+                />
+                <span className="card-title spacer">{t.name}</span>
+                {active && <StatusBadge tone="cyan">actif</StatusBadge>}
+              </div>
+              <span className="hint">{t.description}</span>
             </button>
           );
         })}
@@ -506,6 +563,7 @@ export default function System() {
         <div className="view-main">
           <div className="stack" style={{ gap: "var(--sp-8)", maxWidth: "var(--content-max)" }}>
             <UsageSection />
+            <ThemeSection />
             <ModesSection />
             <MemorySection />
             <LogSection />

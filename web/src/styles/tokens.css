@@ -22,6 +22,7 @@
   --cyan-dim: oklch(0.86 0.13 210 / 0.14);
   --cyan-dim-hover: oklch(0.86 0.13 210 / 0.24);
   --glow: oklch(0.86 0.13 210 / 0.55);
+  --glow-bg: oklch(0.86 0.13 210 / 0.09); /* teinte du halo radial derrière le pupitre (hud.css) */
 
   /* ── Texte ────────────────────────────────────────────────────────── */
   --text: oklch(0.96 0.015 220);         /* corps */
@@ -89,4 +90,71 @@
   --header-h: 60px;
   --tabbar-h: 62px;      /* barre basse mobile */
   --content-max: 1080px;
+}
+
+/* ── Thèmes (F33) ─────────────────────────────────────────────────────────
+   Seules la teinte des surfaces et celle de l'accent changent — luminosité
+   et chroma restent identiques à la palette par défaut ci-dessus, donc les
+   contrastes texte/fond validés plus haut (≥ 4.5:1 / ≥ 7:1) tiennent tels
+   quels sur les trois thèmes. Rien d'autre (typo, espacements, rayons) ne
+   varie : c'est une identité visuelle, pas trois design systems. */
+
+/* Mark 42 — rouge/or */
+:root[data-theme="mark42"] {
+  --bg: oklch(0.135 0.022 40);
+  --surface: oklch(0.178 0.024 40);
+  --surface-2: oklch(0.215 0.026 40);
+  --surface-3: oklch(0.255 0.028 40);
+  --overlay: oklch(0.09 0.02 40 / 0.72);
+
+  --line: oklch(0.8 0.14 45 / 0.16);
+  --line-strong: oklch(0.8 0.14 45 / 0.34);
+  --grid: oklch(0.8 0.14 45 / 0.05);
+
+  --cyan: oklch(0.78 0.16 40);
+  --cyan-strong: oklch(0.87 0.14 60);
+  --cyan-dim: oklch(0.78 0.16 40 / 0.14);
+  --cyan-dim-hover: oklch(0.78 0.16 40 / 0.24);
+  --glow: oklch(0.78 0.16 40 / 0.55);
+  --glow-bg: oklch(0.78 0.16 40 / 0.09);
+}
+
+/* War Machine — gris gunmetal */
+:root[data-theme="warmachine"] {
+  --bg: oklch(0.135 0.01 250);
+  --surface: oklch(0.178 0.011 250);
+  --surface-2: oklch(0.215 0.012 250);
+  --surface-3: oklch(0.255 0.013 250);
+  --overlay: oklch(0.09 0.01 250 / 0.72);
+
+  --line: oklch(0.82 0.02 250 / 0.16);
+  --line-strong: oklch(0.82 0.02 250 / 0.34);
+  --grid: oklch(0.82 0.02 250 / 0.05);
+
+  --cyan: oklch(0.82 0.025 250);
+  --cyan-strong: oklch(0.91 0.018 250);
+  --cyan-dim: oklch(0.82 0.025 250 / 0.14);
+  --cyan-dim-hover: oklch(0.82 0.025 250 / 0.24);
+  --glow: oklch(0.82 0.025 250 / 0.55);
+  --glow-bg: oklch(0.82 0.025 250 / 0.09);
+}
+
+/* Vision — pourpre */
+:root[data-theme="vision"] {
+  --bg: oklch(0.135 0.022 305);
+  --surface: oklch(0.178 0.024 305);
+  --surface-2: oklch(0.215 0.026 305);
+  --surface-3: oklch(0.255 0.028 305);
+  --overlay: oklch(0.09 0.02 305 / 0.72);
+
+  --line: oklch(0.8 0.14 320 / 0.16);
+  --line-strong: oklch(0.8 0.14 320 / 0.34);
+  --grid: oklch(0.8 0.14 320 / 0.05);
+
+  --cyan: oklch(0.78 0.15 320);
+  --cyan-strong: oklch(0.87 0.13 315);
+  --cyan-dim: oklch(0.78 0.15 320 / 0.14);
+  --cyan-dim-hover: oklch(0.78 0.15 320 / 0.24);
+  --glow: oklch(0.78 0.15 320 / 0.55);
+  --glow-bg: oklch(0.78 0.15 320 / 0.09);
 }
