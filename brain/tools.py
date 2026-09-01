@@ -10,7 +10,7 @@ deux listes de schémas, et route chaque tool_use vers le bon exécuteur
 """
 from __future__ import annotations
 
-from brain.integrations import google_calendar, google_drive, google_gmail, store, zoho_mail
+from brain.integrations import google_calendar, google_drive, google_gmail, spotify, store, zoho_mail
 
 BRAIN_TOOLS = [
     {
@@ -244,6 +244,51 @@ BRAIN_TOOLS = [
             "required": ["to", "subject", "body"],
         },
     },
+    {
+        "name": "spotify_now_playing",
+        "description": "Ce qui joue actuellement sur Spotify (titre, artiste, album, en pause ou non). Utilise pour « c'est quoi ce titre ? », « qu'est-ce qui joue ? ».",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "spotify_play",
+        "description": (
+            "Lance la lecture sur Spotify — cherche d'abord dans les playlists personnelles "
+            "de Monsieur, sinon dans le catalogue public (titre, playlist, album, artiste), et "
+            "démarre le premier résultat pertinent sur l'appareil Spotify actif. Utilise pour "
+            "« mets ma playlist détente », « joue X de Y », « lance de la musique ». Si aucun "
+            "appareil Spotify n'est actif (app fermée partout), l'erreur le dit clairement — "
+            "ne réessaie pas en boucle, dis-le à Monsieur."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Ce que Monsieur veut écouter (titre, artiste, nom de playlist…)."},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "spotify_control",
+        "description": "Contrôle la lecture Spotify en cours : pause, reprise, morceau suivant/précédent.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["pause", "resume", "next", "previous"], "description": "Action à effectuer."},
+            },
+            "required": ["action"],
+        },
+    },
+    {
+        "name": "spotify_volume",
+        "description": "Règle le volume de lecture Spotify (pas le volume Windows — voir les outils système pour ça).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "percent": {"type": "integer", "description": "Volume cible, 0 à 100."},
+            },
+            "required": ["percent"],
+        },
+    },
 ]
 
 NAMES = {t["name"] for t in BRAIN_TOOLS}
@@ -422,5 +467,40 @@ def execute(name: str, args: dict):
         if "error" in result:
             return result["error"]
         return f"Composé : « {result['subject']} » à {result['to']} depuis {result['account']}."
+
+    if name == "spotify_now_playing":
+        if not store.list_public("spotify"):
+            return "Aucun compte Spotify connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
+        result = spotify.now_playing()
+        if "error" in result:
+            return result["error"]
+        if "track" not in result:
+            return "Rien ne joue actuellement, Monsieur."
+        state = "en lecture" if result["playing"] else "en pause"
+        return f"{result['track']} — {result['artists']} ({result['album']}), {state}."
+
+    if name == "spotify_play":
+        if not store.list_public("spotify"):
+            return "Aucun compte Spotify connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
+        result = spotify.play(args.get("query", ""))
+        if "error" in result:
+            return result["error"]
+        return f"Lecture lancée : {result['name']} ({result['type']})."
+
+    if name == "spotify_control":
+        if not store.list_public("spotify"):
+            return "Aucun compte Spotify connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
+        result = spotify.control(args.get("action", ""))
+        if "error" in result:
+            return result["error"]
+        return f"Fait : {result['action']}."
+
+    if name == "spotify_volume":
+        if not store.list_public("spotify"):
+            return "Aucun compte Spotify connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
+        result = spotify.set_volume(int(args.get("percent", 50)))
+        if "error" in result:
+            return result["error"]
+        return f"Volume Spotify réglé à {result['percent']}%."
 
     return f"Outil brain inconnu : {name}"

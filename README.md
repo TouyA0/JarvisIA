@@ -274,6 +274,33 @@ et bien documentée), Zoho Mail réserve deux pièges —
 Si la connexion ou l'envoi échoue malgré tout, le message d'erreur inclut
 la réponse brute de Zoho pour diagnostiquer vite.
 
+### Spotify
+
+Fournisseur distinct, identifiants séparés (panneau **Intégrations**, bloc
+**Paramètres Spotify**), pas de région à gérer :
+
+1. [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard)
+   → connecte-toi avec ton compte Spotify → **Create app**.
+2. *App name*/*App description* : libres. *Redirect URI* : colle exactement
+   `http://127.0.0.1:8420/api/integrations/spotify/callback`. Coche l'API
+   **Web API**. Accepte les conditions → **Save**.
+3. Sur la page de l'app créée → **Settings** → *Client ID* visible
+   directement, *Client secret* derrière **View client secret**.
+4. Console web → **Intégrations** → déplie **Paramètres Spotify** → colle
+   les deux → **Enregistrer** → **Connecter** sous Spotify.
+
+Une fois connecté, depuis la Console web :
+- « Jarvis, c'est quoi ce titre ? » / « qu'est-ce qui joue ? » → lecture en cours
+- « Jarvis, mets ma playlist détente » / « joue X de Y » → cherche d'abord dans
+  tes playlists personnelles, sinon dans le catalogue public, lance la lecture
+- « Jarvis, mets en pause » / « suivant » / « son à 40% » → contrôle direct,
+  aucune confirmation (lancer/couper de la musique n'a rien d'irréversible)
+
+**Prérequis à chaque usage** : un appareil Spotify doit déjà être actif
+quelque part (app ouverte sur le téléphone, le PC, une enceinte connectée…)
+— sans ça Spotify refuse toute commande de lecture, Jarvis le dit clairement
+plutôt que d'échouer en silence.
+
 > Voix personnalisée : le dossier `voice/` contient `jarvis-high.onnx` (Piper).
 > Pour l'utiliser, enregistrez-la dans votre instance Speaches puis pointez
 > `TTS_MODEL`/`TTS_VOICE` dessus dans `.env`.

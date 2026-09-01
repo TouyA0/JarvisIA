@@ -38,6 +38,7 @@ from brain.core.chat import ask_stream
 from brain.devices import Device, registry
 from brain.integrations import confirm as integrations_confirm
 from brain.integrations import google_calendar, google_drive, google_gmail, google_oauth, settings as integrations_settings
+from brain.integrations import spotify, spotify_oauth
 from brain.integrations import store as integrations_store
 from brain.integrations import zoho_mail, zoho_oauth
 
@@ -79,7 +80,11 @@ async def _require_console_auth(request: Request, call_next):
     # après consentement) : pas de moyen d'y joindre notre bearer token. Sûr
     # quand même — le `state` à usage unique émis par nous seuls fait office
     # de jeton anti-CSRF pour cet échange (google_oauth.py / zoho_oauth.py).
-    if path in ("/api/integrations/google/callback", "/api/integrations/zoho/callback"):
+    if path in (
+        "/api/integrations/google/callback",
+        "/api/integrations/zoho/callback",
+        "/api/integrations/spotify/callback",
+    ):
         return await call_next(request)
     if config.CONSOLE_PASSWORD and path.startswith("/api/") and path != "/api/health":
         auth = request.headers.get("authorization", "")
@@ -416,6 +421,70 @@ setTimeout(() => window.close(), 1500);
 
     try:
         account = module.handle_callback(code)
+    except Exception as exc:
+        return _page(False, str(exc))
+    return _page(True, f"Compte {account['label']} connecté.")
+
+
+@app.get("/api/integrations/spotify/settings")
+async def spotify_settings() -> dict:
+    return integrations_settings.spotify_status()
+
+
+@app.post("/api/integrations/spotify/settings")
+async def set_spotify_settings(body: dict) -> dict:
+    client_id = (body.get("client_id") or "").strip()
+    client_secret = (body.get("client_secret") or "").strip()
+    if not client_id or not client_secret:
+        raise HTTPException(400, "client_id et client_secret requis")
+    integrations_settings.set_spotify_credentials(client_id, client_secret)
+    return integrations_settings.spotify_status()
+
+
+@app.delete("/api/integrations/spotify/settings")
+async def clear_spotify_settings() -> dict:
+    integrations_settings.clear_spotify_credentials()
+    return integrations_settings.spotify_status()
+
+
+@app.get("/api/integrations/spotify/auth-url")
+async def spotify_auth_url() -> dict:
+    if not spotify_oauth.configured():
+        raise HTTPException(400, "Identifiants Spotify manquants — voir Paramètres Spotify dans la Console")
+    return {"url": spotify.build_auth_url()}
+
+
+@app.get("/api/integrations/spotify/callback")
+async def spotify_callback(request: Request) -> Response:
+    """Cible de la redirection Spotify après consentement — même principe
+    que google_callback/zoho_callback ci-dessus."""
+    code = request.query_params.get("code")
+    state = request.query_params.get("state", "")
+    error = request.query_params.get("error")
+
+    def _page(ok: bool, message: str) -> Response:
+        html = f"""<!doctype html><html><body style="background:#0a0e14;color:{'#5eead4' if ok else '#f87171'};
+font-family:system-ui;display:grid;place-items:center;height:100vh;margin:0">
+<div style="text-align:center">
+<p>{message}</p>
+<p style="opacity:.6;font-size:13px">Cet onglet peut être fermé.</p>
+</div>
+<script>
+if (window.opener) {{ window.opener.postMessage({{ jarvisIntegration: {str(ok).lower()} }}, "*"); }}
+setTimeout(() => window.close(), 1500);
+</script>
+</body></html>"""
+        return Response(content=html, media_type="text/html")
+
+    if error:
+        return _page(False, f"Connexion refusée par Spotify ({error}).")
+    if not code:
+        return _page(False, "Réponse Spotify incomplète (code manquant).")
+    if not spotify_oauth.consume_state(state):
+        return _page(False, "État OAuth invalide ou expiré — relance la connexion depuis la Console.")
+
+    try:
+        account = spotify.handle_callback(code)
     except Exception as exc:
         return _page(False, str(exc))
     return _page(True, f"Compte {account['label']} connecté.")

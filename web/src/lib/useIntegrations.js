@@ -7,17 +7,20 @@ export function useIntegrations() {
   const [accounts, setAccounts] = useState([]);
   const [googleSettings, setGoogleSettings] = useState({ configured: false, source: null, client_id: null });
   const [zohoSettings, setZohoSettings] = useState({ configured: false, client_id: null, region: null });
+  const [spotifySettings, setSpotifySettings] = useState({ configured: false, client_id: null });
 
   const refresh = useCallback(async () => {
     try {
-      const [accountsRes, googleRes, zohoRes] = await Promise.all([
+      const [accountsRes, googleRes, zohoRes, spotifyRes] = await Promise.all([
         authFetch("/api/integrations"),
         authFetch("/api/integrations/google/settings"),
         authFetch("/api/integrations/zoho/settings"),
+        authFetch("/api/integrations/spotify/settings"),
       ]);
       if (accountsRes.ok) setAccounts(await accountsRes.json());
       if (googleRes.ok) setGoogleSettings(await googleRes.json());
       if (zohoRes.ok) setZohoSettings(await zohoRes.json());
+      if (spotifyRes.ok) setSpotifySettings(await spotifyRes.json());
     } catch {
       // brain injoignable — on garde la dernière liste connue
     }
@@ -61,6 +64,16 @@ export function useIntegrations() {
     }
     const { url } = await res.json();
     window.open(url, "jarvis-zoho-auth", "width=480,height=680");
+  }, []);
+
+  const connectSpotify = useCallback(async () => {
+    const res = await authFetch("/api/integrations/spotify/auth-url");
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.detail || "Spotify non configuré");
+    }
+    const { url } = await res.json();
+    window.open(url, "jarvis-spotify-auth", "width=480,height=680");
   }, []);
 
   const remove = useCallback(
@@ -113,9 +126,31 @@ export function useIntegrations() {
     await refresh();
   }, [refresh]);
 
+  const saveSpotifySettings = useCallback(
+    async (clientId, clientSecret) => {
+      const res = await authFetch("/api/integrations/spotify/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ client_id: clientId, client_secret: clientSecret }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "échec de l'enregistrement");
+      }
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const clearSpotifySettings = useCallback(async () => {
+    await authFetch("/api/integrations/spotify/settings", { method: "DELETE" });
+    await refresh();
+  }, [refresh]);
+
   return {
     accounts, remove,
     connectGoogle, googleSettings, saveGoogleSettings, clearGoogleSettings,
     connectZoho, zohoSettings, saveZohoSettings, clearZohoSettings,
+    connectSpotify, spotifySettings, saveSpotifySettings, clearSpotifySettings,
   };
 }

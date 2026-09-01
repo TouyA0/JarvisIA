@@ -15,6 +15,7 @@ PC_COMMAND_KEYWORDS = [
     "ouvre", "ferme", "lance", "démarre", "arrête", "volume", "son",
     "screenshot", "capture", "dossier", "fichier", "application",
     "programme", "navigateur", "musique", "vidéo", "cherche", "trouve",
+    "playlist", "chanson", "morceau",
     "crée", "supprime", "déplace", "copie", "écris", "note",
     "clique", "tape", "écran", "fenêtre", "bureau", "barre des tâches",
     "wifi", "bluetooth", "batterie", "cpu", "ram", "mémoire", "disque",

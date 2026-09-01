@@ -113,6 +113,11 @@ GOOGLE_REDIRECT_URI = os.getenv(
 ZOHO_REDIRECT_URI = os.getenv(
     "ZOHO_REDIRECT_URI", f"http://127.0.0.1:{PORT}/api/integrations/zoho/callback",
 )
+# Spotify — client OAuth créé sur developer.spotify.com/dashboard, identifiants
+# saisis depuis la Console web (voir settings.py::set_spotify_credentials).
+SPOTIFY_REDIRECT_URI = os.getenv(
+    "SPOTIFY_REDIRECT_URI", f"http://127.0.0.1:{PORT}/api/integrations/spotify/callback",
+)
 # Fuseau pour délimiter "aujourd'hui"/"demain"/"cette semaine" (calendar_events) —
 # calculer ces bornes en UTC décalerait la journée de 1-2h par rapport à la
 # réalité locale (été/hiver), faisant rater ou déborder des événements en

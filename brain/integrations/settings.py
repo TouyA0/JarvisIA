@@ -107,3 +107,32 @@ def zoho_status() -> dict:
     if not (client_id and client_secret):
         return {"configured": False, "client_id": None, "region": None}
     return {"configured": True, "client_id": client_id, "region": region}
+
+
+# ── Spotify ──────────────────────────────────────────────────────────────
+# Même principe que Zoho (Console uniquement, pas de repli .env) — un seul
+# datacenter/domaine chez Spotify, pas de région à choisir.
+def get_spotify_credentials() -> tuple[str, str]:
+    data = _load().get("spotify", {})
+    if data.get("client_id") and data.get("client_secret_enc"):
+        return data["client_id"], crypto.decrypt(data["client_secret_enc"])
+    return "", ""
+
+
+def set_spotify_credentials(client_id: str, client_secret: str) -> None:
+    data = _load()
+    data["spotify"] = {"client_id": client_id, "client_secret_enc": crypto.encrypt(client_secret)}
+    _save(data)
+
+
+def clear_spotify_credentials() -> None:
+    data = _load()
+    data.pop("spotify", None)
+    _save(data)
+
+
+def spotify_status() -> dict:
+    client_id, client_secret = get_spotify_credentials()
+    if not (client_id and client_secret):
+        return {"configured": False, "client_id": None}
+    return {"configured": True, "client_id": client_id}
