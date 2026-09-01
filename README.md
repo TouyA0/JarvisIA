@@ -162,7 +162,7 @@ Jarvis/
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | — | intégration Google Calendar (panneau **Intégrations** de la Console web), voir ci-dessous |
 | `GOOGLE_REDIRECT_URI` | `http://127.0.0.1:8420/api/integrations/google/callback` | à ne changer que si le brain n'écoute pas sur `127.0.0.1:8420` |
 
-### Google (Calendar, Drive)
+### Google (Calendar, Drive, Gmail)
 
 Panneau **Intégrations** de la Console web (`ROADMAP_DISPLAY_INTEGRATIONS.md`)
 — comptes multiples supportés par service, résultats fusionnés
@@ -172,9 +172,9 @@ place une fois, ~5 min :
 
 1. [Google Cloud Console](https://console.cloud.google.com/) → nouveau
    projet (ou existant) → **APIs & Services** → activer **Google Calendar
-   API** ET **Google Drive API** (les deux, même si tu ne comptes utiliser
-   qu'un des deux services pour l'instant — inactive, l'API bloque juste
-   silencieusement les appels le jour où tu voudras l'autre).
+   API**, **Google Drive API** ET **Gmail API** (les trois, même si tu ne
+   comptes utiliser qu'un service pour l'instant — inactive, l'API bloque
+   juste silencieusement les appels le jour où tu voudras un autre).
 2. **APIs & Services → OAuth consent screen** → type *External* (ou
    *Internal* si Workspace), ajoute-toi comme utilisateur de test si l'app
    reste en mode test (largement suffisant pour un usage perso) — ajoute
@@ -192,11 +192,12 @@ place une fois, ~5 min :
    `GOOGLE_CLIENT_ID=...` / `GOOGLE_CLIENT_SECRET=...` — et redémarrer le
    brain ; le réglage saisi dans la Console reste prioritaire si les deux
    existent.)
-5. Toujours dans **Intégrations** → **Connecter** sous Google Calendar et/ou
-   Google Drive → choisis le compte Google → accepte. Répète pour chaque
-   compte et chaque service à connecter — tout se passe depuis le site,
-   aucun fichier à éditer après l'étape 4. Un même compte Google demande une
-   connexion séparée par service (jetons indépendants, scopes différents).
+5. Toujours dans **Intégrations** → **Connecter** sous Google Calendar,
+   Google Drive et/ou Gmail → choisis le compte Google → accepte. Répète
+   pour chaque compte et chaque service à connecter — tout se passe depuis
+   le site, aucun fichier à éditer après l'étape 4. Un même compte Google
+   demande une connexion séparée par service (jetons indépendants, scopes
+   différents).
 
 Seules les étapes 1-3 (créer le client OAuth dans Google Cloud Console) ne
 peuvent pas se faire depuis Jarvis : Google n'expose aucune API pour ça,
@@ -215,6 +216,12 @@ pilotage PC vers l'agent à outils) :
   qui apparaît dans la Console (n'importe quelle vue) avant toute exécution ; sans
   réponse sous 90s ou en cas de refus, rien n'est fait. La suppression n'est jamais
   définitive (corbeille Drive, récupérable ~30 jours).
+- « Jarvis, j'ai des mails importants/non lus ? », « résume le mail de X » → recherche
+  (syntaxe Gmail native : is:unread, from:, subject:, newer_than:7d…) puis lecture
+- « Jarvis, réponds à ce mail... » / « écris un mail à X pour... » → crée un
+  **brouillon** (jamais envoyé automatiquement, aucune confirmation nécessaire pour
+  un brouillon) ; « envoie-le » → confirmation obligatoire (destinataire + sujet
+  affichés) avant l'envoi réel, irréversible
 
 Le scope Drive demandé est `drive` (lecture ET écriture, pas seulement
 `drive.readonly`) — nécessaire pour agir sur n'importe quel fichier trouvé

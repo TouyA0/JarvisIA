@@ -10,7 +10,7 @@ deux listes de schémas, et route chaque tool_use vers le bon exécuteur
 """
 from __future__ import annotations
 
-from brain.integrations import google_calendar, google_drive, store
+from brain.integrations import google_calendar, google_drive, google_gmail, store
 
 BRAIN_TOOLS = [
     {
@@ -123,6 +123,76 @@ BRAIN_TOOLS = [
             "required": ["id"],
         },
     },
+    {
+        "name": "gmail_search",
+        "description": (
+            "Cherche des mails dans la boîte Gmail de Monsieur (tous les comptes connectés, "
+            "fusionnés). `query` accepte la syntaxe de recherche Gmail native : "
+            "'is:unread', 'from:x@y.com', 'subject:facture', 'newer_than:7d', "
+            "'has:attachment', combinables. Vide = boîte de réception récente. Chaque "
+            "résultat inclut un `id` (à réutiliser avec gmail_read pour le contenu "
+            "complet, ou gmail_draft pour répondre). Pour « j'ai des mails importants ? » "
+            "essaie 'is:unread' ou 'is:important' d'abord."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Recherche Gmail (syntaxe native). Omis = boîte de réception récente."},
+            },
+        },
+    },
+    {
+        "name": "gmail_read",
+        "description": (
+            "Lit le contenu complet d'un mail (expéditeur, destinataire, sujet, corps) à "
+            "partir de son `id` — utilise EXACTEMENT l'id retourné par gmail_search. "
+            "Utilise pour comprendre/résumer un mail ou répondre à une question sur son "
+            "contenu — ne réponds jamais à partir du seul aperçu (snippet) de gmail_search."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string", "description": "Id du message, tel que retourné par gmail_search."},
+            },
+            "required": ["id"],
+        },
+    },
+    {
+        "name": "gmail_draft",
+        "description": (
+            "Crée un BROUILLON Gmail — jamais envoyé automatiquement, Monsieur le relira "
+            "dans Gmail ou via gmail_send. Aucune confirmation nécessaire pour créer un "
+            "brouillon (rien ne part). Si `reply_to_id` est fourni (id d'un mail lu via "
+            "gmail_search/gmail_read), le brouillon répond dans le même fil — sujet et "
+            "destinataire déduits automatiquement si non précisés."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "to": {"type": "string", "description": "Adresse email du destinataire."},
+                "subject": {"type": "string", "description": "Sujet du mail. Déduit si reply_to_id est fourni et laissé vide."},
+                "body": {"type": "string", "description": "Corps du mail, texte brut."},
+                "reply_to_id": {"type": "string", "description": "Id du mail auquel répondre (voir gmail_search), pour rattacher au bon fil."},
+            },
+            "required": ["to", "body"],
+        },
+    },
+    {
+        "name": "gmail_send",
+        "description": (
+            "Envoie un brouillon existant (id retourné par gmail_draft) — ACTION "
+            "IRRÉVERSIBLE, déclenche systématiquement une confirmation à l'écran dans la "
+            "Console web (destinataire + sujet affichés) avant tout envoi réel. Si refusée "
+            "ou expirée, dis-le simplement, ne recrée pas le brouillon ni ne réessaie seul."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "draft_id": {"type": "string", "description": "Id du brouillon, tel que retourné par gmail_draft."},
+            },
+            "required": ["draft_id"],
+        },
+    },
 ]
 
 NAMES = {t["name"] for t in BRAIN_TOOLS}
@@ -159,6 +229,18 @@ def _format_files(files: list[dict]) -> str:
         link = f" — {f['link']}" if f.get("link") else ""
         fid = f" (id: {f['id']})" if f.get("id") else ""
         lines.append(f"- {f['name']}{acct}{link}{fid}")
+    return "\n".join(lines)
+
+
+def _format_messages(messages: list[dict]) -> str:
+    if not messages:
+        return "Aucun mail trouvé, Monsieur."
+    lines = []
+    for m in messages:
+        acct = f" [{m['account']}]" if len(messages) > 1 and len({ms['account'] for ms in messages}) > 1 else ""
+        flag = " ●non lu" if m.get("unread") else ""
+        mid = f" (id: {m['id']})" if m.get("id") else ""
+        lines.append(f"- {m['subject']} — de {m['from']}{flag}{acct} : {m['snippet']}{mid}")
     return "\n".join(lines)
 
 
@@ -217,5 +299,47 @@ def execute(name: str, args: dict):
         if "error" in result:
             return result["error"]
         return f"Mis à la corbeille : {result['name']} (récupérable ~30 jours depuis Drive)."
+
+    if name == "gmail_search":
+        if not google_gmail.configured():
+            return "Gmail n'est pas configuré, Monsieur — aucun compte connecté."
+        if not store.list_public("gmail"):
+            return "Aucun compte Gmail connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
+        messages = google_gmail.search(args.get("query") or None)
+        return _format_messages(messages)
+
+    if name == "gmail_read":
+        if not store.list_public("gmail"):
+            return "Aucun compte Gmail connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
+        message_id = args.get("id", "")
+        if not message_id:
+            return "Id de message manquant, Monsieur — appelle d'abord gmail_search."
+        result = google_gmail.read_message(message_id)
+        if "error" in result:
+            return result["error"]
+        text = result["text"]
+        if result["truncated"]:
+            text += "\n\n[… contenu tronqué, le mail est plus long que ce qui a été lu ici]"
+        return f"De : {result['from']}\nÀ : {result['to']}\nSujet : {result['subject']}\nDate : {result['date']}\n\n{text}"
+
+    if name == "gmail_draft":
+        if not store.list_public("gmail"):
+            return "Aucun compte Gmail connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
+        result = google_gmail.create_draft(
+            args.get("to", ""), args.get("subject", ""), args.get("body", ""),
+            reply_to_id=args.get("reply_to_id"),
+        )
+        if "error" in result:
+            return result["error"]
+        return f"Brouillon créé : « {result['subject']} » à {result['to']} (id: {result['draft_id']})."
+
+    if name == "gmail_send":
+        draft_id = args.get("draft_id", "")
+        if not draft_id:
+            return "Id de brouillon manquant, Monsieur — appelle d'abord gmail_draft."
+        result = google_gmail.send_draft(draft_id)
+        if "error" in result:
+            return result["error"]
+        return f"Envoyé : « {result['subject']} » à {result['to']}."
 
     return f"Outil brain inconnu : {name}"

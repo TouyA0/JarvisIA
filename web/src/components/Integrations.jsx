@@ -6,16 +6,17 @@ import { useIsMobile } from "../lib/useIsMobile.js";
 const TYPE_LABELS = {
   google_calendar: "Google Calendar",
   google_drive: "Google Drive",
+  gmail: "Gmail",
 };
 
-// Catalogue affiché à droite — google_calendar et google_drive sont
+// Catalogue affiché à droite — google_calendar, google_drive et gmail sont
 // branchés (même Client ID/Secret Google, scopes distincts), le reste vient
 // docs/ROADMAP_DISPLAY_INTEGRATIONS.md et attend son tour (même socle, un
 // module brain/integrations/<service>.py de plus).
 const CATALOG = [
   { type: "google_calendar", label: "Google Calendar", available: true },
   { type: "google_drive", label: "Google Drive", available: true },
-  { type: "gmail", label: "Gmail", available: false },
+  { type: "gmail", label: "Gmail", available: true },
   { type: "zoho_mail", label: "Zoho Mail", available: false },
   { type: "spotify", label: "Spotify", available: false },
 ];
@@ -208,7 +209,7 @@ export default function Integrations({ onNavigate, focusEnabled }) {
   const isMobile = useIsMobile();
   const [busyType, setBusyType] = useState(null);
   const [errors, setErrors] = useState({});
-  const GOOGLE_TYPES = new Set(["google_calendar", "google_drive"]);
+  const GOOGLE_TYPES = new Set(["google_calendar", "google_drive", "gmail"]);
 
   async function handleConnect(type) {
     if (!GOOGLE_TYPES.has(type)) return;

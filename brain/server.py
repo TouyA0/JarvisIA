@@ -37,16 +37,17 @@ from brain.core import agent as pc_agent
 from brain.core.chat import ask_stream
 from brain.devices import Device, registry
 from brain.integrations import confirm as integrations_confirm
-from brain.integrations import google_calendar, google_drive, google_oauth, settings as integrations_settings
+from brain.integrations import google_calendar, google_drive, google_gmail, google_oauth, settings as integrations_settings
 from brain.integrations import store as integrations_store
 
 # Un module par service Google, tous partagent la même mécanique OAuth
 # (google_oauth.py) et le même callback — seul auth-url/callback ont besoin
-# de savoir lequel appeler ; calendar_events/drive_search (brain/tools.py)
-# importent directement le module qui les concerne.
+# de savoir lequel appeler ; calendar_events/drive_search/gmail_search
+# (brain/tools.py) importent directement le module qui les concerne.
 _GOOGLE_SERVICES = {
     google_calendar.SERVICE_TYPE: google_calendar,
     google_drive.SERVICE_TYPE: google_drive,
+    google_gmail.SERVICE_TYPE: google_gmail,
 }
 
 config.ensure_dirs()
