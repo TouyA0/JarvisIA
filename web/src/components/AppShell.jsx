@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import Icon from "./ui/Icon.jsx";
 import ModeSwitcher from "./ui/ModeSwitcher.jsx";
 import Reactor from "./ui/Reactor.jsx";
@@ -43,9 +44,30 @@ function NavIcon({ name }) {
 export default function AppShell({ view, onNavigate, children }) {
   const isMobile = useIsMobile();
   const status = useBrainStatus();
+  const mainRef = useRef(null);
+  const announceRef = useRef(null);
+  const isFirstRender = useRef(true);
 
   const statusLabel =
     status === "online" ? "Brain connecté" : status === "connecting" ? "Connexion…" : "Brain injoignable";
+
+  // Coquilles à écrans sans routeur : `onNavigate` remplace le contenu de
+  // <main> mais ne bouge ni le focus ni le contexte annoncé — au lecteur
+  // d'écran, rien ne se passe. On déplace le focus sur le titre de la vue
+  // (ou sur <main> à défaut, pour les écrans qui n'en ont pas encore) et on
+  // annonce le nouveau titre dans une région aria-live dédiée.
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    const label = NAV_ITEMS.find((item) => item.id === view)?.label ?? view;
+    const heading = mainRef.current?.querySelector("#view-title");
+    (heading || mainRef.current)?.focus();
+    if (announceRef.current) {
+      announceRef.current.textContent = label;
+    }
+  }, [view]);
 
   if (isMobile) {
     return (
@@ -53,9 +75,10 @@ export default function AppShell({ view, onNavigate, children }) {
         <a className="skip-link" href="#contenu">
           Aller au contenu
         </a>
-        <main id="contenu" className="view">
+        <main id="contenu" className="view" tabIndex={-1} ref={mainRef}>
           {children}
         </main>
+        <div className="sr-only" role="status" aria-live="polite" ref={announceRef} />
         <nav className="tabbar" aria-label="Navigation principale">
           {NAV_ITEMS.map((item) => (
             <button
@@ -116,9 +139,10 @@ export default function AppShell({ view, onNavigate, children }) {
         </div>
       </nav>
 
-      <main id="contenu" className="view">
+      <main id="contenu" className="view" tabIndex={-1} ref={mainRef}>
         {children}
       </main>
+      <div className="sr-only" role="status" aria-live="polite" ref={announceRef} />
     </div>
   );
 }
@@ -138,7 +162,9 @@ export function ViewHeader({ title, subtitle, actions, onBack, backLabel = "Reto
         </button>
       )}
       <div className="view-heading">
-        <h1 className="view-title">{title}</h1>
+        <h1 id="view-title" className="view-title" tabIndex={-1}>
+          {title}
+        </h1>
         {subtitle && <span className="view-subtitle">{subtitle}</span>}
       </div>
       {actions && <div className="view-actions">{actions}</div>}
