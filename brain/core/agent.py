@@ -16,19 +16,160 @@ chantier").
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from typing import Callable, Optional
+
+import requests
 
 from brain import cards, config, state, tools as brain_tools
 from brain.clients import get_anthropic
 from brain.core import history, prompts, usage
 from brain.devices import registry
 
+# ── Tool-use local (F7, phase 2) ─────────────────────────────────────────────
+# Sous-ensemble d'outils qu'un modèle Ollama local a le droit d'appeler : QUE
+# du lecture-seule, sans confirmation (docs/ROADMAP.md F7 §07 phase 2). Rien
+# ici ne touche brain/integrations/confirm.py — Drive en écriture, Gmail/Zoho
+# en envoi, Home Assistant en contrôle restent exclusivement sur Claude.
+#
+# Choix mesuré, pas supposé : scripts/test_ollama_tools.py, sur qwen3:14b et
+# les vrais schémas du projet, donne 100% de JSON valide et ~88% de bon choix
+# d'outil sur ce même périmètre. Le garde-fou ci-dessous (SAFE_LOCAL_TOOL_NAMES
+# revérifié à l'exécution) couvre le reste : un outil halluciné ou hors
+# périmètre n'est jamais exécuté, la question repart simplement vers Claude.
+SAFE_LOCAL_TOOL_NAMES = frozenset({
+    "weather_now", "system_diagnostics",
+    "calendar_events",
+    "gmail_search", "gmail_read", "zoho_search", "zoho_read",
+    "web_search", "fetch_page",
+    "tisseo_next",
+    "jellyfin_search", "jellyfin_now_playing",
+    "jellyfin_continue_watching", "jellyfin_recently_added",
+})
+
+_LOCAL_TOOL_MAX_TURNS = 4
+
+
+def _safe_local_tools() -> list[dict]:
+    """BRAIN_TOOLS est au format Claude (name/description/input_schema) ;
+    Ollama attend le format OpenAI (type=function, function={...,parameters})."""
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": t["name"],
+                "description": t["description"],
+                "parameters": t["input_schema"],
+            },
+        }
+        for t in brain_tools.to_claude_tools()
+        if t["name"] in SAFE_LOCAL_TOOL_NAMES
+    ]
+
+
+def _ollama_chat_sync(messages: list[dict], tools: list[dict]) -> dict | None:
+    """Un tour Ollama, appels d'outils inclus. Ne lève jamais — toute panne
+    (Ollama éteint, timeout, erreur de génération) doit se traduire par un
+    repli vers Claude, jamais par une exception qui casse la question."""
+    try:
+        resp = requests.post(
+            config.OLLAMA_URL,
+            json={
+                "model": config.OLLAMA_MODEL,
+                "messages": messages,
+                "tools": tools,
+                "stream": False,
+                "think": False,
+                "keep_alive": config.OLLAMA_KEEP_ALIVE,
+                "options": {"num_predict": 400},
+            },
+            timeout=(config.OLLAMA_CONNECT_TIMEOUT, config.OLLAMA_READ_TIMEOUT),
+        )
+        resp.raise_for_status()
+    except Exception as e:
+        print(f"[Ollama outils] indisponible ou erreur ({e}).")
+        return None
+    data = resp.json()
+    if data.get("error"):
+        print(f"[Ollama outils] erreur : {data['error']}")
+        return None
+    return data.get("message", {})
+
+
+async def _ask_local_with_tools(question: str) -> str | None:
+    """Tente de répondre avec le modèle local, restreint aux outils sûrs.
+
+    Retourne None dès que le résultat n'est pas fiable à 100% — outil hors
+    périmètre, JSON invalide, panne, ou trop d'allers-retours sans conclure
+    — plutôt que de risquer une réponse bancale : l'appelant repart alors sur
+    Claude, exactement comme brain/core/chat.py::ask_stream() le fait déjà
+    pour la conversation pure.
+
+    Ne fait JAMAIS confiance à une réponse texte spontanée (sans appel
+    d'outil) : un modèle limité à 14 outils n'a aucune base pour répondre à
+    une question hors de ce périmètre, et pourrait répondre de façon plausible
+    mais fausse (« Fait, Monsieur » sans avoir rien fait). Seul un texte final
+    formulé APRÈS au moins un outil exécuté avec succès est retenu.
+    """
+    tools = _safe_local_tools()
+    static_prompt, dynamic_prompt = prompts.get_system_prompt()
+    system_text = static_prompt + "\n\n" + prompts.AGENT_INSTRUCTIONS
+    if dynamic_prompt:
+        system_text += "\n\n" + dynamic_prompt
+
+    messages = [{"role": "system", "content": system_text}]
+    messages += history.recent_text_history()
+    messages.append({"role": "user", "content": question})
+
+    tool_call_count = 0
+    for _ in range(_LOCAL_TOOL_MAX_TURNS):
+        message = await asyncio.to_thread(_ollama_chat_sync, messages, tools)
+        if message is None:
+            return None
+
+        tool_calls = message.get("tool_calls") or []
+        if not tool_calls:
+            text = (message.get("content") or "").strip()
+            return text if (text and tool_call_count > 0) else None
+
+        messages.append({"role": "assistant", "content": message.get("content", ""),
+                          "tool_calls": tool_calls})
+
+        for call in tool_calls:
+            fn = call.get("function", {})
+            name = fn.get("name")
+            args = fn.get("arguments")
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except (json.JSONDecodeError, TypeError):
+                    args = {}
+            if not isinstance(args, dict):
+                args = {}
+
+            if name not in SAFE_LOCAL_TOOL_NAMES:
+                print(f"[Ollama outils] outil hors périmètre local : {name} — repli Claude.")
+                return None
+
+            print(f"[Outil local] {name}({args})")
+            result = await asyncio.to_thread(brain_tools.execute, name, args)
+            tool_call_count += 1
+            messages.append({"role": "tool", "content": result if isinstance(result, str) else str(result)})
+
+    return None
+
 # Callback branché par server.py pour informer la Console web de
 # l'activité en cours (ex : "⚙ open_url") — même idée que le hook
 # on_activity du HUD desktop (agents/desktop/brain/agent.py), transposé
 # au web sous forme de message chat.status. Peut rester None.
 on_activity: Optional[Callable[[str], None]] = None
+
+# Même idée pour indiquer QUI a réellement répondu ("ollama-agent" ou
+# "claude-agent") — server.py l'utilise pour que le message chat.done envoyé
+# à la Console reflète le vrai modèle, plutôt qu'une étiquette figée
+# "brain-agent" qui ne dirait jamais si le tour a été géré en local (F7).
+on_source: Optional[Callable[[str], None]] = None
 
 
 def _device_name(device_id: str) -> str:
@@ -56,6 +197,14 @@ def _notify(activity: str) -> None:
     if on_activity:
         try:
             on_activity(activity)
+        except Exception:
+            pass
+
+
+def _notify_source(source: str) -> None:
+    if on_source:
+        try:
+            on_source(source)
         except Exception:
             pass
 
@@ -110,6 +259,16 @@ async def ask_with_tools(question: str, device_id: str | None) -> str | None:
     if not client:
         print("[Claude] Clé API manquante — vérifiez ANTHROPIC_API_KEY dans .env")
         return "Je ne peux pas répondre sans clé API, Monsieur. Vérifiez le fichier point env."
+
+    # Tool-use local d'abord (F7 phase 2) : agenda, mails en lecture, météo,
+    # diagnostics, recherche web, Tisséo, Jellyfin. Repli silencieux vers
+    # Claude si le modèle local échoue ou sort de ce périmètre — voir
+    # _ask_local_with_tools ci-dessus.
+    local_answer = await _ask_local_with_tools(question)
+    if local_answer:
+        _notify_source("ollama-agent")
+        history.remember_exchange(question, local_answer, source="ollama-agent")
+        return local_answer
 
     # Import différé : agents.desktop.tools.registry importe des modules
     # Windows-only (écran, input) juste pour leurs schémas d'outils, dont
@@ -184,7 +343,8 @@ async def ask_with_tools(question: str, device_id: str | None) -> str | None:
                 final = "Je n'ai pas réussi à accomplir cette tâche, Monsieur."
 
             _notify("")
-            history.remember_exchange(question, final, source="brain-agent")
+            _notify_source("claude-agent")
+            history.remember_exchange(question, final, source="claude-agent")
             return final
 
         if response.stop_reason == "tool_use":
@@ -237,6 +397,7 @@ async def ask_with_tools(question: str, device_id: str | None) -> str | None:
             messages.append({"role": "user", "content": tool_results})
 
     _notify("")
+    _notify_source("claude-agent")
     final = "Je n'ai pas réussi à accomplir cette tâche, Monsieur. Pourriez-vous préciser ?"
-    history.remember_exchange(question, final, source="brain-agent")
+    history.remember_exchange(question, final, source="claude-agent")
     return final

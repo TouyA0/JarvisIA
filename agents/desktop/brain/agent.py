@@ -6,18 +6,28 @@ Claude voit donc réellement l'écran.
 """
 from __future__ import annotations
 
+import json
 import re
 import time
 from typing import Callable, Optional
 
+import requests
+
 from agents.desktop import config, state
 from agents.desktop.clients import get_anthropic
+from brain import tools as brain_tools
 from brain.core import history, prompts, usage
 from agents.desktop.tools import registry
 
 # Callback branché par le runtime pour afficher l'activité dans le HUD
 # (ex : "⚙ run_powershell"). Peut rester None.
 on_activity: Optional[Callable[[str], None]] = None
+
+# Même idée pour indiquer QUI a répondu ("ollama-agent" ou "claude-agent") —
+# le runtime s'en sert pour afficher le bon modèle sur le HUD (F7 phase 2 :
+# avant ça, l'étiquette affichée était toujours Claude, même quand le
+# modèle local avait répondu).
+on_source: Optional[Callable[[str], None]] = None
 
 
 def _notify(activity: str) -> None:
@@ -26,6 +36,129 @@ def _notify(activity: str) -> None:
             on_activity(activity)
         except Exception:
             pass
+
+
+def _notify_source(source: str) -> None:
+    if on_source:
+        try:
+            on_source(source)
+        except Exception:
+            pass
+
+
+# ── Tool-use local (F7, phase 2) ─────────────────────────────────────────────
+# Miroir de brain/core/agent.py::_ask_local_with_tools — mêmes outils sûrs,
+# même garde-fou, mêmes chiffres mesurés (scripts/test_ollama_tools.py).
+# Différence structurelle avec la Console web : la boucle Claude ci-dessous
+# ne connaît QUE les outils PC (registry.PC_TOOLS) — les outils brain
+# (agenda, mails, météo…) n'y ont jamais été exposés, donc pour la voix ce
+# chemin local n'écarte pas Claude sur ces sujets, il ajoute une capacité
+# qui manquait. Le pilotage PC (Claude + PC_TOOLS) n'est pas touché.
+SAFE_LOCAL_TOOL_NAMES = frozenset({
+    "weather_now", "system_diagnostics",
+    "calendar_events",
+    "gmail_search", "gmail_read", "zoho_search", "zoho_read",
+    "web_search", "fetch_page",
+    "tisseo_next",
+    "jellyfin_search", "jellyfin_now_playing",
+    "jellyfin_continue_watching", "jellyfin_recently_added",
+})
+
+_LOCAL_TOOL_MAX_TURNS = 4
+
+
+def _safe_local_tools() -> list[dict]:
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": t["name"],
+                "description": t["description"],
+                "parameters": t["input_schema"],
+            },
+        }
+        for t in brain_tools.to_claude_tools()
+        if t["name"] in SAFE_LOCAL_TOOL_NAMES
+    ]
+
+
+def _ollama_chat_sync(messages: list[dict], tools: list[dict]) -> dict | None:
+    try:
+        resp = requests.post(
+            config.OLLAMA_URL,
+            json={
+                "model": config.OLLAMA_MODEL,
+                "messages": messages,
+                "tools": tools,
+                "stream": False,
+                "think": False,
+                "keep_alive": config.OLLAMA_KEEP_ALIVE,
+                "options": {"num_predict": 400},
+            },
+            timeout=(config.OLLAMA_CONNECT_TIMEOUT, config.OLLAMA_READ_TIMEOUT),
+        )
+        resp.raise_for_status()
+    except Exception as e:
+        print(f"[Ollama outils] indisponible ou erreur ({e}).")
+        return None
+    data = resp.json()
+    if data.get("error"):
+        print(f"[Ollama outils] erreur : {data['error']}")
+        return None
+    return data.get("message", {})
+
+
+def _ask_local_with_tools(question: str) -> str | None:
+    """Voir brain/core/agent.py::_ask_local_with_tools — même logique,
+    exécution directe (in-process) plutôt qu'asynchrone."""
+    tools = _safe_local_tools()
+    static_prompt, dynamic_prompt = prompts.get_system_prompt()
+    system_text = static_prompt + "\n\n" + prompts.AGENT_INSTRUCTIONS
+    if dynamic_prompt:
+        system_text += "\n\n" + dynamic_prompt
+
+    messages = [{"role": "system", "content": system_text}]
+    messages += history.recent_text_history()
+    messages.append({"role": "user", "content": question})
+
+    tool_call_count = 0
+    for _ in range(_LOCAL_TOOL_MAX_TURNS):
+        if state.stop_agent.is_set():
+            return None
+        message = _ollama_chat_sync(messages, tools)
+        if message is None:
+            return None
+
+        tool_calls = message.get("tool_calls") or []
+        if not tool_calls:
+            text = (message.get("content") or "").strip()
+            return text if (text and tool_call_count > 0) else None
+
+        messages.append({"role": "assistant", "content": message.get("content", ""),
+                          "tool_calls": tool_calls})
+
+        for call in tool_calls:
+            fn = call.get("function", {})
+            name = fn.get("name")
+            args = fn.get("arguments")
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except (json.JSONDecodeError, TypeError):
+                    args = {}
+            if not isinstance(args, dict):
+                args = {}
+
+            if name not in SAFE_LOCAL_TOOL_NAMES:
+                print(f"[Ollama outils] outil hors périmètre local : {name} — repli Claude.")
+                return None
+
+            print(f"[Outil local] {name}({args})")
+            result = brain_tools.execute(name, args)
+            tool_call_count += 1
+            messages.append({"role": "tool", "content": result if isinstance(result, str) else str(result)})
+
+    return None
 
 
 def _recovery_hint(tool_name: str, args: dict, result: str) -> str | None:
@@ -90,6 +223,14 @@ def ask_with_tools(question: str) -> str | None:
     if not client:
         print("[Claude] Clé API manquante — vérifiez votre ANTHROPIC_API_KEY dans .env")
         return "Je ne peux pas répondre sans clé API, Monsieur. Vérifiez le fichier point env."
+
+    # Tool-use local d'abord (F7 phase 2) : agenda, mails en lecture, météo,
+    # diagnostics, recherche web, Tisséo, Jellyfin — voir _ask_local_with_tools.
+    local_answer = _ask_local_with_tools(question)
+    if local_answer:
+        _notify_source("ollama-agent")
+        history.remember_exchange(question, local_answer, source="ollama-agent")
+        return local_answer
 
     claude_tools = registry.to_claude_tools(cached=True)
     static_prompt, dynamic_prompt = prompts.get_system_prompt()
@@ -162,6 +303,7 @@ def ask_with_tools(question: str) -> str | None:
                 final = "Je n'ai pas réussi à accomplir cette tâche, Monsieur."
 
             _notify("")
+            _notify_source("claude-agent")
             history.remember_exchange(question, final, source="claude-agent")
             return final
 
@@ -192,6 +334,7 @@ def ask_with_tools(question: str) -> str | None:
             messages.append({"role": "user", "content": tool_results})
 
     _notify("")
+    _notify_source("claude-agent")
     final = "Je n'ai pas réussi à accomplir cette tâche, Monsieur. Pourriez-vous préciser ?"
     history.remember_exchange(question, final, source="claude-agent")
     return final

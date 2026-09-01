@@ -916,13 +916,24 @@ async def ws_chat(websocket: WebSocket) -> None:
                 def _on_activity(text: str) -> None:
                     asyncio.create_task(_send_status(text))
 
+                # Rempli par pc_agent (F7 phase 2) : "ollama-agent" si le
+                # modèle local a répondu, "claude-agent" sinon — reflète
+                # dans la Console qui a réellement traité la question,
+                # plutôt qu'une étiquette figée.
+                answered_by = {"source": "claude-agent"}
+
+                def _on_source(source: str) -> None:
+                    answered_by["source"] = source
+
                 pc_agent.on_activity = _on_activity
+                pc_agent.on_source = _on_source
                 try:
                     answer = await pc_agent.ask_with_tools(question, device_id)
                 finally:
                     pc_agent.on_activity = None
+                    pc_agent.on_source = None
                 await websocket.send_json({"type": "chat.phrase", "text": answer or ""})
-                await websocket.send_json({"type": "chat.done", "source": "brain-agent"})
+                await websocket.send_json({"type": "chat.done", "source": answered_by["source"]})
                 continue
 
             brain_state: dict = {}

@@ -108,9 +108,13 @@ def _answer_with_brain(question: str) -> str | None:
         interrupt_thread.start()
         overlay.set_source("ai")
         result = None
+        answered_by = {"source": "claude-agent"}
+        agent.on_source = lambda s: answered_by.__setitem__("source", s)
         try:
             result = agent.ask_with_tools(question)
-            overlay.set_model_label(config.CLAUDE_MODEL)
+            overlay.set_model_label(
+                config.OLLAMA_MODEL if answered_by["source"] == "ollama-agent"
+                else config.CLAUDE_MODEL)
             if result and not (state.stop_agent.is_set() or state.stop_speaking.is_set()):
                 print(f"Jarvis : {result}")
                 overlay.set_response(result)
@@ -118,6 +122,7 @@ def _answer_with_brain(question: str) -> str | None:
                 if not overlay.is_muted():
                     tts.speak(result, on_level=overlay.set_level)
         finally:
+            agent.on_source = None
             state.stop_speaking.set()
             interrupt_thread.join()
             overlay.set_state("idle")
