@@ -41,6 +41,7 @@ from brain.integrations import google_calendar, google_contacts, google_drive, g
 from brain.integrations import jellyfin
 from brain.integrations import spotify, spotify_oauth
 from brain.integrations import store as integrations_store
+from brain.integrations import tisseo
 from brain.integrations import zoho_mail, zoho_oauth
 
 # Un module par service Google, tous partagent la même mécanique OAuth
@@ -503,6 +504,40 @@ async def connect_jellyfin(body: dict) -> dict:
         raise HTTPException(400, "base_url et api_key requis")
     try:
         account = jellyfin.connect(base_url, api_key, username)
+    except RuntimeError as exc:
+        raise HTTPException(400, str(exc))
+    return account
+
+
+@app.get("/api/integrations/tisseo/settings")
+async def tisseo_settings() -> dict:
+    return integrations_settings.tisseo_status()
+
+
+@app.post("/api/integrations/tisseo/settings")
+async def set_tisseo_settings(body: dict) -> dict:
+    api_key = (body.get("api_key") or "").strip()
+    if not api_key:
+        raise HTTPException(400, "api_key requis")
+    integrations_settings.set_tisseo_api_key(api_key)
+    return integrations_settings.tisseo_status()
+
+
+@app.delete("/api/integrations/tisseo/settings")
+async def clear_tisseo_settings() -> dict:
+    integrations_settings.clear_tisseo_api_key()
+    return integrations_settings.tisseo_status()
+
+
+@app.post("/api/integrations/tisseo/connect")
+async def connect_tisseo(body: dict) -> dict:
+    """Pas d'OAuth — enregistre un arrêt favori (résolu par nom via
+    l'API Tisséo), voir tisseo.py::connect."""
+    stop_query = (body.get("stop") or "").strip()
+    if not stop_query:
+        raise HTTPException(400, "stop requis")
+    try:
+        account = tisseo.connect(stop_query)
     except RuntimeError as exc:
         raise HTTPException(400, str(exc))
     return account

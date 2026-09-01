@@ -8,19 +8,22 @@ export function useIntegrations() {
   const [googleSettings, setGoogleSettings] = useState({ configured: false, source: null, client_id: null });
   const [zohoSettings, setZohoSettings] = useState({ configured: false, client_id: null, region: null });
   const [spotifySettings, setSpotifySettings] = useState({ configured: false, client_id: null });
+  const [tisseoSettings, setTisseoSettings] = useState({ configured: false });
 
   const refresh = useCallback(async () => {
     try {
-      const [accountsRes, googleRes, zohoRes, spotifyRes] = await Promise.all([
+      const [accountsRes, googleRes, zohoRes, spotifyRes, tisseoRes] = await Promise.all([
         authFetch("/api/integrations"),
         authFetch("/api/integrations/google/settings"),
         authFetch("/api/integrations/zoho/settings"),
         authFetch("/api/integrations/spotify/settings"),
+        authFetch("/api/integrations/tisseo/settings"),
       ]);
       if (accountsRes.ok) setAccounts(await accountsRes.json());
       if (googleRes.ok) setGoogleSettings(await googleRes.json());
       if (zohoRes.ok) setZohoSettings(await zohoRes.json());
       if (spotifyRes.ok) setSpotifySettings(await spotifyRes.json());
+      if (tisseoRes.ok) setTisseoSettings(await tisseoRes.json());
     } catch {
       // brain injoignable — on garde la dernière liste connue
     }
@@ -84,6 +87,24 @@ export function useIntegrations() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ base_url: baseUrl, api_key: apiKey, username: username || undefined }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "échec de la connexion");
+      }
+      await refresh();
+    },
+    [refresh],
+  );
+
+  // Tisséo : pas d'OAuth, enregistre un arrêt favori par nom (résolu côté
+  // brain) — voir brain/server.py::connect_tisseo.
+  const connectTisseo = useCallback(
+    async (stop) => {
+      const res = await authFetch("/api/integrations/tisseo/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stop }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -165,11 +186,33 @@ export function useIntegrations() {
     await refresh();
   }, [refresh]);
 
+  const saveTisseoSettings = useCallback(
+    async (apiKey) => {
+      const res = await authFetch("/api/integrations/tisseo/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: apiKey }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "échec de l'enregistrement");
+      }
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const clearTisseoSettings = useCallback(async () => {
+    await authFetch("/api/integrations/tisseo/settings", { method: "DELETE" });
+    await refresh();
+  }, [refresh]);
+
   return {
     accounts, remove,
     connectGoogle, googleSettings, saveGoogleSettings, clearGoogleSettings,
     connectZoho, zohoSettings, saveZohoSettings, clearZohoSettings,
     connectSpotify, spotifySettings, saveSpotifySettings, clearSpotifySettings,
     connectJellyfin,
+    connectTisseo, tisseoSettings, saveTisseoSettings, clearTisseoSettings,
   };
 }

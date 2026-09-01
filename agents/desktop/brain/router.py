@@ -40,6 +40,8 @@ PC_COMMAND_KEYWORDS = [
     "contact", "contacts", "numéro de", "coordonnées",
     # Jellyfin (voir brain/tools.py::jellyfin_*)
     "jellyfin", "film", "films", "série", "séries", "épisode",
+    # Tisséo (voir brain/tools.py::tisseo_next)
+    "tisséo", "bus", "métro", "tram", "arrêt",
     # Gmail / Zoho Mail (voir brain/tools.py::gmail_* / zoho_*)
     "mail", "mails", "email", "emails", "e-mail", "e-mails", "gmail",
     "courriel", "courriels", "boîte mail", "boite mail", "brouillon", "zoho",

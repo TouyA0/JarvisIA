@@ -43,6 +43,7 @@ devient le canal d'affichage riche.
 | I8 | **GitHub notifications** (bonus, si pertinent pour toi) | REST API (token) | « des PR en attente ? », « des issues qui me sont assignées ? » | lecture seule | ▲ |
 | I9 | **Discord** (bonus, écarté) | nécessiterait un bot (pas d'accès aux DM, seulement les serveurs invités) — proposé, décliné par Monsieur (pas l'usage voulu) | — | — | — |
 | I10 | **Jellyfin** ✓ *(fait)* | serveur perso, clé API — pas d'OAuth, connexion directe (base_url + clé + utilisateur optionnel) | jellyfin_search/jellyfin_now_playing/jellyfin_continue_watching/jellyfin_recently_added | lecture seule ; pas de contrôle de lecture à distance | ▲ |
+| I11 | **Tisséo (transports Toulouse)** ✓ *(fait)* | API publique gratuite, clé simple — pas d'OAuth, pas de facturation (Google Maps évoqué puis écarté pour cette raison) | tisseo_next — arrêts favoris multiples (un "compte" = un arrêt), fusionnés au listing | lecture seule ; confiance technique modérée sur les noms de paramètres exacts | ▲ |
 
 **Notion vs Google Calendar** : si ton agenda réel est dans Notion Calendar,
 commence par I2 seul (une seule source de vérité). Si tu utilises aussi

@@ -329,6 +329,32 @@ Une fois connecté, depuis la Console web :
 Lecture seule — pas de contrôle de lecture à distance (pause/lancer sur un
 appareil précis) pour l'instant, contrairement à Spotify.
 
+### Tisséo (transports Toulouse)
+
+Gratuit, sans facturation (contrairement à Google Maps, envisagé puis
+écarté pour cette raison) — une clé API simple, pas d'OAuth :
+
+1. Envoie un email à **opendata@tisseo.fr** en demandant une clé API pour
+   l'API temps réel (usage personnel) — pas de portail self-service, mais
+   la demande n'est pas filtrée : la clé est fournie gratuitement, l'email
+   sert juste à établir un contact côté Tisséo. Documentation développeur
+   complète sur le [portail Open Data de Toulouse Métropole](https://data.toulouse-metropole.fr/explore/dataset/api-temps-reel-tisseo/).
+2. Console web → Intégrations → déplie **Tisséo** → colle la clé API →
+   **Enregistrer la clé**.
+3. Toujours dans ce bloc, saisis le nom d'un arrêt (ex. « Jean Jaurès ») →
+   **Ajouter comme arrêt favori**. Répète pour chaque arrêt à suivre
+   (domicile, travail…) — ils apparaissent comme des cartes séparées à
+   gauche et sont fusionnés au listing des prochains passages.
+
+Une fois configuré, depuis la Console web :
+- « Jarvis, quand passe le prochain bus ? » → prochains passages, tous arrêts
+  favoris fusionnés (ou un seul si tu en nommes un précis)
+
+**Confiance technique modérée** : l'API Tisséo est moins documentée dans ce
+que je connais que Google/Spotify — si la recherche d'arrêt ou les horaires
+échouent, le message d'erreur inclut la réponse brute de l'API pour
+corriger vite le nom d'un paramètre au besoin.
+
 > Voix personnalisée : le dossier `voice/` contient `jarvis-high.onnx` (Piper).
 > Pour l'utiliser, enregistrez-la dans votre instance Speaches puis pointez
 > `TTS_MODEL`/`TTS_VOICE` dessus dans `.env`.

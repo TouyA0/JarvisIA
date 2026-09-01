@@ -10,7 +10,7 @@ deux listes de schémas, et route chaque tool_use vers le bon exécuteur
 """
 from __future__ import annotations
 
-from brain.integrations import google_calendar, google_contacts, google_drive, google_gmail, jellyfin, spotify, store, zoho_mail
+from brain.integrations import google_calendar, google_contacts, google_drive, google_gmail, jellyfin, spotify, store, tisseo, zoho_mail
 
 BRAIN_TOOLS = [
     {
@@ -331,6 +331,20 @@ BRAIN_TOOLS = [
         "description": "Derniers films/séries/épisodes ajoutés à la bibliothèque Jellyfin. Utilise pour « qu'est-ce qu'il y a de nouveau sur Jellyfin ? ».",
         "input_schema": {"type": "object", "properties": {}},
     },
+    {
+        "name": "tisseo_next",
+        "description": (
+            "Prochains passages de bus/métro/tram pour les arrêts favoris enregistrés par "
+            "Monsieur (tous fusionnés, ou un seul si `stop` filtre par nom). Utilise pour "
+            "« quand passe le prochain bus ? », « le métro dans combien de temps ? »."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "stop": {"type": "string", "description": "Nom (ou fragment) de l'arrêt favori visé, si Monsieur en a plusieurs et en nomme un précis."},
+            },
+        },
+    },
 ]
 
 NAMES = {t["name"] for t in BRAIN_TOOLS}
@@ -420,6 +434,21 @@ def _format_jellyfin_sessions(sessions: list[dict]) -> str:
         title = s["title"] if not s.get("series") else f"{s['series']} — {s['title']}"
         state = "en pause" if s.get("paused") else "en lecture"
         lines.append(f"- {title} ({state}) — {s.get('user', '')} sur {s.get('device', '')}")
+    return "\n".join(lines)
+
+
+def _format_departures(departures: list[dict]) -> str:
+    if not departures:
+        return "Aucun passage trouvé, Monsieur."
+    if len(departures) == 1 and "error" in departures[0]:
+        return departures[0]["error"]
+    lines = []
+    for d in departures:
+        if "error" in d:
+            lines.append(f"- {d['stop']} : [erreur : {d['error']}]")
+            continue
+        when = f" dans {d['waiting']}" if d.get("waiting") else f" à {d.get('datetime', '?')}"
+        lines.append(f"- {d['stop']} — ligne {d.get('line', '?')} vers {d.get('destination', '?')}{when}")
     return "\n".join(lines)
 
 
@@ -617,5 +646,13 @@ def execute(name: str, args: dict):
             return "Aucun serveur Jellyfin connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
         items = jellyfin.recently_added()
         return _jellyfin_error(items) or _format_jellyfin_items(items)
+
+    if name == "tisseo_next":
+        if not tisseo.configured():
+            return "Tisséo n'est pas configuré, Monsieur — aucune clé API renseignée."
+        if not store.list_public("tisseo"):
+            return "Aucun arrêt favori enregistré — ajoute-en un depuis la Console (Intégrations), Monsieur."
+        departures = tisseo.next_departures(args.get("stop"))
+        return _format_departures(departures)
 
     return f"Outil brain inconnu : {name}"

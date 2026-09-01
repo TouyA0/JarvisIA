@@ -136,3 +136,28 @@ def spotify_status() -> dict:
     if not (client_id and client_secret):
         return {"configured": False, "client_id": None}
     return {"configured": True, "client_id": client_id}
+
+
+# ── Tisséo ───────────────────────────────────────────────────────────────
+# Une seule clé (pas de paire client_id/secret — l'API Tisséo authentifie
+# par clé simple) : gratuite, sans facturation, à la différence de Google
+# Maps évoqué puis écarté pour cette raison.
+def get_tisseo_api_key() -> str:
+    data = _load().get("tisseo", {})
+    return crypto.decrypt(data["api_key_enc"]) if data.get("api_key_enc") else ""
+
+
+def set_tisseo_api_key(api_key: str) -> None:
+    data = _load()
+    data["tisseo"] = {"api_key_enc": crypto.encrypt(api_key)}
+    _save(data)
+
+
+def clear_tisseo_api_key() -> None:
+    data = _load()
+    data.pop("tisseo", None)
+    _save(data)
+
+
+def tisseo_status() -> dict:
+    return {"configured": bool(get_tisseo_api_key())}

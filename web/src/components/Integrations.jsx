@@ -11,6 +11,7 @@ const TYPE_LABELS = {
   zoho_mail: "Zoho Mail",
   spotify: "Spotify",
   jellyfin: "Jellyfin",
+  tisseo: "Tisséo (arrêt favori)",
 };
 
 // Catalogue affiché à droite — google_calendar/google_drive/gmail/
@@ -402,6 +403,105 @@ function JellyfinConnect({ onConnect }) {
   );
 }
 
+function TisseoConnect({ settings, onSaveKey, onClearKey, onAddStop }) {
+  const [open, setOpen] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const [stop, setStop] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSaveKey() {
+    setError("");
+    setBusy(true);
+    try {
+      await onSaveKey(apiKey.trim());
+      setApiKey("");
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleAddStop() {
+    setError("");
+    setBusy(true);
+    try {
+      await onAddStop(stop.trim());
+      setStop("");
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ borderTop: "1px solid var(--stroke-soft)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+      >
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--faint)" }}>
+          Tisséo
+        </span>
+        <span style={{ fontSize: 11, color: "var(--cyan)" }}>{open ? "−" : "+"}</span>
+      </button>
+
+      <div style={{ fontSize: 11, color: settings.configured ? "var(--online)" : "var(--faint)" }}>
+        {settings.configured ? "Clé API configurée" : "Non configuré — aucune recherche d'arrêt possible tant que ça n'est pas rempli."}
+      </div>
+
+      {open && (
+        <>
+          <input placeholder="Clé API Tisséo" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} style={_inputStyle} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={handleSaveKey}
+              disabled={busy || !apiKey.trim()}
+              style={{
+                flex: 1, border: "1px solid var(--stroke)", borderRadius: 9, padding: "8px 0", fontSize: 12,
+                background: "var(--cyan-dim)", color: "var(--cyan)", cursor: "pointer", opacity: busy ? 0.6 : 1,
+              }}
+            >
+              Enregistrer la clé
+            </button>
+            {settings.configured && (
+              <button
+                onClick={onClearKey}
+                style={{ border: "1px solid var(--stroke-soft)", borderRadius: 9, padding: "8px 11px", fontSize: 12, background: "transparent", color: "var(--muted)", cursor: "pointer" }}
+              >
+                Effacer
+              </button>
+            )}
+          </div>
+
+          <div style={{ height: 1, background: "var(--stroke-soft)", margin: "4px 0" }} />
+
+          <input placeholder="Nom d'un arrêt (ex. Jean Jaurès)" value={stop} onChange={(e) => setStop(e.target.value)} style={_inputStyle} />
+          <button
+            onClick={handleAddStop}
+            disabled={busy || !stop.trim() || !settings.configured}
+            style={{
+              border: "1px solid var(--stroke)", borderRadius: 9, padding: "8px 0", fontSize: 12,
+              background: "var(--cyan-dim)", color: "var(--cyan)", cursor: "pointer", opacity: busy ? 0.6 : 1,
+            }}
+          >
+            Ajouter comme arrêt favori
+          </button>
+          {error && <div style={{ fontSize: 11, color: "#f87171" }}>{error}</div>}
+          <div style={{ fontSize: 11, color: "var(--faint)" }}>
+            Clé gratuite (voir README.md, section Tisséo). Plusieurs arrêts
+            favoris peuvent être ajoutés — ils apparaissent comme des cartes
+            séparées ci-contre, et sont fusionnés automatiquement au listing
+            des prochains passages.
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function CatalogRow({ entry, onConnect, busy, error }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -521,6 +621,12 @@ export default function Integrations({ onNavigate, focusEnabled }) {
             <ZohoAppSettings status={integrations.zohoSettings} onSave={integrations.saveZohoSettings} onClear={integrations.clearZohoSettings} />
             <SpotifyAppSettings status={integrations.spotifySettings} onSave={integrations.saveSpotifySettings} onClear={integrations.clearSpotifySettings} />
             <JellyfinConnect onConnect={integrations.connectJellyfin} />
+            <TisseoConnect
+              settings={integrations.tisseoSettings}
+              onSaveKey={integrations.saveTisseoSettings}
+              onClearKey={integrations.clearTisseoSettings}
+              onAddStop={integrations.connectTisseo}
+            />
           </div>
         </div>
       </div>
