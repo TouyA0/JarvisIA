@@ -17,19 +17,51 @@ const DURATION_MS = 5000;
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
   const nextId = useRef(0);
+  const timers = useRef(new Map());
 
   const dismiss = useCallback((id) => {
+    const timer = timers.current.get(id);
+    if (timer) {
+      clearTimeout(timer.timeoutId);
+      timers.current.delete(id);
+    }
     setToasts((list) => list.filter((t) => t.id !== id));
   }, []);
+
+  const arm = useCallback(
+    (id, ms) => {
+      const timeoutId = setTimeout(() => dismiss(id), ms);
+      timers.current.set(id, { timeoutId, remaining: ms, start: Date.now() });
+    },
+    [dismiss],
+  );
+
+  const pause = useCallback((id) => {
+    const timer = timers.current.get(id);
+    if (!timer) return;
+    clearTimeout(timer.timeoutId);
+    timer.remaining -= Date.now() - timer.start;
+  }, []);
+
+  const resume = useCallback(
+    (id) => {
+      const timer = timers.current.get(id);
+      if (!timer) return;
+      arm(id, Math.max(timer.remaining, 0));
+    },
+    [arm],
+  );
 
   const push = useCallback(
     (message, tone = "info") => {
       const id = ++nextId.current;
       setToasts((list) => [...list, { id, message, tone }]);
-      setTimeout(() => dismiss(id), DURATION_MS);
+      // Les erreurs restent affichées jusqu'à fermeture explicite : une
+      // lecture lente ne doit pas faire disparaître l'information critique.
+      if (tone !== "error") arm(id, DURATION_MS);
       return id;
     },
-    [dismiss],
+    [arm],
   );
 
   const api = useMemo(
@@ -46,7 +78,14 @@ export function ToastProvider({ children }) {
       {children}
       <div className="toasts" role="status" aria-live="polite">
         {toasts.map((t) => (
-          <div key={t.id} className={`toast toast--${t.tone}`}>
+          <div
+            key={t.id}
+            className={`toast toast--${t.tone}`}
+            onMouseEnter={() => pause(t.id)}
+            onMouseLeave={() => resume(t.id)}
+            onFocus={() => pause(t.id)}
+            onBlur={() => resume(t.id)}
+          >
             <Icon
               name={t.tone === "error" ? "alert" : t.tone === "success" ? "check" : "info"}
               size={16}
