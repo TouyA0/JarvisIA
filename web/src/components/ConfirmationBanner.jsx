@@ -1,3 +1,4 @@
+import Icon from "./ui/Icon.jsx";
 import { useConfirmations } from "../lib/useConfirmations.js";
 
 // Montée au niveau App.jsx (pas dans un panneau précis) : une confirmation
@@ -5,6 +6,11 @@ import { useConfirmations } from "../lib/useConfirmations.js";
 // quelle vue de la Console, elle doit rester visible partout. Miroir web de
 // la bulle Qt bloquante du HUD desktop (agents/desktop/ui/dialogs.py) —
 // voir brain/integrations/confirm.py pour le mécanisme côté brain.
+//
+// `role="alertdialog"` + `aria-live="assertive"` : contrairement aux
+// notifications ordinaires (Toast.jsx, en `polite`), celle-ci mérite
+// d'interrompre — un thread côté brain attend la réponse jusqu'à 90 s, et
+// sans réponse l'action est simplement abandonnée.
 export default function ConfirmationBanner() {
   const { pending, resolve } = useConfirmations();
 
@@ -14,54 +20,43 @@ export default function ConfirmationBanner() {
     <div
       style={{
         position: "fixed",
-        top: 16,
+        top: "var(--sp-4)",
         left: "50%",
         transform: "translateX(-50%)",
-        zIndex: 1000,
+        zIndex: 140,
         display: "flex",
         flexDirection: "column",
-        gap: 10,
+        gap: "var(--sp-2)",
         width: "min(520px, calc(100vw - 32px))",
       }}
+      role="alertdialog"
+      aria-live="assertive"
+      aria-label="Confirmation requise"
     >
       {pending.map((c) => (
         <div
           key={c.id}
+          className="card"
           style={{
-            background: "var(--bg-2)",
-            border: "1px solid var(--cyan)",
-            borderRadius: 14,
-            padding: "16px 18px",
-            boxShadow: "0 12px 40px -12px var(--glow)",
-            display: "flex",
-            flexDirection: "column",
-            gap: 12,
+            borderColor: "var(--cyan)",
+            boxShadow: "var(--shadow-md), 0 0 40px -20px var(--glow)",
+            animation: "fade-up var(--dur) var(--ease)",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--cyan)", boxShadow: "0 0 8px var(--cyan)", flex: "none" }} />
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--cyan)" }}>
+          <div className="row" style={{ gap: "var(--sp-2)" }}>
+            <span className="dot dot--cyan dot--pulse" aria-hidden="true" />
+            <span className="section-label" style={{ color: "var(--cyan)" }}>
               Confirmation requise
             </span>
           </div>
-          <div style={{ fontSize: 13, lineHeight: 1.5 }}>{c.summary}</div>
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-            <button
-              onClick={() => resolve(c.id, false)}
-              style={{
-                border: "1px solid var(--stroke-soft)", borderRadius: 9, padding: "8px 14px", fontSize: 12,
-                background: "transparent", color: "var(--muted)", cursor: "pointer",
-              }}
-            >
+          <p style={{ fontSize: "var(--text-base)", lineHeight: 1.5 }}>{c.summary}</p>
+          <div className="card-actions">
+            <button type="button" className="btn btn--ghost btn--sm" onClick={() => resolve(c.id, false)}>
+              <Icon name="x" size={15} />
               Refuser
             </button>
-            <button
-              onClick={() => resolve(c.id, true)}
-              style={{
-                border: "1px solid var(--stroke)", borderRadius: 9, padding: "8px 14px", fontSize: 12,
-                background: "var(--cyan-dim)", color: "var(--cyan)", cursor: "pointer", fontWeight: 600,
-              }}
-            >
+            <button type="button" className="btn btn--primary btn--sm" onClick={() => resolve(c.id, true)}>
+              <Icon name="check" size={15} />
               Confirmer
             </button>
           </div>

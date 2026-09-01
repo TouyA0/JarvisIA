@@ -123,3 +123,11 @@ SPOTIFY_REDIRECT_URI = os.getenv(
 # réalité locale (été/hiver), faisant rater ou déborder des événements en
 # bordure de journée.
 TIMEZONE = os.getenv("TIMEZONE", "Europe/Paris")
+
+# Météo (carte "weather", voir brain/weather.py) — mêmes valeurs par défaut
+# que agents/desktop/config.py, dupliquées ici volontairement : le brain ne
+# doit pas dépendre du package agent desktop (Windows-only par endroits)
+# pour un simple appel Open-Meteo.
+WEATHER_LAT = float(os.getenv("WEATHER_LAT", "43.6047"))
+WEATHER_LON = float(os.getenv("WEATHER_LON", "1.4442"))
+WEATHER_CITY = os.getenv("WEATHER_CITY", "Toulouse")

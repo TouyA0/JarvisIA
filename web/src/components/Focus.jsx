@@ -1,172 +1,234 @@
-import Frame from "./Frame.jsx";
+import { useState } from "react";
+import { ViewHeader } from "./AppShell.jsx";
+import Icon from "./ui/Icon.jsx";
+import Modal from "./ui/Modal.jsx";
+import StatusBadge from "./ui/StatusBadge.jsx";
+import { TextField } from "./ui/Field.jsx";
+import { useConfirm } from "./ui/Confirm.jsx";
+import { useToast } from "./ui/Toast.jsx";
 import { useFocusDevice } from "../lib/useFocusDevice.js";
-import { useIsMobile } from "../lib/useIsMobile.js";
 
-const dot = (color, size = 7) => ({
-  width: size,
-  height: size,
-  borderRadius: "50%",
-  background: color,
-  boxShadow: `0 0 8px ${color}`,
-  flex: "none",
-});
-
-function Topbar({ device }) {
-  const online = device?.status === "online";
-  return (
-    <div
-      style={{
-        height: 54,
-        flex: "none",
-        borderBottom: "1px solid var(--stroke-soft)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "0 22px",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-        <span style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 16 }}>
-          Focus · {device?.name || "…"}
-        </span>
-      </div>
-      <span style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11, color: online ? "var(--online)" : "var(--danger)", fontFamily: "var(--font-mono)" }}>
-        <span style={dot(online ? "var(--online)" : "var(--danger)")} />
-        {online ? "en ligne" : "hors ligne"}
-      </span>
-    </div>
-  );
-}
+// Traductions des noms d'outils tels que l'agent les journalise
+// (agents/desktop/tools/registry.py) — le journal affichait
+// « run_powershell » brut, ce qui ne dit rien de ce qui s'est passé.
+const TOOL_LABELS = {
+  take_screenshot: "Capture d'écran",
+  run_powershell: "Commande système",
+  open_url: "Ouverture d'une page",
+  type_text: "Saisie de texte",
+  press_keys: "Raccourci clavier",
+  mouse_click: "Clic souris",
+  read_screen: "Lecture de l'écran",
+  scroll_page: "Défilement",
+  get_browser_url: "Lecture de l'URL",
+  read_clipboard: "Lecture du presse-papiers",
+  search_file: "Recherche de fichier",
+  open_file: "Ouverture d'un fichier",
+  list_folder: "Listage d'un dossier",
+  read_file_content: "Lecture d'un fichier",
+};
 
 function formatTime(ts) {
-  return new Date(ts * 1000).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return new Date(ts * 1000).toLocaleTimeString("fr-FR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 }
 
-export default function Focus({ deviceId, onNavigate }) {
-  const { device, activityLog, screenshot, busy, error, capture, lock } = useFocusDevice(deviceId);
-  const isMobile = useIsMobile();
+export default function Focus({ deviceId, onBack }) {
+  const { device, activityLog, screenshot, busy, error, capture, lock, dispatch } = useFocusDevice(deviceId);
+  const confirm = useConfirm();
+  const toast = useToast();
+  const [urlOpen, setUrlOpen] = useState(false);
+  const [url, setUrl] = useState("");
+  const [zoomed, setZoomed] = useState(false);
 
-  function handleLock() {
-    if (window.confirm("Verrouiller cet appareil maintenant ?")) lock();
+  const online = device?.status === "online";
+
+  async function handleLock() {
+    const ok = await confirm({
+      title: "Verrouiller cet appareil ?",
+      message: `La session de « ${device?.name || "cet appareil"} » sera verrouillée immédiatement. Tout travail non enregistré reste ouvert, mais il faudra ressaisir le mot de passe.`,
+      confirmLabel: "Verrouiller",
+    });
+    if (!ok) return;
+    const result = await lock();
+    if (result !== null) toast.success("Appareil verrouillé.");
+  }
+
+  async function handleCapture() {
+    const shot = await capture();
+    if (shot) toast.success("Capture reçue.");
+  }
+
+  async function handleOpenUrl(e) {
+    e.preventDefault();
+    const target = url.trim();
+    if (!target) return;
+    const result = await dispatch("open_url", { url: target });
+    if (result !== null) {
+      toast.success("Page ouverte sur l'appareil.");
+      setUrl("");
+      setUrlOpen(false);
+    }
   }
 
   return (
-    <Frame active="focus" onNavigate={onNavigate} focusEnabled>
-      <Topbar device={device} />
-      <div style={{ flex: 1, display: "flex", flexDirection: isMobile ? "column" : "row", minHeight: 0, overflow: "auto" }}>
-        <div
-          style={{
-            flex: 1,
-            position: "relative",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 20,
-            background:
-              "radial-gradient(600px 500px at 50% 50%, var(--cyan-dim), transparent 64%)," +
-              "repeating-linear-gradient(0deg,var(--grid) 0 1px,transparent 1px 44px)," +
-              "repeating-linear-gradient(90deg,var(--grid) 0 1px,transparent 1px 44px)",
-            minWidth: 0,
-          }}
-        >
-          {screenshot ? (
-            <img
-              src={`data:image/jpeg;base64,${screenshot}`}
-              alt="Capture d'écran"
-              style={{ maxWidth: "70%", maxHeight: "70%", borderRadius: 12, border: "1px solid var(--stroke)", boxShadow: "0 0 60px -18px var(--glow)" }}
-            />
-          ) : (
-            <div
-              style={{
-                width: 236,
-                height: 160,
-                borderRadius: 16,
-                border: "1px solid var(--stroke)",
-                display: "grid",
-                placeItems: "center",
-                boxShadow: "0 0 60px -18px var(--glow), inset 0 0 40px -20px var(--glow)",
-              }}
-            >
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--faint)", textAlign: "center", lineHeight: 1.7 }}>
-                aucune capture pour l'instant
-              </span>
+    <>
+      <ViewHeader
+        title={device?.name || "Appareil"}
+        subtitle={online ? "Pilotage à distance" : "Appareil hors ligne — les actions sont indisponibles"}
+        onBack={onBack}
+        backLabel="Retour à la liste des appareils"
+        actions={
+          <StatusBadge tone={online ? "ok" : "danger"}>{online ? "en ligne" : "hors ligne"}</StatusBadge>
+        }
+      />
+
+      <div className="view-body">
+        <div className="view-main">
+          <div className="stack">
+            <div className="row row--wrap">
+              <button type="button" className="btn btn--accent" onClick={handleCapture} disabled={busy || !online}>
+                {busy ? <span className="spinner" aria-hidden="true" /> : <Icon name="camera" size={16} />}
+                Capturer l'écran
+              </button>
+              <button type="button" className="btn" onClick={() => setUrlOpen(true)} disabled={busy || !online}>
+                <Icon name="link" size={16} />
+                Ouvrir une page
+              </button>
+              <button type="button" className="btn btn--danger" onClick={handleLock} disabled={busy || !online}>
+                <Icon name="lock" size={16} />
+                Verrouiller
+              </button>
             </div>
-          )}
 
-          {error && (
-            <div style={{ color: "var(--danger)", fontSize: 12, fontFamily: "var(--font-mono)" }}>{error}</div>
-          )}
+            {error && (
+              <div className="alert alert--danger" role="alert">
+                <Icon name="alert" size={16} />
+                {error}
+              </div>
+            )}
 
-          <div style={{ display: "flex", gap: 12 }}>
-            <button
-              onClick={capture}
-              disabled={busy || device?.status !== "online"}
-              style={{
-                display: "flex", alignItems: "center", gap: 9,
-                border: "1px solid var(--stroke-soft)", borderRadius: 12, padding: "11px 15px",
-                fontSize: 13, background: "transparent", color: "var(--text)",
-                cursor: busy ? "default" : "pointer", opacity: device?.status === "online" ? 1 : 0.5,
-              }}
-            >
-              <span style={{ width: 11, height: 11, background: "var(--cyan)", transform: "rotate(45deg)", borderRadius: 2 }} />
-              Capturer
-            </button>
-            <button
-              onClick={handleLock}
-              disabled={busy || device?.status !== "online"}
-              style={{
-                display: "flex", alignItems: "center", gap: 9,
-                border: "1px solid var(--stroke-soft)", borderRadius: 12, padding: "11px 15px",
-                fontSize: 13, background: "transparent", color: "var(--text)",
-                cursor: busy ? "default" : "pointer", opacity: device?.status === "online" ? 1 : 0.5,
-              }}
-            >
-              <span style={{ width: 11, height: 11, border: "2px solid var(--cyan)", borderRadius: 3 }} />
-              Verrouiller
-            </button>
+            {screenshot ? (
+              <figure style={{ margin: 0 }}>
+                <button
+                  type="button"
+                  onClick={() => setZoomed(true)}
+                  style={{ display: "block", width: "100%", padding: 0, background: "none", border: "none" }}
+                  aria-label="Agrandir la capture"
+                >
+                  <img
+                    src={`data:image/jpeg;base64,${screenshot}`}
+                    alt={`Écran de ${device?.name || "l'appareil"}`}
+                    style={{
+                      width: "100%",
+                      borderRadius: "var(--r-lg)",
+                      border: "1px solid var(--line-strong)",
+                      boxShadow: "var(--shadow-md)",
+                    }}
+                  />
+                </button>
+                <figcaption className="hint" style={{ marginTop: "var(--sp-2)" }}>
+                  Cliquez sur l'image pour l'agrandir.
+                </figcaption>
+              </figure>
+            ) : (
+              <div
+                className="card"
+                style={{ alignItems: "center", justifyContent: "center", minHeight: 260, textAlign: "center" }}
+              >
+                <span className="empty-icon" aria-hidden="true">
+                  <Icon name="eye" size={24} />
+                </span>
+                <p className="hint" style={{ maxWidth: 340 }}>
+                  Aucune capture pour l'instant. « Capturer l'écran » demande une image à l'appareil et
+                  l'affiche ici.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
-        <div
-          style={{
-            width: isMobile ? "100%" : 298, flex: "none",
-            borderLeft: isMobile ? "none" : "1px solid var(--stroke-soft)",
-            borderTop: isMobile ? "1px solid var(--stroke-soft)" : "none",
-            background: "var(--bg-2)", padding: "22px 20px", display: "flex",
-            flexDirection: "column", gap: 18, overflow: "auto",
-          }}
-        >
-          <div>
-            <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--faint)", marginBottom: 12 }}>
-              Appareil
-            </div>
-            <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, lineHeight: 2, color: "var(--muted)" }}>
-              <div>type · <span style={{ color: "var(--text)" }}>{device?.device_type || "—"}</span></div>
-              <div>capacités · {device?.capabilities?.join(", ") || "—"}</div>
-              <div>appairé le · {device ? new Date(device.paired_at * 1000).toLocaleDateString("fr-FR") : "—"}</div>
-            </div>
-          </div>
+        <aside className="rail" aria-label="Détails de l'appareil">
+          <section className="stack stack--tight">
+            <h2 className="section-label">Appareil</h2>
+            <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "auto 1fr", gap: "var(--sp-2) var(--sp-3)", fontSize: "var(--text-sm)" }}>
+              <dt className="hint">Type</dt>
+              <dd style={{ margin: 0 }}>{device?.device_type || "—"}</dd>
+              <dt className="hint">Capacités</dt>
+              <dd style={{ margin: 0 }}>{device?.capabilities?.join(", ") || "—"}</dd>
+              <dt className="hint">Appairé le</dt>
+              <dd style={{ margin: 0 }}>
+                {device ? new Date(device.paired_at * 1000).toLocaleDateString("fr-FR") : "—"}
+              </dd>
+            </dl>
+          </section>
 
-          <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--faint)", marginBottom: 12 }}>
-              Journal
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, fontFamily: "var(--font-mono)", fontSize: 11, lineHeight: 1.4 }}>
-              {activityLog.length === 0 ? (
-                <span style={{ color: "var(--faint)" }}>Aucune activité pour l'instant.</span>
-              ) : (
-                activityLog.map((entry, i) => (
-                  <div key={i} style={{ display: "flex", gap: 9 }}>
-                    <span style={{ color: entry.ok ? "var(--cyan)" : "var(--danger)" }}>{formatTime(entry.ts)}</span>
-                    <span style={{ color: "var(--muted)" }}>{entry.tool}{entry.ok ? "" : ` — ${entry.error || "échec"}`}</span>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
+          <section className="stack stack--tight">
+            <h2 className="section-label">Journal d'activité</h2>
+            {activityLog.length === 0 ? (
+              <p className="hint">Rien encore. Chaque action envoyée à cet appareil s'inscrit ici.</p>
+            ) : (
+              <ul className="stack stack--tight" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+                {activityLog.map((entry, i) => (
+                  <li key={i} className="row" style={{ alignItems: "flex-start", gap: "var(--sp-2)" }}>
+                    <span className={`dot ${entry.ok ? "dot--ok" : "dot--danger"}`} style={{ marginTop: 6 }} aria-hidden="true" />
+                    <span style={{ fontSize: "var(--text-sm)" }}>
+                      {TOOL_LABELS[entry.tool] || entry.tool}
+                      {!entry.ok && (
+                        <span style={{ color: "var(--danger-text)" }}> — {entry.error || "échec"}</span>
+                      )}
+                      <br />
+                      <span className="hint" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>
+                        {formatTime(entry.ts)}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </aside>
       </div>
-    </Frame>
+
+      <Modal
+        open={urlOpen}
+        onClose={() => setUrlOpen(false)}
+        title="Ouvrir une page sur cet appareil"
+        description="La page s'ouvre dans le navigateur par défaut de l'appareil distant."
+        footer={
+          <>
+            <button type="button" className="btn btn--ghost" onClick={() => setUrlOpen(false)}>
+              Annuler
+            </button>
+            <button type="button" className="btn btn--primary" onClick={handleOpenUrl} disabled={busy || !url.trim()}>
+              Ouvrir
+            </button>
+          </>
+        }
+      >
+        <form onSubmit={handleOpenUrl}>
+          <TextField
+            label="Adresse"
+            placeholder="https://…"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            hint="Une adresse complète, protocole compris."
+          />
+        </form>
+      </Modal>
+
+      <Modal open={zoomed} onClose={() => setZoomed(false)} title="Capture d'écran" wide>
+        {screenshot && (
+          <img
+            src={`data:image/jpeg;base64,${screenshot}`}
+            alt={`Écran de ${device?.name || "l'appareil"}`}
+            style={{ width: "100%", borderRadius: "var(--r-md)" }}
+          />
+        )}
+      </Modal>
+    </>
   );
 }

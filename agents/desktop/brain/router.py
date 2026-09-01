@@ -50,6 +50,13 @@ PC_COMMAND_KEYWORDS = [
     # Gmail / Zoho Mail (voir brain/tools.py::gmail_* / zoho_*)
     "mail", "mails", "email", "emails", "e-mail", "e-mails", "gmail",
     "courriel", "courriels", "boîte mail", "boite mail", "brouillon", "zoho",
+    # Météo / diagnostics (voir brain/tools.py::weather_now / system_diagnostics)
+    # — nécessaire depuis la Console web : contrairement à la boucle vocale
+    # locale, elle ne passe jamais par router.handle_direct() (fast path
+    # sans LLM), donc sans ces mots-clés la question tomberait en
+    # conversation pure et le modèle inventerait une météo plausible.
+    "météo", "quel temps", "il fait beau", "va-t-il pleuvoir", "diagnostic",
+    "diagnostics", "le pc rame", "l'ordinateur rame", "comment va le pc",
 ]
 
 

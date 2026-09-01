@@ -86,14 +86,25 @@ un gain flou. Décide selon où vit réellement ton planning aujourd'hui.
 
 ---
 
-## 2. Système d'affichage riche — les « cartes »
+## 2. Système d'affichage riche — les « cartes » ✓ *(fait)*
 
 Le vrai chantier structurant derrière ta demande : donner à Jarvis un
 **format de réponse visuelle unique**, que chaque intégration/outil peut
 remplir, et que la web console (et dans une moindre mesure le HUD) sait
 rendre de façon cohérente — au lieu de réinventer un widget par feature.
 
-### 2.1 Protocole
+### 2.1 Protocole ✓ *(fait — `brain/cards.py`)*
+
+Implémenté avec un champ de plus que prévu (`subtitle`) et un `id`
+attribué par le brain. Deux chemins de sortie plutôt qu'un :
+`GET /api/cards` (les 30 dernières, pour repeupler l'écran après un
+rafraîchissement) et `WS /ws/cards`, qui **diffuse à toutes les
+Consoles ouvertes** — pas seulement à celle qui a posé la question.
+C'est ce qui permet de demander son agenda à voix haute au PC fixe et
+de le voir s'afficher sur l'écran d'à côté. Le même canal transporte
+les tours de conversation (`kind: "exchange"`), pour que le pupitre
+affiche aussi ce qui vient d'être dit ailleurs.
+
 
 Une réponse d'outil peut inclure, en plus du texte parlé, un objet `card` :
 
@@ -110,20 +121,36 @@ Transporté sur le même WebSocket brain ↔ agents ↔ web console qui existe
 déjà (`ROADMAP_MULTIDEVICE.md`). Le HUD desktop affiche un résumé compact +
 « ouvrir dans la console » ; la web console rend le composant React complet.
 
-### 2.2 Types de cartes à prévoir
+### 2.2 Types de cartes
+
+Quatorze types construits (`web/src/components/cards/renderers.jsx`) ; les
+émissions vivent dans `brain/tools.py` (+ `brain/core/agent.py` pour
+screenshot/file_preview, déclenchées par le résultat d'un outil PC plutôt
+que par un tool brain), à côté du texte que Claude et la voix continuent
+d'utiliser — la carte double l'information, elle ne la remplace pas.
+
 
 | Type | Contenu | Alimenté par |
 |------|---------|--------------|
-| `calendar_day` / `calendar_week` | liste d'événements, heure, lieu | I1/I2 |
-| `mail_list` / `mail_detail` | expéditeur, objet, aperçu, pièce jointe | I4/I5 |
-| `drive_file` / `drive_list` | icône type fichier, nom, date, lien | I3 |
-| `spotify_now_playing` | pochette, titre, artiste, barre de progression, contrôles | I6 |
-| `screenshot` | image capturée, zoomable | existant `tools/screen.py`, juste jamais **affiché**, seulement envoyé à Claude en interne |
-| `video_stream` | flux live (webcam ou partage d'écran) | §4 |
-| `confirmation` | HUD (`ui/dialogs.py`, bulle Qt) ✓ ; **web fait aussi** (`ConfirmationBanner.jsx` + `brain/integrations/confirm.py`, générique — pas juste Drive, réutilisable pour Gmail/Notion write plus tard) | `tools/safety.py` (desktop) / `confirm.py` (brain) |
-| `weather` | déjà affiché en HUD, à porter en carte web pour cohérence | `services/weather.py` |
-| `diagnostics` | CPU/RAM/réseau, déjà en HUD | `services/diagnostics.py` |
-| `file_preview` | PDF/image/texte résumé, aperçu | Drive + fichiers locaux |
+| `agenda` ✓ | événements du jour/de la semaine, heure, lieu | I1 |
+| `mail` / `mail_detail` ✓ | expéditeur, objet, aperçu ; corps complet en détail | I4/I5 |
+| `files` / `document` ✓ | nom + lien cliquable ; contenu lu en aperçu ; **écriture aussi cartée** (create/update/delete) | I3 |
+| `music` ✓ *(avec contrôles)* | pochette, titre, artiste, barre de progression, **boutons précédent/pause-lecture/suivant sur la carte elle-même** (`/api/tools/execute`, générique à tout type de carte) | I6 |
+| `screenshot` ✓ *(avec export)* | image capturée, cliquable pour l'agrandir, **copier/enregistrer** | `tools/screen.py`, affichée automatiquement dès qu'un outil PC renvoie une image |
+| `file_preview` ✓ | contenu d'un fichier local lu à distance (`read_file_content`), même mécanique que screenshot | `brain/core/agent.py` |
+| `video_stream` | flux live (webcam ou partage d'écran) — **seul point encore non commencé**, classé ▲▲▲ (plusieurs jours), volontairement laissé pour une session dédiée | §4 |
+| `confirmation` | HUD (`ui/dialogs.py`, bulle Qt) ✓ ; web ✓ (`ConfirmationBanner.jsx` + `brain/integrations/confirm.py`) — **reste un canal séparé du protocole `cards.py`, décision assumée** : le fusionner referait un mécanisme de sécurité déjà éprouvé pour un gain cosmétique | `tools/safety.py` (desktop) / `confirm.py` (brain) |
+| `transport` / `route` ✓ | prochains passages ; distance et durée de trajet | I11 / I12 |
+| `media` / `contacts` / `home` ✓ | titres Jellyfin, fiches contact, état des entités | I10 / I7 / I13 |
+| `weather` ✓ | température, description, vent — `brain/weather.py` (Open-Meteo, dupliqué du desktop pour ne pas en dépendre) | nouveau tool `weather_now` |
+| `diagnostics` ✓ | CPU/RAM/disque, coût API du mois — instantané à la demande, pas de polling continu comme le HUD | nouveau tool `system_diagnostics`, `brain/diagnostics.py` |
+
+**Rendu** : Hud.jsx (pupitre) et **Console.jsx** (fil de conversation) affichent
+désormais tous les deux les cartes — ce n'était vrai que pour le Hud
+jusqu'ici. **Historique réel** : chaque carte est aussi journalisée sur
+disque (`data/logs/cards-AAAA-MM.jsonl`, images retirées), consultable
+au-delà des 30 dernières via `GET /api/cards/history` et la nouvelle
+section "Historique des affichages" de l'écran Système.
 
 ### 2.3 Pourquoi c'est prioritaire
 
@@ -139,11 +166,11 @@ Aujourd'hui `tools/screen.py` capture une zone/l'écran et l'envoie à Claude
 en interne (vision), mais **l'image n'est jamais montrée** à l'utilisateur —
 seule la réponse texte de Claude apparaît dans le HUD.
 
-- **F-screenshot-1** ▲ — après une capture (Vision ciblée ou demande
+- **F-screenshot-1** ✓ *(fait)* — après une capture (Vision ciblée ou demande
   explicite « montre-moi une capture »), pousser une carte `screenshot` vers
   la web console (et une miniature cliquable dans le HUD) en plus de la
   réponse vocale.
-- **F-screenshot-2** ▲ — bouton « copier » / « enregistrer » sur la carte.
+- **F-screenshot-2** ▲ — bouton « copier » / « enregistrer » sur la carte (l'agrandissement au clic existe, pas encore l'export).
 - Ça règle directement ton exemple : « si je lui demande une capture
   d'écran faut qu'il puisse me l'afficher direct ».
 
@@ -186,9 +213,12 @@ Deux cas d'usage différents à ne pas confondre :
   interroge Drive + Gmail + Calendar en parallèle et retourne une carte
   mixte par source.
 - **Mode présentation / dashboard ambiant** — extension du « mode ambiant »
-  déjà noté en F29 (`ROADMAP.md`) : quand AFK, la web console peut afficher
-  agenda du jour + météo + lecture Spotify en cours en grand, écran
-  d'accueil façon Stark.
+  déjà noté en F29 (`ROADMAP.md`). Première marche posée : l'écran
+  d'accueil de la Console est le **pupitre** (`web/src/components/Hud.jsx`)
+  — réacteur, heure, mode en cours, appareils en ligne, et les cartes qui
+  s'y empilent. Reste à faire : un vrai mode plein écran sans navigation,
+  et un rafraîchissement autonome (agenda du jour affiché sans qu'on ait
+  rien demandé).
 - **Historique des cartes** — les cartes envoyées (mails lus, captures,
   événements consultés) restent consultables dans le panneau transmissions
   existant (F31), pas juste éphémères.
@@ -199,9 +229,9 @@ Deux cas d'usage différents à ne pas confondre :
 
 | Prio | Feature | Pourquoi | Effort |
 |------|---------|----------|--------|
-| ★1 | **Socle cartes (§2)** | Tout le reste en dépend ; sans lui chaque intégration réinvente son UI | ▲▲ |
+| ★1 | ~~**Socle cartes (§2)**~~ ✓ fait | Tout le reste en dépend ; sans lui chaque intégration réinvente son UI | ▲▲ |
 | ★2 | **I1/I2 — Agenda (Google Calendar ou Notion, un seul des deux)** | Utilité quotidienne immédiate, alimente aussi le briefing matinal F6 | ▲▲ |
-| ★3 | **F-screenshot-1 — Afficher les captures** | Gain immédiat, quasi gratuit vu que `screen.py` existe déjà | ▲ |
+| ★3 | ~~**F-screenshot-1 — Afficher les captures**~~ ✓ fait | Gain immédiat, quasi gratuit vu que `screen.py` existe déjà | ▲ |
 | ★4 | **I4/I5 — Mails (lecture seule d'abord)** | Deuxième besoin quotidien le plus cité par toi | ▲▲ |
 | ★5 | **I6 — Spotify** | Petit scope, très visible/satisfaisant (carte pochette + contrôle) | ▲▲ |
 

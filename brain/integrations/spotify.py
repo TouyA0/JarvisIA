@@ -75,11 +75,17 @@ def now_playing(account_hint: str | None = None) -> dict:
     item = data.get("item")
     if not item:
         return {"playing": False}
+    album = item.get("album", {})
+    images = album.get("images") or []
     return {
         "playing": data.get("is_playing", False),
         "track": item.get("name", ""),
         "artists": ", ".join(a["name"] for a in item.get("artists", [])),
-        "album": item.get("album", {}).get("name", ""),
+        "album": album.get("name", ""),
+        # Pochette : inutile à l'oral, mais c'est tout l'intérêt de la carte
+        # « morceau en cours » côté Console (ROADMAP_DISPLAY_INTEGRATIONS.md
+        # §2.2). Spotify trie ses images de la plus grande à la plus petite.
+        "cover": images[0].get("url", "") if images else "",
         "progress_ms": data.get("progress_ms", 0),
         "duration_ms": item.get("duration_ms", 0),
     }

@@ -63,9 +63,18 @@ export function useFocusDevice(deviceId) {
   const capture = useCallback(async () => {
     const result = await dispatch("take_screenshot");
     if (result?.image_b64) setScreenshot(result.image_b64);
+    // Rendu à l'appelant : la vue Focus a besoin de savoir si la capture a
+    // abouti pour confirmer (ou non) à l'écran — `dispatch` renvoie null
+    // en cas d'échec, et `error` porte déjà le détail.
+    return result?.image_b64 || null;
   }, [dispatch]);
 
-  const lock = useCallback(() => dispatch("run_powershell", { command: "rundll32.exe user32.dll,LockWorkStation" }), [dispatch]);
+  const lock = useCallback(
+    () => dispatch("run_powershell", { command: "rundll32.exe user32.dll,LockWorkStation" }),
+    [dispatch],
+  );
 
-  return { device, activityLog, screenshot, busy, error, capture, lock };
+  // `dispatch` est exposé pour les actions ponctuelles qui n'ont pas mérité
+  // leur propre helper (ouvrir une page, par exemple).
+  return { device, activityLog, screenshot, busy, error, capture, lock, dispatch };
 }

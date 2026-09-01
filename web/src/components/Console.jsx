@@ -1,367 +1,265 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ViewHeader } from "./AppShell.jsx";
+import CardView from "./cards/CardView.jsx";
+import Icon from "./ui/Icon.jsx";
+import StatusBadge from "./ui/StatusBadge.jsx";
 import { authFetch } from "../lib/consoleAuth.js";
+import { useCardFeed } from "../lib/useCardFeed.js";
 import { useChat } from "../lib/useChat.js";
 import { useVoice } from "../lib/useVoice.js";
-import Frame from "./Frame.jsx";
 
-const dot = (color, size = 7) => ({
-  width: size,
-  height: size,
-  borderRadius: "50%",
-  background: color,
-  boxShadow: `0 0 8px ${color}`,
-  flex: "none",
-});
+const SUGGESTIONS = [
+  "Quel temps fait-il ?",
+  "Résume-moi mes prochains rendez-vous",
+  "Mémorise que je préfère les réponses courtes",
+  "Fais une capture d'écran du PC fixe",
+];
 
-function Topbar({ status, voice }) {
-  const online = status === "online";
-  return (
-    <div
-      style={{
-        height: 54,
-        flex: "none",
-        borderBottom: "1px solid var(--stroke-soft)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "0 22px",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-        <span style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 16 }}>
-          Console
-        </span>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--faint)" }}>
-          {online ? "en écoute" : status === "connecting" ? "connexion…" : "hors ligne"}
-        </span>
-        {voice.armed && (
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--cyan)" }}>
-            · écoute vocale active
-          </span>
-        )}
-      </div>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 16,
-          fontFamily: "var(--font-mono)",
-          fontSize: 11,
-          color: "var(--muted)",
-        }}
-      >
-        <span
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 7,
-            color: online ? "var(--online)" : "var(--danger)",
-          }}
-        >
-          <span style={dot(online ? "var(--online)" : "var(--danger)")} />
-          {online ? "cerveau actif" : "cerveau injoignable"}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function Hub({ question, answer, activity, busy }) {
-  return (
-    <div
-      style={{
-        flex: 1,
-        position: "relative",
-        background:
-          "radial-gradient(560px 440px at 50% 44%, var(--cyan-dim), transparent 62%)," +
-          "repeating-linear-gradient(0deg,var(--grid) 0 1px,transparent 1px 44px)," +
-          "repeating-linear-gradient(90deg,var(--grid) 0 1px,transparent 1px 44px)",
-        minWidth: 0,
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          top: 18,
-          left: 20,
-          right: 20,
-          fontFamily: "var(--font-mono)",
-          fontSize: 10,
-          color: "var(--faint)",
-          letterSpacing: ".14em",
-          whiteSpace: "nowrap",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-        }}
-      >
-        INTENTION · {question || "—"}
-      </div>
-
-      <div
-        style={{
-          position: "absolute",
-          top: "44%",
-          left: "50%",
-          transform: "translate(-50%,-50%)",
-          width: 250,
-          height: 250,
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            width: 250,
-            height: 250,
-            margin: "-125px 0 0 -125px",
-            borderRadius: "50%",
-            border: "1px dashed var(--stroke-soft)",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            width: 214,
-            height: 214,
-            margin: "-107px 0 0 -107px",
-            borderRadius: "50%",
-            border: "1px solid var(--stroke-soft)",
-            borderTopColor: "var(--cyan)",
-            animation: `spin ${busy ? "2.5s" : "14s"} linear infinite`,
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            width: 120,
-            height: 120,
-            margin: "-60px 0 0 -60px",
-            borderRadius: "50%",
-            background: "radial-gradient(circle,var(--glow),transparent 68%)",
-            animation: "breathe 5s ease-in-out infinite",
-          }}
-        />
-        <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", textAlign: "center" }}>
-          <div
-            style={{
-              fontFamily: "var(--font-display)",
-              fontWeight: 600,
-              fontSize: 14,
-              letterSpacing: ".3em",
-              color: "var(--cyan)",
-              textShadow: "0 0 18px var(--glow)",
-            }}
-          >
-            JARVIS
-          </div>
-          <div style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--muted)", letterSpacing: ".12em", marginTop: 5 }}>
-            PC FIXE · CERVEAU
-          </div>
-        </div>
-      </div>
-
-      {(answer || busy) && (
-        <div
-          style={{
-            position: "absolute",
-            bottom: 90,
-            left: "50%",
-            transform: "translateX(-50%)",
-            maxWidth: 560,
-            textAlign: "center",
-            padding: "14px 20px",
-            borderRadius: 14,
-            border: "1px solid var(--stroke-soft)",
-            background: "var(--bg-2)",
-            fontSize: 14,
-            lineHeight: 1.5,
-            color: "var(--text)",
-          }}
-        >
-          {answer || (
-            <span style={{ color: "var(--faint)", fontFamily: activity ? "var(--font-mono)" : undefined }}>
-              {activity || "Réflexion…"}
-            </span>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-const VOICE_STATUS_LABELS = {
-  idle: "Micro — cliquer pour armer l'écoute vocale",
-  listening: "Écoute vocale active — dites « Jarvis »",
-  listening_command: "Jarvis vous écoute…",
-  transcribing: "Transcription…",
-  speaking: "Jarvis parle…",
+const VOICE_LABELS = {
+  idle: "Micro éteint",
+  listening: "En écoute — dites « Jarvis »",
+  listening_command: "Jarvis vous écoute",
+  transcribing: "Transcription en cours",
+  speaking: "Jarvis parle",
 };
 
-// Visible en clair (pas juste un tooltip au survol) : ce que le micro
-// entend réellement, pour répondre à « je sais pas s'il comprend ce que
-// je dis » — sans ça, la fenêtre d'écoute armée est une boîte noire.
-function VoiceStatusBar({ voice }) {
-  if (!voice.armed) return null;
+function formatTime(ts) {
+  if (!ts) return "";
+  return new Date(ts).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+}
+
+function dayKey(ts) {
+  if (!ts) return "";
+  return new Date(ts).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+}
+
+/** Une bulle. Le rôle est écrit (« Vous » / « Jarvis »), pas seulement
+ * suggéré par l'alignement et la couleur — c'est ce qui rend le fil
+ * lisible pour un lecteur d'écran comme en diagonale. */
+function Message({ message, activity }) {
+  const isUser = message.role === "user";
+  const empty = !message.text;
   return (
-    <div
-      style={{
-        padding: "10px 22px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 12,
-        fontSize: 12,
-        background: "var(--bg-2)",
-        borderTop: "1px solid var(--stroke-soft)",
-      }}
-    >
-      <span
-        style={{
-          fontFamily: "var(--font-mono)",
-          color: voice.wakeWordHeard ? "var(--online)" : "var(--cyan)",
-          fontWeight: 600,
-        }}
-      >
-        {voice.wakeWordHeard ? "✓ « Jarvis » détecté" : VOICE_STATUS_LABELS[voice.status]}
-        {voice.status === "listening" && (
-          <span style={{ color: "var(--faint)", fontWeight: 400 }}>
-            {" "}· score {voice.lastScore.toFixed(2)}
-          </span>
+    <article className={`msg msg--${isUser ? "user" : "jarvis"}`}>
+      <div className="msg-meta">
+        <span>{isUser ? "Vous" : "Jarvis"}</span>
+        {message.at && <span>· {formatTime(message.at)}</span>}
+        {!isUser && message.source && !message.pending && <span>· {message.source}</span>}
+      </div>
+      <div className="msg-bubble">
+        {empty ? (
+          activity ? (
+            <span className="msg-activity">
+              <span className="spinner" aria-hidden="true" />
+              {activity}
+            </span>
+          ) : (
+            <span className="thinking" role="status" aria-label="Jarvis réfléchit">
+              <span />
+              <span />
+              <span />
+            </span>
+          )
+        ) : (
+          message.text
         )}
-      </span>
-      {voice.lastTranscript && (
-        <span
-          style={{
-            color: "var(--faint)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            maxWidth: "60%",
-          }}
-        >
-          entendu : « {voice.lastTranscript} »
-        </span>
-      )}
-    </div>
+        {!empty && message.pending && activity && (
+          <div className="msg-activity" style={{ marginTop: "var(--sp-2)" }}>
+            <span className="spinner" aria-hidden="true" />
+            {activity}
+          </div>
+        )}
+      </div>
+    </article>
   );
 }
 
-function CommandBar({ status, busy, onSend, voice }) {
-  const [value, setValue] = useState("");
+function Thread({ messages, activity }) {
+  const scrollerRef = useRef(null);
+  const stickToBottomRef = useRef(true);
 
-  function submit() {
-    if (!value.trim() || busy) return;
-    onSend(value);
-    setValue("");
+  // On ne recolle en bas que si Monsieur y était déjà : sinon relire un
+  // vieux message pendant que Jarvis répond devient impossible, la vue
+  // sautant à chaque phrase reçue.
+  function onScroll() {
+    const el = scrollerRef.current;
+    if (!el) return;
+    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   }
 
+  useLayoutEffect(() => {
+    const el = scrollerRef.current;
+    if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
+  }, [messages, activity]);
+
+  let lastDay = "";
+
   return (
-    <div
-      style={{
-        height: 62,
-        flex: "none",
-        borderTop: "1px solid var(--stroke-soft)",
-        display: "flex",
-        alignItems: "center",
-        gap: 14,
-        padding: "0 22px",
-        background: "var(--bg-2)",
-      }}
-    >
-      <button
-        onClick={() => (voice.armed ? voice.disarm() : voice.arm())}
-        title={VOICE_STATUS_LABELS[voice.status] || "Micro"}
-        style={{
-          position: "relative",
-          width: 40,
-          height: 40,
-          borderRadius: "50%",
-          background: voice.armed ? "var(--cyan)" : "var(--cyan-dim)",
-          border: "1px solid var(--stroke)",
-          display: "flex",
-          alignItems: "flex-end",
-          justifyContent: "center",
-          gap: 3,
-          paddingBottom: 13,
-          boxShadow: "0 0 22px -6px var(--glow)",
-          flex: "none",
-          cursor: "pointer",
-          animation: voice.status === "listening_command" || voice.status === "transcribing"
-            ? "breathe 1.2s ease-in-out infinite" : "none",
-        }}
-      >
-        {[0, 1, 2].map((i) => (
-          <span
-            key={i}
-            style={{
-              width: 3,
-              height: [12, 17, 10][i],
-              borderRadius: 3,
-              background: voice.armed ? "var(--bg)" : "var(--cyan)",
-            }}
-          />
-        ))}
-      </button>
-
-      <input
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && submit()}
-        placeholder="Parlez, ou tapez une commande…"
-        disabled={status !== "online"}
-        style={{
-          flex: 1,
-          background: "transparent",
-          border: "none",
-          outline: "none",
-          color: "var(--text)",
-          fontFamily: "var(--font-body)",
-          fontSize: 14,
-        }}
-      />
-
-      <button
-        onClick={submit}
-        disabled={status !== "online" || busy || !value.trim()}
-        style={{
-          width: 40,
-          height: 40,
-          borderRadius: 11,
-          background: "var(--cyan)",
-          border: "none",
-          display: "grid",
-          placeItems: "center",
-          boxShadow: "0 0 24px -6px var(--glow)",
-          flex: "none",
-          cursor: "pointer",
-          opacity: status === "online" && !busy && value.trim() ? 1 : 0.4,
-        }}
-        aria-label="Envoyer"
-      >
-        <div
-          style={{
-            width: 0,
-            height: 0,
-            borderLeft: "9px solid var(--bg)",
-            borderTop: "6px solid transparent",
-            borderBottom: "6px solid transparent",
-            marginLeft: 3,
-          }}
-        />
-      </button>
+    <div className="thread" ref={scrollerRef} onScroll={onScroll}>
+      <div className="thread-inner">
+        {messages.map((m) => {
+          const day = dayKey(m.at);
+          const separator = day && day !== lastDay ? day : null;
+          lastDay = day || lastDay;
+          return (
+            <div key={m.id} style={{ display: "contents" }}>
+              {separator && <div className="thread-sep">{separator}</div>}
+              <Message message={m} activity={m.pending ? activity : ""} />
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-export default function Console({ onNavigate, focusEnabled }) {
-  const { status, question, answer, activity, busy, ask } = useChat();
+/** Ce que le micro entend, en clair. Sans ce bandeau, l'écoute armée est
+ * une boîte noire : impossible de savoir si le mot d'éveil est passé, si
+ * la commande a été comprise, ou si le micro capte simplement du bruit. */
+function VoiceBar({ voice }) {
+  if (!voice.armed) return null;
+  const heard = voice.wakeWordHeard;
+  return (
+    <div className="voicebar" role="status" aria-live="polite">
+      <span className={`voicebar-state${heard ? " voicebar-state--heard" : ""}`}>
+        <span className={`dot ${heard ? "dot--ok" : "dot--cyan"} dot--pulse`} aria-hidden="true" />
+        {heard ? "« Jarvis » détecté" : VOICE_LABELS[voice.status]}
+      </span>
+
+      {voice.status === "listening" && (
+        <>
+          <span className="meter" aria-hidden="true">
+            <span className="meter-fill" style={{ width: `${Math.min(100, voice.lastScore * 100)}%` }} />
+          </span>
+          <span className="voicebar-heard">niveau {voice.lastScore.toFixed(2)}</span>
+        </>
+      )}
+
+      <span className="spacer" />
+      {voice.lastTranscript && <span className="voicebar-heard">entendu : « {voice.lastTranscript} »</span>}
+    </div>
+  );
+}
+
+function Composer({ online, busy, onSend, voice }) {
+  const [value, setValue] = useState("");
+  const inputRef = useRef(null);
+
+  // Hauteur ajustée aussi au montage : sans ça, un `rows={1}` mesuré par
+  // le navigateur avant le chargement de la police laisse une ligne
+  // trop basse, et le texte saisi est rogné verticalement.
+  useLayoutEffect(() => autoSize(inputRef.current), []);
+
+  // Le champ grandit avec le texte : une commande de trois lignes ne doit
+  // pas se saisir à l'aveugle dans une ligne unique qui défile.
+  function autoSize(el) {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }
+
+  function submit() {
+    const text = value.trim();
+    if (!text || busy || !online) return;
+    if (onSend(text)) {
+      setValue("");
+      requestAnimationFrame(() => autoSize(inputRef.current));
+    }
+  }
+
+  const micState = voice.armed
+    ? voice.status === "listening_command" || voice.status === "transcribing"
+      ? "mic--active"
+      : "mic--armed"
+    : "";
+
+  return (
+    <>
+      <div className="composer">
+        <button
+          type="button"
+          className={`mic ${micState}`.trim()}
+          onClick={() => (voice.armed ? voice.disarm() : voice.arm())}
+          aria-pressed={voice.armed}
+          aria-label={voice.armed ? "Couper l'écoute vocale" : "Activer l'écoute vocale"}
+          title={voice.armed ? VOICE_LABELS[voice.status] : "Activer l'écoute vocale"}
+        >
+          <Icon name="mic" size={20} />
+        </button>
+
+        <div className="composer-inner">
+          <label className="sr-only" htmlFor="composer-input">
+            Message pour Jarvis
+          </label>
+          <textarea
+            id="composer-input"
+            ref={inputRef}
+            className="composer-input"
+            rows={1}
+            value={value}
+            placeholder={online ? "Écrivez à Jarvis, ou parlez…" : "Brain injoignable"}
+            disabled={!online}
+            onChange={(e) => {
+              setValue(e.target.value);
+              autoSize(e.target);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                submit();
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="composer-send"
+            onClick={submit}
+            disabled={!online || busy || !value.trim()}
+            aria-label="Envoyer"
+          >
+            <Icon name="send" size={17} />
+          </button>
+        </div>
+      </div>
+      <div className="composer-hint">
+        <span className="kbd">Entrée</span> pour envoyer · <span className="kbd">Maj</span>+
+        <span className="kbd">Entrée</span> pour aller à la ligne
+      </div>
+    </>
+  );
+}
+
+/** Bandeau de cartes au-dessus du fil — auparavant réservé au pupitre
+ * (Hud.jsx). Sans ça, quelqu'un qui vit dans la vue Conversation ne
+ * voyait jamais l'agenda/les mails/la capture d'écran en carte, seulement
+ * en texte — voir docs/ROADMAP_DISPLAY_INTEGRATIONS.md §2, item resté
+ * ouvert : « le rendu riche n'existe que dans le Hud ». */
+function CardStrip({ cards, dismiss, clearAll }) {
+  if (cards.length === 0) return null;
+  return (
+    <section className="hud-deck hud-deck--strip" aria-label="Affichages de Jarvis">
+      <div className="hud-deck-head">
+        <h2 className="section-label">Affichage</h2>
+        <button type="button" className="btn btn--ghost btn--sm" onClick={clearAll}>
+          <Icon name="x" size={15} />
+          Tout effacer
+        </button>
+      </div>
+      <div className="hud-deck-grid">
+        {cards.map((card) => (
+          <CardView key={card.id} card={card} onDismiss={dismiss} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export default function Console() {
+  const { status, messages, activity, busy, historyLoaded, ask, clear } = useChat();
+  const { cards, dismiss, clearAll } = useCardFeed();
   const lastWasVoiceRef = useRef(false);
   const wasBusyRef = useRef(false);
+  const lastAnswerRef = useRef("");
 
   // Déclaration de fonction (hoistée) : peut référencer `voice` avant sa
   // ligne `const` ci-dessous, tant qu'elle n'est appelée qu'après coup
@@ -375,43 +273,85 @@ export default function Console({ onNavigate, focusEnabled }) {
 
   const voice = useVoice({ onCommand: handleVoiceCommand });
 
+  // Garde sous la main le texte complet de la dernière réponse : c'est lui
+  // qu'on envoie à la synthèse vocale une fois le tour terminé.
+  const lastJarvis = [...messages].reverse().find((m) => m.role === "jarvis");
+  lastAnswerRef.current = lastJarvis?.text || "";
+
   // Un tour vient de se terminer (busy: true → false) : si la question
-  // venait de la voix, on synthétise et on lit la réponse, puis on
-  // reprend l'écoute — sinon on reprend directement (une réponse à une
-  // question tapée ne doit pas se mettre à parler toute seule).
+  // venait de la voix, on lit la réponse à voix haute puis on reprend
+  // l'écoute — sinon on reprend directement (une réponse à une question
+  // tapée ne doit pas se mettre à parler toute seule).
   useEffect(() => {
-    if (wasBusyRef.current && !busy) {
-      if (lastWasVoiceRef.current) {
-        lastWasVoiceRef.current = false;
-        speakAnswer(answer, voice);
-      }
+    if (wasBusyRef.current && !busy && lastWasVoiceRef.current) {
+      lastWasVoiceRef.current = false;
+      speakAnswer(lastAnswerRef.current, voice);
     }
     wasBusyRef.current = busy;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [busy]);
 
+  const online = status === "online";
+  const empty = messages.length === 0;
+
   return (
-    <Frame active="console" onNavigate={onNavigate} focusEnabled={focusEnabled}>
-      <Topbar status={status} voice={voice} />
-      <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
-        <Hub question={question} answer={answer} activity={activity} busy={busy} />
+    <>
+      <ViewHeader
+        title="Conversation"
+        subtitle={
+          voice.armed ? "Écoute vocale active" : online ? "Prêt — écrivez ou parlez" : "Le brain ne répond pas"
+        }
+        actions={
+          <>
+            <StatusBadge tone={online ? "ok" : status === "connecting" ? "cyan" : "danger"} pulse={!online}>
+              {online ? "en ligne" : status === "connecting" ? "connexion…" : "hors ligne"}
+            </StatusBadge>
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm"
+              onClick={clear}
+              disabled={empty}
+              title="Vide l'affichage — le journal du brain n'est pas effacé"
+            >
+              <Icon name="refresh" size={16} />
+              Effacer l'affichage
+            </button>
+          </>
+        }
+      />
+
+      <div className="chat">
+        <CardStrip cards={cards} dismiss={dismiss} clearAll={clearAll} />
+        {empty && historyLoaded ? (
+          <div className="chat-welcome">
+            <h2>Bonsoir, Monsieur.</h2>
+            <p>
+              Posez une question, donnez un ordre à un appareil, ou activez le micro et dites
+              « Jarvis ». La conversation est conservée d'une session à l'autre.
+            </p>
+            <div className="suggestions">
+              {SUGGESTIONS.map((s) => (
+                <button key={s} type="button" className="suggestion" onClick={() => ask(s)} disabled={!online}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <Thread messages={messages} activity={activity} />
+        )}
+
+        {voice.error && (
+          <div className="alert alert--danger" style={{ margin: "0 var(--sp-6) var(--sp-2)" }} role="alert">
+            <Icon name="alert" size={16} />
+            {voice.error}
+          </div>
+        )}
+
+        <VoiceBar voice={voice} />
+        <Composer online={online} busy={busy} onSend={ask} voice={voice} />
       </div>
-      {voice.error && (
-        <div
-          style={{
-            padding: "8px 22px",
-            fontSize: 12,
-            color: "var(--danger)",
-            background: "var(--bg-2)",
-            borderTop: "1px solid var(--stroke-soft)",
-          }}
-        >
-          {voice.error}
-        </div>
-      )}
-      <VoiceStatusBar voice={voice} />
-      <CommandBar status={status} busy={busy} onSend={ask} voice={voice} />
-    </Frame>
+    </>
   );
 }
 

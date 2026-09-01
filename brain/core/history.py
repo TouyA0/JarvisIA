@@ -17,6 +17,16 @@ def remember_exchange(question: str, answer: str, source: str = "") -> None:
     except Exception:
         pass
 
+    # Diffusion vers les Consoles ouvertes. Point de passage unique de tous
+    # les tours de conversation, quelle que soit leur origine (Console web,
+    # boucle vocale du PC fixe) : c'est ce qui permet à un écran resté
+    # allumé d'afficher ce qui vient d'être demandé à voix haute ailleurs.
+    try:
+        from brain import cards
+        cards.exchange(question, answer, source)
+    except Exception:
+        pass
+
 
 def recent_text_history() -> list:
     """Historique récent réduit aux messages texte simples (les blocs outils

@@ -10,7 +10,15 @@ deux listes de schémas, et route chaque tool_use vers le bon exécuteur
 """
 from __future__ import annotations
 
+from brain import cards, config, diagnostics, weather
 from brain.integrations import google_calendar, google_contacts, google_drive, google_gmail, home_assistant, jellyfin, ors, spotify, store, tisseo, zoho_mail
+
+# Chaque outil qui rapporte de la donnée structurée émet, en plus du texte
+# destiné à la voix, une **carte** que la Console affiche (voir brain/cards.py
+# et docs/ROADMAP_DISPLAY_INTEGRATIONS.md §2). Le texte reste la source de
+# vérité pour Claude et pour la synthèse vocale : la carte ne le remplace pas,
+# elle le double à l'écran.
+_RANGE_TITLES = {"today": "Aujourd'hui", "tomorrow": "Demain", "week": "Cette semaine"}
 
 BRAIN_TOOLS = [
     {
@@ -435,6 +443,16 @@ BRAIN_TOOLS = [
         "description": "Compte les appareils en ligne/hors ligne sur le réseau (entités device_tracker Home Assistant — routeur, UniFi, etc.). Utilise pour « combien d'appareils en ligne ? », « y a-t-il des appareils inconnus connectés ? ». Requête globale, pas de nom d'entité à donner (différent de ha_state).",
         "input_schema": {"type": "object", "properties": {}},
     },
+    {
+        "name": "weather_now",
+        "description": "Météo actuelle à Toulouse (ou la ville configurée en .env). Utilise pour « quel temps fait-il ? », « il fait combien dehors ? ».",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "system_diagnostics",
+        "description": "État du PC qui héberge Jarvis : CPU, RAM, disque, coût API du mois. Utilise pour « comment va le PC ? », « l'ordinateur rame ? », « combien ça m'a coûté ce mois-ci ? ».",
+        "input_schema": {"type": "object", "properties": {}},
+    },
 ]
 
 NAMES = {t["name"] for t in BRAIN_TOOLS}
@@ -442,6 +460,26 @@ NAMES = {t["name"] for t in BRAIN_TOOLS}
 
 def to_claude_tools() -> list:
     return [dict(t) for t in BRAIN_TOOLS]
+
+
+def _plural(count: int, word: str) -> str:
+    """Sous-titre de carte : « 3 événements », « 1 fichier ». Uniquement
+    cosmétique — le texte lu à voix haute ne passe pas par ici."""
+    return f"{count} {word}" + ("s" if count > 1 else "")
+
+
+def _music_actions(playing: bool) -> list[dict]:
+    """Boutons de la carte "music" — appellent /api/tools/execute (voir
+    server.py::execute_tool), donc directement spotify_control sans repasser
+    par Claude. `playing` détermine si on propose pause ou reprise."""
+    pause_action = {"action": "pause"} if playing else {"action": "resume"}
+    pause_label = "Pause" if playing else "Lecture"
+    pause_icon = "pause" if playing else "play"
+    return [
+        {"label": "Précédent", "icon": "skip-prev", "tool": "spotify_control", "args": {"action": "previous"}},
+        {"label": pause_label, "icon": pause_icon, "tool": "spotify_control", "args": pause_action},
+        {"label": "Suivant", "icon": "skip-next", "tool": "spotify_control", "args": {"action": "next"}},
+    ]
 
 
 def _format_events(events: list[dict]) -> str:
@@ -566,8 +604,12 @@ def execute(name: str, args: dict):
             return "Google Calendar n'est pas configuré, Monsieur — aucun compte connecté."
         if not store.list_public("google_calendar"):
             return "Aucun compte Google connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
-        time_min, time_max = google_calendar.range_for(args.get("range", "today"))
+        period = args.get("range", "today")
+        time_min, time_max = google_calendar.range_for(period)
         events = google_calendar.list_events(time_min, time_max)
+        cards.emit("agenda", _RANGE_TITLES.get(period, "Agenda"),
+                   {"events": events, "range": period},
+                   subtitle=_plural(len(events), "événement"))
         return _format_events(events)
 
     if name == "drive_search":
@@ -576,6 +618,8 @@ def execute(name: str, args: dict):
         if not store.list_public("google_drive"):
             return "Aucun compte Google Drive connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
         files = google_drive.search(args.get("query") or None)
+        cards.emit("files", args.get("query") or "Fichiers récents", {"files": files},
+                   subtitle="Drive · " + _plural(len(files), "fichier"))
         return _format_files(files)
 
     if name == "drive_read":
@@ -588,6 +632,10 @@ def execute(name: str, args: dict):
         if "error" in result:
             return result["error"]
         text = result["text"]
+        cards.emit("document", result["name"],
+                   {"text": text, "mime_type": result["mime_type"],
+                    "truncated": result["truncated"]},
+                   subtitle="Google Drive")
         if result["truncated"]:
             text += f"\n\n[… contenu tronqué, {result['name']} est plus long que ce qui a été lu ici]"
         return f"— {result['name']} ({result['mime_type']}) —\n{text}"
@@ -598,6 +646,9 @@ def execute(name: str, args: dict):
         result = google_drive.create_file(args.get("name", ""), args.get("content", ""), args.get("account"))
         if "error" in result:
             return result["error"]
+        cards.emit("document", result["name"],
+                   {"text": args.get("content", ""), "mime_type": "text/plain", "truncated": False},
+                   subtitle="Créé sur Drive")
         return f"Créé : {result['name']}" + (f" — {result['link']}" if result.get("link") else "")
 
     if name == "drive_update":
@@ -606,6 +657,9 @@ def execute(name: str, args: dict):
         result = google_drive.update_file(args["id"], args.get("content", ""))
         if "error" in result:
             return result["error"]
+        cards.emit("document", result["name"],
+                   {"text": args.get("content", ""), "mime_type": "text/plain", "truncated": False},
+                   subtitle="Modifié sur Drive")
         return f"Contenu remplacé : {result['name']}"
 
     if name == "drive_delete":
@@ -614,6 +668,8 @@ def execute(name: str, args: dict):
         result = google_drive.trash_file(args["id"])
         if "error" in result:
             return result["error"]
+        cards.emit("document", result["name"], {"text": "Mis à la corbeille.", "mime_type": "", "truncated": False},
+                   subtitle="Corbeille Drive · récupérable ~30 jours")
         return f"Mis à la corbeille : {result['name']} (récupérable ~30 jours depuis Drive)."
 
     if name == "gmail_search":
@@ -622,6 +678,9 @@ def execute(name: str, args: dict):
         if not store.list_public("gmail"):
             return "Aucun compte Gmail connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
         messages = google_gmail.search(args.get("query") or None)
+        cards.emit("mail", args.get("query") or "Derniers mails",
+                   {"messages": messages, "service": "Gmail"},
+                   subtitle="Gmail · " + _plural(len(messages), "message"))
         return _format_messages(messages)
 
     if name == "gmail_read":
@@ -634,6 +693,10 @@ def execute(name: str, args: dict):
         if "error" in result:
             return result["error"]
         text = result["text"]
+        cards.emit("mail_detail", result["subject"] or "(sans objet)",
+                   {"from": result["from"], "to": result.get("to", ""),
+                    "date": result.get("date", ""), "text": text, "service": "Gmail"},
+                   subtitle="De " + result["from"])
         if result["truncated"]:
             text += "\n\n[… contenu tronqué, le mail est plus long que ce qui a été lu ici]"
         return f"De : {result['from']}\nÀ : {result['to']}\nSujet : {result['subject']}\nDate : {result['date']}\n\n{text}"
@@ -664,6 +727,9 @@ def execute(name: str, args: dict):
         if not store.list_public("zoho_mail"):
             return "Aucun compte Zoho Mail connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
         messages = zoho_mail.search(args.get("query") or None)
+        cards.emit("mail", args.get("query") or "Derniers mails",
+                   {"messages": messages, "service": "Zoho Mail"},
+                   subtitle="Zoho Mail · " + _plural(len(messages), "message"))
         return _format_messages(messages)
 
     if name == "zoho_read":
@@ -676,6 +742,10 @@ def execute(name: str, args: dict):
         if "error" in result:
             return result["error"]
         text = result["text"]
+        cards.emit("mail_detail", result["subject"] or "(sans objet)",
+                   {"from": result["from"], "to": result.get("to", ""),
+                    "date": result.get("date", ""), "text": text, "service": "Zoho Mail"},
+                   subtitle="De " + result["from"])
         if result["truncated"]:
             text += "\n\n[… contenu tronqué, le mail est plus long que ce qui a été lu ici]"
         return f"De : {result['from']}\nSujet : {result['subject']}\nDate : {result['date']}\n\n{text}"
@@ -697,6 +767,8 @@ def execute(name: str, args: dict):
         if "track" not in result:
             return "Rien ne joue actuellement, Monsieur."
         state = "en lecture" if result["playing"] else "en pause"
+        cards.emit("music", result["track"], result, subtitle=result["artists"],
+                   actions=_music_actions(result["playing"]))
         return f"{result['track']} — {result['artists']} ({result['album']}), {state}."
 
     if name == "spotify_play":
@@ -705,6 +777,9 @@ def execute(name: str, args: dict):
         result = spotify.play(args.get("query", ""))
         if "error" in result:
             return result["error"]
+        cards.emit("music", result["name"],
+                   {"track": result["name"], "artists": "", "playing": True},
+                   subtitle="Lecture lancée · " + result["type"], actions=_music_actions(True))
         return f"Lecture lancée : {result['name']} ({result['type']})."
 
     if name == "spotify_control":
@@ -729,13 +804,19 @@ def execute(name: str, args: dict):
         if not store.list_public("google_contacts"):
             return "Aucun compte Google Contacts connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
         contacts = google_contacts.search(args.get("query", ""))
+        cards.emit("contacts", args.get("query", "") or "Contacts", {"contacts": contacts},
+                   subtitle=_plural(len(contacts), "contact"))
         return _format_contacts(contacts)
 
     if name == "jellyfin_search":
         if not store.list_public("jellyfin"):
             return "Aucun serveur Jellyfin connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
         items = jellyfin.search(args.get("query", ""))
-        return _jellyfin_error(items) or _format_jellyfin_items(items)
+        error = _jellyfin_error(items)
+        if not error:
+            cards.emit("media", args.get("query", "") or "Médiathèque", {"items": items},
+                       subtitle="Jellyfin · " + _plural(len(items), "titre"))
+        return error or _format_jellyfin_items(items)
 
     if name == "jellyfin_now_playing":
         if not store.list_public("jellyfin"):
@@ -747,13 +828,21 @@ def execute(name: str, args: dict):
         if not store.list_public("jellyfin"):
             return "Aucun serveur Jellyfin connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
         items = jellyfin.continue_watching()
-        return _jellyfin_error(items) or _format_jellyfin_items(items)
+        error = _jellyfin_error(items)
+        if not error:
+            cards.emit("media", "Reprendre la lecture", {"items": items},
+                       subtitle="Jellyfin · " + _plural(len(items), "titre"))
+        return error or _format_jellyfin_items(items)
 
     if name == "jellyfin_recently_added":
         if not store.list_public("jellyfin"):
             return "Aucun serveur Jellyfin connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
         items = jellyfin.recently_added()
-        return _jellyfin_error(items) or _format_jellyfin_items(items)
+        error = _jellyfin_error(items)
+        if not error:
+            cards.emit("media", "Ajouts récents", {"items": items},
+                       subtitle="Jellyfin · " + _plural(len(items), "titre"))
+        return error or _format_jellyfin_items(items)
 
     if name == "tisseo_next":
         if not tisseo.configured():
@@ -761,6 +850,9 @@ def execute(name: str, args: dict):
         if not store.list_public("tisseo"):
             return "Aucun arrêt favori enregistré — ajoute-en un depuis la Console (Intégrations), Monsieur."
         departures = tisseo.next_departures(args.get("stop"))
+        if not (departures and "error" in departures[0]):
+            cards.emit("transport", args.get("stop") or "Prochains passages",
+                       {"departures": departures}, subtitle="Tisséo")
         return _format_departures(departures)
 
     if name == "directions":
@@ -772,6 +864,9 @@ def execute(name: str, args: dict):
         hours = result["duration_min"] // 60
         minutes = result["duration_min"] % 60
         duration = f"{hours} h {minutes:02d}" if hours else f"{minutes} min"
+        cards.emit("route", f"{result['origin']} → {result['destination']}",
+                   dict(result, duration_label=duration),
+                   subtitle=f"{result['distance_km']} km · {duration}")
         return (
             f"{result['distance_km']} km, environ {duration} en {result['mode']}, "
             f"de {result['origin']} à {result['destination']}."
@@ -781,12 +876,18 @@ def execute(name: str, args: dict):
         if not store.list_public("home_assistant"):
             return "Aucune instance Home Assistant connectée — ajoute-en une depuis la Console (Intégrations), Monsieur."
         entities = home_assistant.get_state(args.get("entity", ""))
+        if not (entities and "error" in entities[0]):
+            cards.emit("home", args.get("entity", "") or "Maison", {"entities": entities},
+                       subtitle="Home Assistant")
         return _format_ha_entities(entities)
 
     if name == "ha_list_all":
         if not store.list_public("home_assistant"):
             return "Aucune instance Home Assistant connectée — ajoute-en une depuis la Console (Intégrations), Monsieur."
         entities = home_assistant.list_all(domain=args.get("domain"))
+        if not (entities and "error" in entities[0]):
+            cards.emit("home", args.get("domain") or "Toute la maison", {"entities": entities},
+                       subtitle="Home Assistant · " + _plural(len(entities), "entité"))
         return _format_ha_entities(entities, limit_note=True)
 
     if name == "ha_control":
@@ -817,5 +918,23 @@ def execute(name: str, args: dict):
         if online:
             lines.append("En ligne : " + ", ".join(online))
         return "\n".join(lines)
+
+    if name == "weather_now":
+        w = weather.get()
+        if not w or w["temp"] is None:
+            return "Les données météo ne sont pas disponibles pour l'instant, Monsieur."
+        desc = weather.description(w["code"])
+        cards.emit("weather", f"{round(w['temp'])}°C", {
+            "temp": w["temp"], "description": desc, "wind": w["wind"], "city": config.WEATHER_CITY,
+        }, subtitle=desc.capitalize())
+        return f"Il fait {round(w['temp'])} degrés à {config.WEATHER_CITY}, {desc}, Monsieur."
+
+    if name == "system_diagnostics":
+        d = diagnostics.snapshot()
+        cards.emit("diagnostics", "État du système", d, subtitle=f"CPU {d['cpu']}% · RAM {d['mem']}%")
+        return (
+            f"CPU à {d['cpu']}%, RAM à {d['mem']}%, disque à {d['disk']}%. "
+            f"{d['month_calls']} appels API ce mois-ci, {d['month_cost_usd'] * 0.92:.2f} euros, Monsieur."
+        )
 
     return f"Outil brain inconnu : {name}"

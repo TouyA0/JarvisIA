@@ -19,7 +19,7 @@ import asyncio
 import time
 from typing import Callable, Optional
 
-from brain import config, state, tools as brain_tools
+from brain import cards, config, state, tools as brain_tools
 from brain.clients import get_anthropic
 from brain.core import history, prompts, usage
 from brain.devices import registry
@@ -29,6 +29,27 @@ from brain.devices import registry
 # on_activity du HUD desktop (agents/desktop/brain/agent.py), transposé
 # au web sous forme de message chat.status. Peut rester None.
 on_activity: Optional[Callable[[str], None]] = None
+
+
+def _device_name(device_id: str) -> str:
+    device = registry.get(device_id)
+    return device.name if device else "Capture d'écran"
+
+
+_UNTRUSTED_START = "----- DÉBUT DONNÉES NON FIABLES -----\n"
+_UNTRUSTED_END = "\n----- FIN DONNÉES NON FIABLES -----"
+
+
+def _strip_untrusted_wrapper(text: str) -> str:
+    """read_file_content encadre son résultat via
+    agents/desktop/tools/safety.py::wrap_untrusted (anti-injection, adressé
+    à Claude) — inutile et bruyant à l'écran sur la carte "file_preview",
+    on retire juste l'habillage, jamais le contenu lui-même."""
+    start = text.find(_UNTRUSTED_START)
+    end = text.find(_UNTRUSTED_END)
+    if start != -1 and end != -1 and end > start:
+        return text[start + len(_UNTRUSTED_START):end]
+    return text
 
 
 def _notify(activity: str) -> None:
@@ -77,9 +98,14 @@ async def _dispatch_tool(device_id: str, name: str, args: dict) -> dict:
     return result.result or {}
 
 
-async def ask_with_tools(question: str, device_id: str) -> str | None:
+async def ask_with_tools(question: str, device_id: str | None) -> str | None:
     """Boucle d'agent complète, outils exécutés à distance. Retourne la
-    réponse finale, ou None seulement si le brain n'a pas de clé API."""
+    réponse finale, ou None seulement si le brain n'a pas de clé API.
+
+    `device_id` peut être None : aucun appareil n'est connecté, mais les
+    outils « natifs brain » (agenda, mails, Drive, itinéraires…) n'en ont
+    pas besoin. Dans ce cas les outils de pilotage PC ne sont simplement
+    pas proposés à Claude, plutôt que de refuser la question entière."""
     client = get_anthropic()
     if not client:
         print("[Claude] Clé API manquante — vérifiez ANTHROPIC_API_KEY dans .env")
@@ -95,8 +121,10 @@ async def ask_with_tools(question: str, device_id: str) -> str | None:
     # Outils pilotage PC (dispatchés sur l'appareil) + outils natifs brain
     # (comptes externes, ex : calendar_events) — un seul appel Claude voit
     # les deux, la boucle tool_use ci-dessous route chaque appel vers le
-    # bon exécuteur selon son nom (brain_tools.NAMES).
-    claude_tools = to_claude_tools(cached=False) + brain_tools.to_claude_tools()
+    # bon exécuteur selon son nom (brain_tools.NAMES). Sans appareil
+    # connecté, seuls les seconds sont proposés.
+    pc_tools = to_claude_tools(cached=False) if device_id else []
+    claude_tools = pc_tools + brain_tools.to_claude_tools()
     if claude_tools:
         claude_tools[-1]["cache_control"] = {"type": "ephemeral"}
     static_prompt, dynamic_prompt = prompts.get_system_prompt()
@@ -170,9 +198,34 @@ async def ask_with_tools(question: str, device_id: str) -> str | None:
                 if block.name in brain_tools.NAMES:
                     print(f"[Outil brain] {block.name}({block.input})")
                     result = await asyncio.to_thread(brain_tools.execute, block.name, block.input)
+                elif not device_id:
+                    result = {"text": "Aucun appareil connecté pour exécuter ça, Monsieur."}
                 else:
                     print(f"[Outil réseau] {block.name}({block.input}) → {device_id}")
                     result = await _dispatch_tool(device_id, block.name, block.input)
+                    # Une capture partait jusqu'ici uniquement vers Claude,
+                    # pour analyse — Monsieur ne la voyait jamais, alors
+                    # qu'il demandait parfois explicitement à la voir
+                    # (ROADMAP_DISPLAY_INTEGRATIONS.md §3). Elle devient une
+                    # carte, affichée dans la Console.
+                    if isinstance(result, dict) and result.get("image_b64"):
+                        cards.emit(
+                            "screenshot",
+                            _device_name(device_id),
+                            {"image_b64": result["image_b64"],
+                             "media_type": result.get("media_type", "image/jpeg")},
+                            subtitle="Capture à distance",
+                        )
+                    # Même logique pour un fichier local lu à distance —
+                    # jusqu'ici seul Claude voyait le contenu, jamais affiché
+                    # (ROADMAP_DISPLAY_INTEGRATIONS.md §2.2, "file_preview").
+                    elif block.name == "read_file_content" and isinstance(result, str) and result:
+                        cards.emit(
+                            "file_preview",
+                            block.input.get("path", "Fichier"),
+                            {"text": _strip_untrusted_wrapper(result)},
+                            subtitle=_device_name(device_id),
+                        )
                 tool_call_count += 1
 
                 tool_results.append({

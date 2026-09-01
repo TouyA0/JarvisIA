@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import time
 from typing import Any, Callable
 
 from fastapi import FastAPI, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
@@ -32,8 +33,13 @@ from agents.protocol.messages import (
     RegisterAck,
     parse_message,
 )
-from brain import activity, config, device_store, pairing, routines, speech
+from brain import activity, cards, config, device_store, pairing, routines, speech
+from brain import tools as brain_tools
 from brain.core import agent as pc_agent
+from brain.core import convlog
+from brain.core import memory as core_memory
+from brain.core import modes as core_modes
+from brain.core import usage as core_usage
 from brain.core.chat import ask_stream
 from brain.devices import Device, registry
 from brain.integrations import confirm as integrations_confirm
@@ -640,6 +646,196 @@ async def synthesize_speech(body: dict) -> Response:
     return Response(content=audio, media_type="audio/mpeg")
 
 
+# ── Système : mémoire, modes, consommation, journal ──────────────────────────
+# Ces quatre choses existaient depuis longtemps côté brain (data/memory.json,
+# data/modes.json, data/usage.json, data/logs/) mais n'étaient visibles que
+# sur le HUD Qt du PC fixe. La Console web les expose maintenant aussi : sans
+# ça, impossible de savoir depuis un téléphone ce que Jarvis retient de vous,
+# dans quel mode il est, ni ce que l'API a coûté ce mois-ci.
+
+
+@app.post("/api/tools/execute")
+async def execute_tool(body: dict) -> dict:
+    """Exécute un outil brain directement, sans passer par Claude — pour
+    les boutons d'action posés sur une carte (pause/suivant sur la carte
+    Spotify, etc., voir card.actions dans brain/cards.py). Réutilise
+    brain_tools.execute() telle quelle : les mêmes garde-fous s'appliquent
+    (confirmation humaine pour une action sensible), c'est le même code que
+    la boucle d'agent appelle pour un tool_use de Claude, juste sans LLM au
+    milieu — un bouton n'a pas besoin d'un aller-retour Claude pour dire
+    "mets en pause"."""
+    tool = body.get("tool", "")
+    if tool not in brain_tools.NAMES:
+        raise HTTPException(400, f"outil inconnu ou non actionnable depuis une carte : {tool!r}")
+    result = await asyncio.to_thread(brain_tools.execute, tool, body.get("args") or {})
+    return {"text": result if isinstance(result, str) else result.get("text", "")}
+
+
+@app.get("/api/cards")
+async def list_cards(limit: int = 30) -> list[dict]:
+    """Cartes récentes — ce que Jarvis a affiché dernièrement (agenda,
+    mails, capture d'écran…). Sert à repeupler le pupitre après un
+    rafraîchissement de page ; le flux temps réel passe par /ws/cards."""
+    return cards.recent(max(1, min(limit, 30)))
+
+
+@app.get("/api/cards/history")
+async def cards_history(limit: int = 100) -> list[dict]:
+    """Cartes passées, au-delà des 30 dernières gardées en mémoire —
+    relit le journal disque (voir cards.py::history), survit à un
+    redémarrage du brain. Les captures d'écran y perdent leur image
+    (jamais écrite sur disque), le reste de la donnée est intact."""
+    return cards.history(max(1, min(limit, 200)))
+
+
+@app.delete("/api/cards")
+async def clear_cards() -> dict:
+    cards.clear()
+    return {"ok": True}
+
+
+@app.websocket("/ws/cards")
+async def ws_cards(websocket: WebSocket) -> None:
+    """Diffusion des cartes et des tours de conversation vers TOUTES les
+    Consoles ouvertes, quelle que soit l'origine de la demande.
+
+    Canal distinct de /ws/chat, volontairement : /ws/chat est un dialogue
+    (une question, ses réponses, pour ce client-là), celui-ci est une
+    diffusion. C'est ce qui permet de poser une question à voix haute au
+    PC fixe et de voir l'écran d'à côté afficher la réponse."""
+    await websocket.accept()
+    if config.CONSOLE_PASSWORD and websocket.query_params.get("token") != config.CONSOLE_PASSWORD:
+        await websocket.close(code=4401)
+        return
+    queue = cards.subscribe()
+    # Ce canal est à sens unique : sans lecture en parallèle, une Console
+    # fermée ne serait détectée qu'au prochain envoi — et resterait
+    # abonnée d'ici là. Avec un onglet rouvert dix fois dans la journée,
+    # les abonnés fantômes s'accumulent pour la durée de vie du process.
+    closed = asyncio.create_task(websocket.receive_text())
+    try:
+        while True:
+            nxt = asyncio.create_task(queue.get())
+            done, _ = await asyncio.wait({nxt, closed}, return_when=asyncio.FIRST_COMPLETED)
+            if closed in done:
+                nxt.cancel()
+                break
+            await websocket.send_json(nxt.result())
+    except WebSocketDisconnect:
+        pass
+    finally:
+        closed.cancel()
+        cards.unsubscribe(queue)
+
+
+@app.get("/api/conversations")
+async def list_conversations(limit: int = 40) -> list[dict]:
+    """Derniers échanges journalisés — la Console s'en sert pour retrouver
+    la conversation après un rafraîchissement de page (avant, tout
+    disparaissait à chaque F5, seule la dernière réponse restait à
+    l'écran)."""
+    return convlog.recent(max(1, min(limit, 200)))
+
+
+@app.get("/api/memory")
+async def get_memory() -> dict:
+    data = core_memory.load()
+    return {"facts": data.get("facts", []), "last_updated": data.get("last_updated", "")}
+
+
+@app.post("/api/memory")
+async def add_memory_fact(body: dict) -> dict:
+    """Ajout manuel d'un fait. Passe par le même `clean_fact` que la
+    mémorisation vocale : un fait ajouté ici doit obéir aux mêmes règles
+    (longueur, mots bannis) que ceux extraits automatiquement, sinon la
+    Console devient une porte dérobée pour polluer le prompt système."""
+    fact = core_memory.clean_fact((body.get("fact") or "").strip())
+    if not fact:
+        raise HTTPException(400, "fait vide, trop long (80 caractères max) ou non retenu")
+    data = core_memory.load()
+    if fact in data.get("facts", []):
+        return {"ok": True, "fact": fact, "added": False}
+    data.setdefault("facts", []).append(fact)
+    data["last_updated"] = str(time.time())
+    core_memory.save(data)
+    return {"ok": True, "fact": fact, "added": True}
+
+
+@app.put("/api/memory/{index}")
+async def update_memory_fact(index: int, body: dict) -> dict:
+    """Corriger un fait sans le perdre. Sans ça, rectifier une faute de
+    frappe obligeait à supprimer puis retaper — et à retrouver la
+    formulation exacte de mémoire."""
+    fact = core_memory.clean_fact((body.get("fact") or "").strip())
+    if not fact:
+        raise HTTPException(400, "fait vide, trop long (80 caractères max) ou non retenu")
+    data = core_memory.load()
+    facts = data.get("facts", [])
+    if index < 0 or index >= len(facts):
+        raise HTTPException(404, "fait inconnu")
+    facts[index] = fact
+    data["last_updated"] = str(time.time())
+    core_memory.save(data)
+    return {"ok": True, "fact": fact}
+
+
+@app.delete("/api/memory/{index}")
+async def delete_memory_fact(index: int) -> dict:
+    data = core_memory.load()
+    facts = data.get("facts", [])
+    if index < 0 or index >= len(facts):
+        raise HTTPException(404, "fait inconnu")
+    removed = facts.pop(index)
+    data["last_updated"] = str(time.time())
+    core_memory.save(data)
+    return {"ok": True, "removed": removed}
+
+
+@app.get("/api/modes")
+async def list_modes() -> dict:
+    """Modes contextuels + celui qui est actif. Le prompt système complet
+    de chaque mode n'est pas renvoyé : c'est du texte long, sans intérêt
+    pour l'affichage, et ça alourdirait un poll."""
+    data = core_modes.load()
+    return {
+        "modes": [
+            {
+                "id": m["id"],
+                "name": m.get("name", m["id"]),
+                "description": m.get("description", ""),
+                "response_style": m.get("response_style", ""),
+                "notification_level": m.get("notification_level", ""),
+                "focus_topics": m.get("focus_topics", []),
+            }
+            for m in data.get("modes", [])
+        ],
+        "current": core_modes.get_current(),
+    }
+
+
+@app.post("/api/modes/current")
+async def set_current_mode(body: dict) -> dict:
+    mode_id = (body.get("mode_id") or "").strip()
+    activated = core_modes.set_mode(mode_id, source="console")
+    if not activated:
+        raise HTTPException(404, "mode inconnu")
+    return {"ok": True, "mode": {"id": activated["id"], "name": activated.get("name", activated["id"])}}
+
+
+@app.get("/api/usage")
+async def get_usage() -> dict:
+    """Consommation de l'API Claude : mois en cours, dernier appel, et
+    l'historique mensuel pour situer la tendance."""
+    summary = core_usage.summary()
+    raw = core_usage.snapshot()
+    return {
+        **summary,
+        "current": raw.get("current", {}),
+        "last_call": raw.get("last_call", {}),
+        "history": raw.get("history", [])[-12:],
+    }
+
+
 @app.websocket("/ws/chat")
 async def ws_chat(websocket: WebSocket) -> None:
     """Chat texte — utilisé par la Console web (Phase 2) et, depuis la
@@ -664,14 +860,12 @@ async def ws_chat(websocket: WebSocket) -> None:
                 continue
 
             if is_pc_command(question):
+                # `device_id` peut rester None : beaucoup de questions
+                # aiguillées ici ne concernent aucune machine (agenda,
+                # mails, itinéraire — brain/tools.py). Refuser tout tant
+                # qu'aucun agent n'est connecté rendait la Console
+                # inutilisable seule, alors que le brain sait répondre.
                 device_id = registry.pick_default_device()
-                if not device_id:
-                    await websocket.send_json({
-                        "type": "chat.phrase",
-                        "text": "Aucun appareil disponible pour exécuter ça, Monsieur.",
-                    })
-                    await websocket.send_json({"type": "chat.done", "source": "brain-agent"})
-                    continue
 
                 async def _send_status(text: str) -> None:
                     try:

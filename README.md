@@ -187,13 +187,14 @@ place une fois, ~5 min :
    (ou la valeur de `GOOGLE_REDIRECT_URI` si tu l'as changée) — un seul URI
    pour tous les services Google, le brain route en interne selon lequel a
    été demandé.
-4. Ouvre la Console web → **Intégrations** → déplie **Paramètres Google** en
-   bas à droite → colle le *Client ID* et le *Client Secret* → **Enregistrer**.
+4. Ouvre la Console web → **Intégrations** → sur la carte d'un service
+   Google, bouton **Paramètres Google** → colle le *Client ID* et le
+   *Client Secret* → **Enregistrer**.
    (Alternative équivalente : les mettre dans `.env` —
    `GOOGLE_CLIENT_ID=...` / `GOOGLE_CLIENT_SECRET=...` — et redémarrer le
    brain ; le réglage saisi dans la Console reste prioritaire si les deux
    existent.)
-5. Toujours dans **Intégrations** → **Connecter** sous Google Calendar,
+5. Toujours dans **Intégrations** → **Connecter** sur la carte Google Calendar,
    Google Drive, Gmail et/ou Google Contacts → choisis le compte Google →
    accepte. Répète
    pour chaque compte et chaque service à connecter — tout se passe depuis
@@ -252,10 +253,11 @@ Zoho**) :
 2. Dans *Authorized Redirect URIs*, colle exactement
    `http://127.0.0.1:8420/api/integrations/zoho/callback` (ou la valeur de
    `ZOHO_REDIRECT_URI` si changée).
-3. Ouvre la Console web → **Intégrations** → déplie **Paramètres Zoho** →
-   colle *Client ID*, *Client Secret*, choisis la **région** correspondant à
-   ton compte → **Enregistrer**.
-4. **Connecter** sous Zoho Mail → connecte-toi à ton compte Zoho → accepte.
+3. Ouvre la Console web → **Intégrations** → carte **Zoho Mail** →
+   **Paramètres Zoho** → colle *Client ID*, *Client Secret*, choisis la
+   **région** correspondant à ton compte → **Enregistrer**.
+4. **Connecter** sur la carte Zoho Mail → connecte-toi à ton compte Zoho →
+   accepte.
 
 Une fois connecté, depuis la Console web :
 - « Jarvis, j'ai des mails sur Zoho ? », « résume le mail de X » → recherche puis lecture
@@ -290,8 +292,8 @@ Fournisseur distinct, identifiants séparés (panneau **Intégrations**, bloc
    **Web API**. Accepte les conditions → **Save**.
 3. Sur la page de l'app créée → **Settings** → *Client ID* visible
    directement, *Client secret* derrière **View client secret**.
-4. Console web → **Intégrations** → déplie **Paramètres Spotify** → colle
-   les deux → **Enregistrer** → **Connecter** sous Spotify.
+4. Console web → **Intégrations** → carte **Spotify** → **Paramètres
+   Spotify** → colle les deux → **Enregistrer** → **Connecter**.
 
 Une fois connecté, depuis la Console web :
 - « Jarvis, c'est quoi ce titre ? » / « qu'est-ce qui joue ? » → lecture en cours
@@ -313,7 +315,8 @@ clé API. Panneau **Intégrations** → bloc **Jellyfin** :
 1. Dans ton tableau de bord Jellyfin (en tant qu'admin) → **Tableau de
    bord** → **Clés API** → **+** → nomme-la (« Jarvis » par ex.) → copie la
    clé générée.
-2. Console web → Intégrations → déplie **Jellyfin** → renseigne l'URL du
+2. Console web → Intégrations → carte **Jellyfin** → **Connecter** →
+   renseigne l'URL du
    serveur (ex. `http://192.168.1.50:8096`, l'adresse locale suffit si le
    brain tourne sur le même réseau), colle la clé API, et — si ton serveur
    a plusieurs comptes utilisateurs — précise le nom de celui à utiliser
@@ -339,9 +342,9 @@ Gratuit, sans facturation (contrairement à Google Maps, envisagé puis
    la demande n'est pas filtrée : la clé est fournie gratuitement, l'email
    sert juste à établir un contact côté Tisséo. Documentation développeur
    complète sur le [portail Open Data de Toulouse Métropole](https://data.toulouse-metropole.fr/explore/dataset/api-temps-reel-tisseo/).
-2. Console web → Intégrations → déplie **Tisséo** → colle la clé API →
-   **Enregistrer la clé**.
-3. Toujours dans ce bloc, saisis le nom d'un arrêt (ex. « Jean Jaurès ») →
+2. Console web → Intégrations → carte **Tisséo** → **Configurer** → colle
+   la clé API → **Enregistrer la clé**.
+3. Toujours dans ce dialogue, saisis le nom d'un arrêt (ex. « Jean Jaurès ») →
    **Ajouter comme arrêt favori**. Répète pour chaque arrêt à suivre
    (domicile, travail…) — ils apparaissent comme des cartes séparées à
    gauche et sont fusionnés au listing des prochains passages.
@@ -366,9 +369,9 @@ pas d'OAuth, pas de facturation :
    [tableau de bord](https://openrouteservice.org/dev/#/home) → section
    **Tokens**, en bas de page → demande un token gratuit → copie la clé
    générée.
-2. Console web → Intégrations → déplie **Itinéraires (OpenRouteService)** →
+2. Console web → Intégrations → carte **Itinéraires** → **Configurer** →
    colle la clé → **Enregistrer la clé**.
-3. Toujours dans ce bloc, renseigne ton **adresse domicile** →
+3. Toujours dans ce dialogue, renseigne ton **adresse domicile** →
    **Enregistrer le domicile** — sert d'origine par défaut quand tu ne
    donnes que la destination (optionnel : sans elle, Jarvis demande
    l'adresse de départ).
@@ -390,7 +393,8 @@ bloc **Home Assistant** :
    descends jusqu'à **Jetons d'accès de longue durée** → **Créer un jeton**
    → nomme-le (« Jarvis » par ex.) → copie le jeton (affiché une seule
    fois, à sauvegarder tout de suite).
-2. Console web → Intégrations → déplie **Home Assistant** → renseigne
+2. Console web → Intégrations → carte **Home Assistant** → **Connecter** →
+   renseigne
    l'URL de l'instance (ex. `http://192.168.1.x:8123`, adresse locale si
    le brain est sur le même réseau) → colle le jeton → **Connecter**.
 

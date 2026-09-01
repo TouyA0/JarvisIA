@@ -98,6 +98,13 @@ def track(usage_obj) -> float:
     return cost
 
 
+def snapshot() -> dict:
+    """Copie brute du fichier de suivi — pour la Console web, qui affiche
+    le détail (tokens par catégorie, historique mensuel) que `summary()`
+    aplatit volontairement pour le HUD."""
+    return _load()
+
+
 def summary() -> dict:
     data = _load()
     return {

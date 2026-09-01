@@ -38,7 +38,10 @@ def get_current() -> dict:
     return _current_mode_cache
 
 
-def set_mode(mode_id: str) -> dict | None:
+def set_mode(mode_id: str, source: str = "voice") -> dict | None:
+    """`source` : d'où vient le changement (voix, Console web, routine) —
+    la valeur est relue par la Console pour afficher « activé depuis »,
+    d'où le paramètre plutôt qu'un « voice » écrit en dur."""
     global _current_mode_cache
     from brain.core import prompts
 
@@ -46,7 +49,7 @@ def set_mode(mode_id: str) -> dict | None:
     mode = next((m for m in modes["modes"] if m["id"] == mode_id), None)
     if not mode:
         return None
-    _current_mode_cache = {"mode_id": mode_id, "activated_at": time.time(), "activated_by": "voice"}
+    _current_mode_cache = {"mode_id": mode_id, "activated_at": time.time(), "activated_by": source}
     prompts.invalidate_cache()
     with open(config.CURRENT_MODE_FILE, "w", encoding="utf-8") as f:
         json.dump(_current_mode_cache, f, ensure_ascii=False, indent=2)

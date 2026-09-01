@@ -1,819 +1,693 @@
 import { useState } from "react";
-import Frame from "./Frame.jsx";
+import { ViewHeader } from "./AppShell.jsx";
+import Icon from "./ui/Icon.jsx";
+import Modal from "./ui/Modal.jsx";
+import StatusBadge from "./ui/StatusBadge.jsx";
+import { SelectField, TextField } from "./ui/Field.jsx";
+import { useConfirm } from "./ui/Confirm.jsx";
+import { useToast } from "./ui/Toast.jsx";
 import { useIntegrations } from "../lib/useIntegrations.js";
-import { useIsMobile } from "../lib/useIsMobile.js";
 
-const TYPE_LABELS = {
-  google_calendar: "Google Calendar",
-  google_drive: "Google Drive",
-  gmail: "Gmail",
-  google_contacts: "Google Contacts",
-  zoho_mail: "Zoho Mail",
-  spotify: "Spotify",
-  jellyfin: "Jellyfin",
-  home_assistant: "Home Assistant",
-  tisseo: "Tisséo (arrêt favori)",
+/**
+ * Services tiers, rangés par fournisseur.
+ *
+ * Deux erreurs corrigées ici. La première version empilait sept
+ * accordéons dans une colonne de 298 px. La deuxième posait une carte par
+ * service, mais répétait le bouton « Paramètres Google » sur les quatre
+ * cartes Google — alors qu'il s'agit d'un seul et même compte
+ * d'application — sans jamais dire clairement s'il était déjà rempli.
+ *
+ * Maintenant : une section par fournisseur. Les identifiants
+ * d'application (Client ID / Secret) appartiennent à la section, pas aux
+ * services ; leur état est écrit en toutes lettres en tête de section,
+ * une seule fois. Les cartes ne portent plus que ce qui leur est propre :
+ * leurs comptes connectés.
+ */
+
+// ── Fournisseurs OAuth ──────────────────────────────────────────────────
+const PROVIDERS = {
+  google: {
+    label: "Google",
+    settingsKey: "googleSettings",
+    connectKey: "connectGoogle",
+    fields: [
+      { name: "clientId", label: "Client ID", required: true },
+      { name: "clientSecret", label: "Client Secret", type: "password", required: true },
+    ],
+    save: (api, v) => api.saveGoogleSettings(v.clientId, v.clientSecret),
+    clear: (api) => api.clearGoogleSettings(),
+    doc: "À créer une seule fois dans la Google Cloud Console (voir README.md, section Google Calendar) — c'est la seule étape que Google n'autorise pas à faire depuis un site tiers.",
+  },
+  zoho: {
+    label: "Zoho",
+    settingsKey: "zohoSettings",
+    connectKey: "connectZoho",
+    fields: [
+      { name: "clientId", label: "Client ID", required: true },
+      { name: "clientSecret", label: "Client Secret", type: "password", required: true },
+      {
+        name: "region",
+        label: "Région du compte",
+        type: "select",
+        default: "com",
+        options: [
+          { value: "com", label: ".com (États-Unis, par défaut)" },
+          { value: "eu", label: ".eu (Europe)" },
+          { value: "in", label: ".in (Inde)" },
+          { value: "com.au", label: ".com.au (Australie)" },
+          { value: "jp", label: ".jp (Japon)" },
+          { value: "ca", label: ".ca (Canada)" },
+        ],
+        hint: "Doit correspondre au datacenter de votre compte Zoho, sinon la connexion échoue entièrement.",
+      },
+    ],
+    save: (api, v) => api.saveZohoSettings(v.clientId, v.clientSecret, v.region),
+    clear: (api) => api.clearZohoSettings(),
+    doc: "À créer une seule fois dans la Console API Zoho (voir README.md, section Zoho Mail).",
+  },
+  spotify: {
+    label: "Spotify",
+    settingsKey: "spotifySettings",
+    connectKey: "connectSpotify",
+    fields: [
+      { name: "clientId", label: "Client ID", required: true },
+      { name: "clientSecret", label: "Client Secret", type: "password", required: true },
+    ],
+    save: (api, v) => api.saveSpotifySettings(v.clientId, v.clientSecret),
+    clear: (api) => api.clearSpotifySettings(),
+    doc: "À créer une seule fois sur developer.spotify.com/dashboard (voir README.md, section Spotify).",
+  },
 };
 
-// Catalogue affiché à droite — google_calendar/google_drive/gmail/
-// google_contacts (Google, un seul Client ID/Secret), zoho_mail (Zoho) et
-// spotify (Spotify) sont branchés ; le reste vient
-// docs/ROADMAP_DISPLAY_INTEGRATIONS.md et attend son tour (même socle, un
-// module brain/integrations/<service>.py de plus).
-const CATALOG = [
-  { type: "google_calendar", label: "Google Calendar", provider: "google", available: true },
-  { type: "google_drive", label: "Google Drive", provider: "google", available: true },
-  { type: "gmail", label: "Gmail", provider: "google", available: true },
-  { type: "google_contacts", label: "Google Contacts", provider: "google", available: true },
-  { type: "zoho_mail", label: "Zoho Mail", provider: "zoho", available: true },
-  { type: "spotify", label: "Spotify", provider: "spotify", available: true },
+// ── Sections ────────────────────────────────────────────────────────────
+// `summary` répond à la seule question qui compte devant un bouton
+// « Connecter » : qu'est-ce que Jarvis saura faire de plus après ?
+const GROUPS = [
+  {
+    id: "google",
+    title: "Google",
+    provider: "google",
+    description:
+      "Un seul compte d'application Google ouvre ces quatre services : les identifiants ne sont à renseigner qu'une fois.",
+    services: [
+      {
+        type: "google_calendar",
+        label: "Calendar",
+        icon: "clock",
+        summary: "Consulter l'agenda et annoncer les prochains rendez-vous.",
+      },
+      { type: "gmail", label: "Gmail", icon: "chat", summary: "Chercher, lire et rédiger des mails." },
+      {
+        type: "google_drive",
+        label: "Drive",
+        icon: "copy",
+        summary: "Chercher, lire et créer des documents (toute écriture est confirmée).",
+      },
+      {
+        type: "google_contacts",
+        label: "Contacts",
+        icon: "devices",
+        summary: "Retrouver un contact par son nom.",
+      },
+    ],
+  },
+  {
+    id: "zoho",
+    title: "Zoho",
+    provider: "zoho",
+    services: [
+      {
+        type: "zoho_mail",
+        label: "Zoho Mail",
+        icon: "chat",
+        summary: "Même chose que Gmail, pour une boîte Zoho.",
+      },
+    ],
+  },
+  {
+    id: "spotify",
+    title: "Spotify",
+    provider: "spotify",
+    services: [
+      {
+        type: "spotify",
+        label: "Spotify",
+        icon: "play",
+        summary: "Lancer une musique, contrôler la lecture, afficher la pochette.",
+      },
+    ],
+  },
+  {
+    id: "local",
+    title: "Serveurs personnels",
+    description: "Chez vous, sans OAuth : une adresse et une clé suffisent.",
+    services: [
+      {
+        type: "jellyfin",
+        label: "Jellyfin",
+        icon: "play",
+        summary: "Reprendre un film ou une série depuis votre médiathèque.",
+        connect: {
+          title: "Connecter Jellyfin",
+          fields: [
+            { name: "baseUrl", label: "URL du serveur", placeholder: "http://192.168.1.20:8096", required: true },
+            { name: "apiKey", label: "Clé API", type: "password", required: true },
+            {
+              name: "username",
+              label: "Utilisateur Jellyfin",
+              hint: "Facultatif. Sans lui, Jellyfin prend le premier compte du serveur — à préciser si plusieurs comptes existent, la reprise de lecture en dépend.",
+            },
+          ],
+          submitLabel: "Connecter",
+          submit: (api, v) => api.connectJellyfin(v.baseUrl, v.apiKey, v.username),
+          doc: "Clé API générée depuis le tableau de bord Jellyfin : Admin → Clés API.",
+        },
+      },
+      {
+        type: "home_assistant",
+        label: "Home Assistant",
+        icon: "power",
+        summary: "Piloter les lumières, prises, volets et scènes.",
+        connect: {
+          title: "Connecter Home Assistant",
+          fields: [
+            { name: "baseUrl", label: "URL de l'instance", placeholder: "http://192.168.1.30:8123", required: true },
+            { name: "token", label: "Token longue durée", type: "password", required: true },
+          ],
+          submitLabel: "Connecter",
+          submit: (api, v) => api.connectHomeAssistant(v.baseUrl, v.token),
+          doc: "Token généré depuis votre profil Home Assistant, en bas de page : « Jetons d'accès de longue durée » → Créer un jeton.",
+        },
+      },
+    ],
+  },
+  {
+    id: "keys",
+    title: "Services à clé API",
+    description: "Clés gratuites, à créer une fois chez le fournisseur.",
+    services: [
+      {
+        type: "tisseo",
+        label: "Tisséo",
+        icon: "clock",
+        summary: "Prochains passages aux arrêts favoris (transports toulousains).",
+        settingsKey: "tisseoSettings",
+        settings: {
+          title: "Tisséo",
+          sections: [
+            {
+              id: "key",
+              title: "Clé API",
+              fields: [{ name: "apiKey", label: "Clé API Tisséo", type: "password", required: true }],
+              submitLabel: "Enregistrer la clé",
+              submit: (api, v) => api.saveTisseoSettings(v.apiKey),
+              clearLabel: "Effacer la clé",
+              clear: (api) => api.clearTisseoSettings(),
+              canClear: (s) => s.configured,
+            },
+            {
+              id: "stop",
+              title: "Arrêt favori",
+              fields: [{ name: "stop", label: "Nom de l'arrêt", placeholder: "Jean Jaurès", required: true }],
+              submitLabel: "Ajouter aux favoris",
+              submit: (api, v) => api.connectTisseo(v.stop),
+              requiresConfigured: true,
+              hint: "Plusieurs arrêts peuvent être ajoutés : leurs prochains passages sont fusionnés automatiquement.",
+            },
+          ],
+          doc: "Clé gratuite (voir README.md, section Tisséo).",
+        },
+      },
+      {
+        type: "ors",
+        label: "Itinéraires",
+        icon: "link",
+        summary: "Temps de trajet et itinéraires (OpenRouteService).",
+        settingsKey: "orsSettings",
+        noAccounts: true,
+        settings: {
+          title: "Itinéraires (OpenRouteService)",
+          sections: [
+            {
+              id: "key",
+              title: "Clé API",
+              fields: [{ name: "apiKey", label: "Clé API OpenRouteService", type: "password", required: true }],
+              submitLabel: "Enregistrer la clé",
+              submit: (api, v) => api.saveOrsSettings(v.apiKey),
+              clearLabel: "Effacer la clé",
+              clear: (api) => api.clearOrsSettings(),
+              canClear: (s) => s.configured,
+            },
+            {
+              id: "home",
+              title: "Adresse du domicile",
+              fields: [
+                { name: "address", label: "Adresse", placeholder: "12 rue de la Paix, Toulouse", required: true },
+              ],
+              submitLabel: "Enregistrer le domicile",
+              submit: (api, v) => api.saveHomeAddress(v.address),
+              clearLabel: "Effacer",
+              clear: (api) => api.clearHomeAddress(),
+              canClear: (s) => !!s.home_address,
+              hint: "Origine par défaut quand vous ne donnez que la destination (« combien de temps pour aller à X ? »).",
+            },
+          ],
+          doc: "Clé gratuite et sans facturation, sur openrouteservice.org (voir README.md, section Itinéraires).",
+        },
+      },
+    ],
+  },
 ];
 
-function Topbar({ count }) {
-  return (
-    <div
-      style={{
-        height: 54,
-        flex: "none",
-        borderBottom: "1px solid var(--stroke-soft)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "0 22px",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-        <span style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 16 }}>Intégrations</span>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--faint)" }}>
-          {count} compte{count > 1 ? "s" : ""} connecté{count > 1 ? "s" : ""}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function AccountCard({ account, onRemove }) {
-  return (
-    <div
-      style={{
-        background: "var(--bg-2)",
-        border: "1px solid var(--stroke-soft)",
-        borderRadius: 15,
-        padding: 16,
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-      }}
-    >
-      <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--online)", boxShadow: "0 0 8px var(--online)", flex: "none" }} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {account.label}
-        </div>
-        <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--faint)" }}>
-          {TYPE_LABELS[account.type] || account.type}
-        </div>
-      </div>
-      <button
-        onClick={() => onRemove(account.id)}
-        style={{
-          border: "1px solid var(--stroke-soft)",
-          borderRadius: 9,
-          padding: "7px 11px",
-          fontSize: 12,
-          background: "transparent",
-          color: "var(--muted)",
-          cursor: "pointer",
-          flex: "none",
-        }}
-      >
-        Déconnecter
-      </button>
-    </div>
-  );
-}
-
-const _inputStyle = {
-  background: "var(--bg)",
-  border: "1px solid var(--stroke-soft)",
-  borderRadius: 8,
-  padding: "8px 10px",
-  fontSize: 12,
-  color: "var(--fg)",
-  fontFamily: "var(--font-mono)",
-};
-
-function GoogleAppSettings({ status, onSave, onClear }) {
-  const [open, setOpen] = useState(false);
-  const [clientId, setClientId] = useState("");
-  const [clientSecret, setClientSecret] = useState("");
-  const [busy, setBusy] = useState(false);
+/** Formulaire générique : une ou plusieurs sections, chacune avec ses
+ * champs, son bouton d'envoi et son éventuel bouton d'effacement. Couvre
+ * les trois familles (identifiants d'application, connexion directe, clé
+ * API), qui étaient auparavant trois composants quasi identiques recopiés
+ * à sept exemplaires. */
+function FormModal({ open, onClose, title, description, doc, sections, api, status, onDone }) {
+  const toast = useToast();
+  const [values, setValues] = useState({});
+  const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
 
-  async function handleSave() {
-    setError("");
-    setBusy(true);
-    try {
-      await onSave(clientId.trim(), clientSecret.trim());
-      setClientId("");
-      setClientSecret("");
-      setOpen(false);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
+  function valueOf(section, field) {
+    return values[`${section.id || "main"}.${field.name}`] ?? field.default ?? "";
   }
 
-  return (
-    <div style={{ borderTop: "1px solid var(--stroke-soft)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-      >
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--faint)" }}>
-          Paramètres Google
-        </span>
-        <span style={{ fontSize: 11, color: "var(--cyan)" }}>{open ? "−" : "+"}</span>
-      </button>
-
-      <div style={{ fontSize: 11, color: status.configured ? "var(--online)" : "var(--faint)" }}>
-        {status.configured
-          ? `Configuré (${status.source === "console" ? "saisi ici" : ".env"}) — ${status.client_id?.slice(0, 24)}…`
-          : "Non configuré — aucune connexion Google possible tant que ça n'est pas rempli."}
-      </div>
-
-      {open && (
-        <>
-          <input placeholder="Client ID" value={clientId} onChange={(e) => setClientId(e.target.value)} style={_inputStyle} />
-          <input placeholder="Client Secret" type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} style={_inputStyle} />
-          {error && <div style={{ fontSize: 11, color: "#f87171" }}>{error}</div>}
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              onClick={handleSave}
-              disabled={busy || !clientId.trim() || !clientSecret.trim()}
-              style={{
-                flex: 1, border: "1px solid var(--stroke)", borderRadius: 9, padding: "8px 0", fontSize: 12,
-                background: "var(--cyan-dim)", color: "var(--cyan)", cursor: "pointer", opacity: busy ? 0.6 : 1,
-              }}
-            >
-              Enregistrer
-            </button>
-            {status.configured && status.source === "console" && (
-              <button
-                onClick={onClear}
-                style={{ border: "1px solid var(--stroke-soft)", borderRadius: 9, padding: "8px 11px", fontSize: 12, background: "transparent", color: "var(--muted)", cursor: "pointer" }}
-              >
-                Effacer
-              </button>
-            )}
-          </div>
-          <div style={{ fontSize: 11, color: "var(--faint)" }}>
-            À créer une seule fois dans Google Cloud Console (voir README.md,
-            section Google Calendar) — c'est la seule étape que Google
-            n'autorise pas à faire depuis un site tiers.
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-const _ZOHO_REGIONS = ["com", "eu", "in", "com.au", "jp", "ca"];
-
-function ZohoAppSettings({ status, onSave, onClear }) {
-  const [open, setOpen] = useState(false);
-  const [clientId, setClientId] = useState("");
-  const [clientSecret, setClientSecret] = useState("");
-  const [region, setRegion] = useState("com");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  async function handleSave() {
-    setError("");
-    setBusy(true);
-    try {
-      await onSave(clientId.trim(), clientSecret.trim(), region);
-      setClientId("");
-      setClientSecret("");
-      setOpen(false);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
+  function setValue(section, field, v) {
+    setValues((prev) => ({ ...prev, [`${section.id || "main"}.${field.name}`]: v }));
   }
 
-  return (
-    <div style={{ borderTop: "1px solid var(--stroke-soft)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-      >
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--faint)" }}>
-          Paramètres Zoho
-        </span>
-        <span style={{ fontSize: 11, color: "var(--cyan)" }}>{open ? "−" : "+"}</span>
-      </button>
-
-      <div style={{ fontSize: 11, color: status.configured ? "var(--online)" : "var(--faint)" }}>
-        {status.configured
-          ? `Configuré (région .${status.region}) — ${status.client_id?.slice(0, 24)}…`
-          : "Non configuré — aucune connexion Zoho possible tant que ça n'est pas rempli."}
-      </div>
-
-      {open && (
-        <>
-          <input placeholder="Client ID" value={clientId} onChange={(e) => setClientId(e.target.value)} style={_inputStyle} />
-          <input placeholder="Client Secret" type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} style={_inputStyle} />
-          <select value={region} onChange={(e) => setRegion(e.target.value)} style={_inputStyle}>
-            {_ZOHO_REGIONS.map((r) => (
-              <option key={r} value={r}>.{r} ({r === "com" ? "US, par défaut" : r === "eu" ? "Europe" : r})</option>
-            ))}
-          </select>
-          {error && <div style={{ fontSize: 11, color: "#f87171" }}>{error}</div>}
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              onClick={handleSave}
-              disabled={busy || !clientId.trim() || !clientSecret.trim()}
-              style={{
-                flex: 1, border: "1px solid var(--stroke)", borderRadius: 9, padding: "8px 0", fontSize: 12,
-                background: "var(--cyan-dim)", color: "var(--cyan)", cursor: "pointer", opacity: busy ? 0.6 : 1,
-              }}
-            >
-              Enregistrer
-            </button>
-            {status.configured && (
-              <button
-                onClick={onClear}
-                style={{ border: "1px solid var(--stroke-soft)", borderRadius: 9, padding: "8px 11px", fontSize: 12, background: "transparent", color: "var(--muted)", cursor: "pointer" }}
-              >
-                Effacer
-              </button>
-            )}
-          </div>
-          <div style={{ fontSize: 11, color: "var(--faint)" }}>
-            À créer une seule fois dans la Console API Zoho (voir README.md,
-            section Zoho Mail). La région doit correspondre au datacenter de
-            ton compte Zoho, sinon la connexion échoue entièrement.
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function SpotifyAppSettings({ status, onSave, onClear }) {
-  const [open, setOpen] = useState(false);
-  const [clientId, setClientId] = useState("");
-  const [clientSecret, setClientSecret] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  async function handleSave() {
-    setError("");
-    setBusy(true);
-    try {
-      await onSave(clientId.trim(), clientSecret.trim());
-      setClientId("");
-      setClientSecret("");
-      setOpen(false);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div style={{ borderTop: "1px solid var(--stroke-soft)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-      >
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--faint)" }}>
-          Paramètres Spotify
-        </span>
-        <span style={{ fontSize: 11, color: "var(--cyan)" }}>{open ? "−" : "+"}</span>
-      </button>
-
-      <div style={{ fontSize: 11, color: status.configured ? "var(--online)" : "var(--faint)" }}>
-        {status.configured
-          ? `Configuré — ${status.client_id?.slice(0, 24)}…`
-          : "Non configuré — aucune connexion Spotify possible tant que ça n'est pas rempli."}
-      </div>
-
-      {open && (
-        <>
-          <input placeholder="Client ID" value={clientId} onChange={(e) => setClientId(e.target.value)} style={_inputStyle} />
-          <input placeholder="Client Secret" type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} style={_inputStyle} />
-          {error && <div style={{ fontSize: 11, color: "#f87171" }}>{error}</div>}
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              onClick={handleSave}
-              disabled={busy || !clientId.trim() || !clientSecret.trim()}
-              style={{
-                flex: 1, border: "1px solid var(--stroke)", borderRadius: 9, padding: "8px 0", fontSize: 12,
-                background: "var(--cyan-dim)", color: "var(--cyan)", cursor: "pointer", opacity: busy ? 0.6 : 1,
-              }}
-            >
-              Enregistrer
-            </button>
-            {status.configured && (
-              <button
-                onClick={onClear}
-                style={{ border: "1px solid var(--stroke-soft)", borderRadius: 9, padding: "8px 11px", fontSize: 12, background: "transparent", color: "var(--muted)", cursor: "pointer" }}
-              >
-                Effacer
-              </button>
-            )}
-          </div>
-          <div style={{ fontSize: 11, color: "var(--faint)" }}>
-            À créer une seule fois sur developer.spotify.com/dashboard (voir
-            README.md, section Spotify).
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function JellyfinConnect({ onConnect }) {
-  const [open, setOpen] = useState(false);
-  const [baseUrl, setBaseUrl] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [username, setUsername] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  // Pas d'OAuth (serveur perso) : un seul formulaire, connexion directe —
-  // pas de bloc "Paramètres" séparé comme pour Google/Zoho/Spotify.
-  async function handleConnect() {
-    setError("");
-    setBusy(true);
-    try {
-      await onConnect(baseUrl.trim(), apiKey.trim(), username.trim());
-      setBaseUrl("");
-      setApiKey("");
-      setUsername("");
-      setOpen(false);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div style={{ borderTop: "1px solid var(--stroke-soft)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-      >
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--faint)" }}>
-          Jellyfin
-        </span>
-        <span style={{ fontSize: 11, color: "var(--cyan)" }}>{open ? "−" : "+"}</span>
-      </button>
-
-      {open && (
-        <>
-          <input placeholder="URL du serveur (http://192.168.1.x:8096)" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} style={_inputStyle} />
-          <input placeholder="Clé API" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} style={_inputStyle} />
-          <input placeholder="Utilisateur Jellyfin (optionnel)" value={username} onChange={(e) => setUsername(e.target.value)} style={_inputStyle} />
-          {error && <div style={{ fontSize: 11, color: "#f87171" }}>{error}</div>}
-          <button
-            onClick={handleConnect}
-            disabled={busy || !baseUrl.trim() || !apiKey.trim()}
-            style={{
-              border: "1px solid var(--stroke)", borderRadius: 9, padding: "8px 0", fontSize: 12,
-              background: "var(--cyan-dim)", color: "var(--cyan)", cursor: "pointer", opacity: busy ? 0.6 : 1,
-            }}
-          >
-            Connecter
-          </button>
-          <div style={{ fontSize: 11, color: "var(--faint)" }}>
-            Clé API générée depuis ton tableau de bord Jellyfin (Admin → Clés
-            API). Sans nom d'utilisateur, Jellyfin prend le premier compte
-            trouvé sur le serveur — précise-le si plusieurs comptes existent
-            (reprise de lecture / nouveautés en dépendent).
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function HomeAssistantConnect({ onConnect }) {
-  const [open, setOpen] = useState(false);
-  const [baseUrl, setBaseUrl] = useState("");
-  const [token, setToken] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  async function handleConnect() {
-    setError("");
-    setBusy(true);
-    try {
-      await onConnect(baseUrl.trim(), token.trim());
-      setBaseUrl("");
-      setToken("");
-      setOpen(false);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div style={{ borderTop: "1px solid var(--stroke-soft)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-      >
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--faint)" }}>
-          Home Assistant
-        </span>
-        <span style={{ fontSize: 11, color: "var(--cyan)" }}>{open ? "−" : "+"}</span>
-      </button>
-
-      {open && (
-        <>
-          <input placeholder="URL de l'instance (http://192.168.1.x:8123)" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} style={_inputStyle} />
-          <input placeholder="Token longue durée" type="password" value={token} onChange={(e) => setToken(e.target.value)} style={_inputStyle} />
-          {error && <div style={{ fontSize: 11, color: "#f87171" }}>{error}</div>}
-          <button
-            onClick={handleConnect}
-            disabled={busy || !baseUrl.trim() || !token.trim()}
-            style={{
-              border: "1px solid var(--stroke)", borderRadius: 9, padding: "8px 0", fontSize: 12,
-              background: "var(--cyan-dim)", color: "var(--cyan)", cursor: "pointer", opacity: busy ? 0.6 : 1,
-            }}
-          >
-            Connecter
-          </button>
-          <div style={{ fontSize: 11, color: "var(--faint)" }}>
-            Token généré depuis ton profil Home Assistant (en bas de la page
-            profil → « Jetons d'accès de longue durée » → Créer un jeton).
-            Voir README.md, section Home Assistant.
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function TisseoConnect({ settings, onSaveKey, onClearKey, onAddStop }) {
-  const [open, setOpen] = useState(false);
-  const [apiKey, setApiKey] = useState("");
-  const [stop, setStop] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  async function handleSaveKey() {
-    setError("");
-    setBusy(true);
-    try {
-      await onSaveKey(apiKey.trim());
-      setApiKey("");
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleAddStop() {
-    setError("");
-    setBusy(true);
-    try {
-      await onAddStop(stop.trim());
-      setStop("");
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div style={{ borderTop: "1px solid var(--stroke-soft)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-      >
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--faint)" }}>
-          Tisséo
-        </span>
-        <span style={{ fontSize: 11, color: "var(--cyan)" }}>{open ? "−" : "+"}</span>
-      </button>
-
-      <div style={{ fontSize: 11, color: settings.configured ? "var(--online)" : "var(--faint)" }}>
-        {settings.configured ? "Clé API configurée" : "Non configuré — aucune recherche d'arrêt possible tant que ça n'est pas rempli."}
-      </div>
-
-      {open && (
-        <>
-          <input placeholder="Clé API Tisséo" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} style={_inputStyle} />
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              onClick={handleSaveKey}
-              disabled={busy || !apiKey.trim()}
-              style={{
-                flex: 1, border: "1px solid var(--stroke)", borderRadius: 9, padding: "8px 0", fontSize: 12,
-                background: "var(--cyan-dim)", color: "var(--cyan)", cursor: "pointer", opacity: busy ? 0.6 : 1,
-              }}
-            >
-              Enregistrer la clé
-            </button>
-            {settings.configured && (
-              <button
-                onClick={onClearKey}
-                style={{ border: "1px solid var(--stroke-soft)", borderRadius: 9, padding: "8px 11px", fontSize: 12, background: "transparent", color: "var(--muted)", cursor: "pointer" }}
-              >
-                Effacer
-              </button>
-            )}
-          </div>
-
-          <div style={{ height: 1, background: "var(--stroke-soft)", margin: "4px 0" }} />
-
-          <input placeholder="Nom d'un arrêt (ex. Jean Jaurès)" value={stop} onChange={(e) => setStop(e.target.value)} style={_inputStyle} />
-          <button
-            onClick={handleAddStop}
-            disabled={busy || !stop.trim() || !settings.configured}
-            style={{
-              border: "1px solid var(--stroke)", borderRadius: 9, padding: "8px 0", fontSize: 12,
-              background: "var(--cyan-dim)", color: "var(--cyan)", cursor: "pointer", opacity: busy ? 0.6 : 1,
-            }}
-          >
-            Ajouter comme arrêt favori
-          </button>
-          {error && <div style={{ fontSize: 11, color: "#f87171" }}>{error}</div>}
-          <div style={{ fontSize: 11, color: "var(--faint)" }}>
-            Clé gratuite (voir README.md, section Tisséo). Plusieurs arrêts
-            favoris peuvent être ajoutés — ils apparaissent comme des cartes
-            séparées ci-contre, et sont fusionnés automatiquement au listing
-            des prochains passages.
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function OrsSettings({ status, onSave, onClear, onSaveHome, onClearHome }) {
-  const [open, setOpen] = useState(false);
-  const [apiKey, setApiKey] = useState("");
-  const [homeAddress, setHomeAddress] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  // Pas de "compte" à créer (contrairement à Tisséo/Jellyfin) : un
-  // itinéraire ne se rattache à rien de persistant, juste la clé + une
-  // adresse domicile optionnelle (origine par défaut de directions()).
-  async function handleSaveKey() {
-    setError("");
-    setBusy(true);
-    try {
-      await onSave(apiKey.trim());
-      setApiKey("");
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleSaveHome() {
-    setError("");
-    setBusy(true);
-    try {
-      await onSaveHome(homeAddress.trim());
-      setHomeAddress("");
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div style={{ borderTop: "1px solid var(--stroke-soft)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-      >
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--faint)" }}>
-          Itinéraires (OpenRouteService)
-        </span>
-        <span style={{ fontSize: 11, color: "var(--cyan)" }}>{open ? "−" : "+"}</span>
-      </button>
-
-      <div style={{ fontSize: 11, color: status.configured ? "var(--online)" : "var(--faint)" }}>
-        {status.configured ? "Clé API configurée" : "Non configuré — aucun calcul d'itinéraire possible tant que ça n'est pas rempli."}
-      </div>
-      {status.home_address && (
-        <div style={{ fontSize: 11, color: "var(--faint)" }}>Domicile : {status.home_address}</div>
-      )}
-
-      {open && (
-        <>
-          <input placeholder="Clé API OpenRouteService" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} style={_inputStyle} />
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              onClick={handleSaveKey}
-              disabled={busy || !apiKey.trim()}
-              style={{
-                flex: 1, border: "1px solid var(--stroke)", borderRadius: 9, padding: "8px 0", fontSize: 12,
-                background: "var(--cyan-dim)", color: "var(--cyan)", cursor: "pointer", opacity: busy ? 0.6 : 1,
-              }}
-            >
-              Enregistrer la clé
-            </button>
-            {status.configured && (
-              <button
-                onClick={onClear}
-                style={{ border: "1px solid var(--stroke-soft)", borderRadius: 9, padding: "8px 11px", fontSize: 12, background: "transparent", color: "var(--muted)", cursor: "pointer" }}
-              >
-                Effacer
-              </button>
-            )}
-          </div>
-
-          <div style={{ height: 1, background: "var(--stroke-soft)", margin: "4px 0" }} />
-
-          <input placeholder="Adresse domicile (ex. 12 rue de la Paix, Toulouse)" value={homeAddress} onChange={(e) => setHomeAddress(e.target.value)} style={_inputStyle} />
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              onClick={handleSaveHome}
-              disabled={busy || !homeAddress.trim()}
-              style={{
-                flex: 1, border: "1px solid var(--stroke)", borderRadius: 9, padding: "8px 0", fontSize: 12,
-                background: "var(--cyan-dim)", color: "var(--cyan)", cursor: "pointer", opacity: busy ? 0.6 : 1,
-              }}
-            >
-              Enregistrer le domicile
-            </button>
-            {status.home_address && (
-              <button
-                onClick={onClearHome}
-                style={{ border: "1px solid var(--stroke-soft)", borderRadius: 9, padding: "8px 11px", fontSize: 12, background: "transparent", color: "var(--muted)", cursor: "pointer" }}
-              >
-                Effacer
-              </button>
-            )}
-          </div>
-          {error && <div style={{ fontSize: 11, color: "#f87171" }}>{error}</div>}
-          <div style={{ fontSize: 11, color: "var(--faint)" }}>
-            Clé gratuite, sans facturation (voir README.md, section
-            Itinéraires) — inscription sur openrouteservice.org. L'adresse
-            domicile sert d'origine par défaut quand tu ne donnes que la
-            destination ("combien de temps pour aller à X ?").
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function CatalogRow({ entry, onConnect, busy, error }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ fontSize: 13, color: entry.available ? "var(--fg)" : "var(--faint)" }}>{entry.label}</span>
-        {entry.available ? (
-          <button
-            onClick={() => onConnect(entry.type)}
-            disabled={busy}
-            style={{
-              border: "1px solid var(--stroke)",
-              borderRadius: 9,
-              padding: "6px 11px",
-              fontSize: 12,
-              background: "var(--cyan-dim)",
-              color: "var(--cyan)",
-              cursor: busy ? "default" : "pointer",
-              opacity: busy ? 0.6 : 1,
-            }}
-          >
-            Connecter
-          </button>
-        ) : (
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--faint)", textTransform: "uppercase" }}>
-            bientôt
-          </span>
-        )}
-      </div>
-      {error && <div style={{ fontSize: 11, color: "#f87171" }}>{error}</div>}
-    </div>
-  );
-}
-
-const _CONNECTORS = {
-  google: { connectKey: "connectGoogle", settingsKey: "googleSettings", label: "Paramètres Google" },
-  zoho: { connectKey: "connectZoho", settingsKey: "zohoSettings", label: "Paramètres Zoho" },
-  spotify: { connectKey: "connectSpotify", settingsKey: "spotifySettings", label: "Paramètres Spotify" },
-};
-
-export default function Integrations({ onNavigate, focusEnabled }) {
-  const integrations = useIntegrations();
-  const { accounts, remove } = integrations;
-  const isMobile = useIsMobile();
-  const [busyType, setBusyType] = useState(null);
-  const [errors, setErrors] = useState({});
-
-  async function handleConnect(type) {
-    const entry = CATALOG.find((c) => c.type === type);
-    const connector = entry && _CONNECTORS[entry.provider];
-    if (!connector) return;
-
-    const status = integrations[connector.settingsKey];
-    if (!status.configured) {
-      setErrors((e) => ({ ...e, [type]: `Renseigne d'abord Client ID / Client Secret ci-dessous (${connector.label}).` }));
+  async function submit(section) {
+    const payload = Object.fromEntries(section.fields.map((f) => [f.name, valueOf(section, f).trim()]));
+    const missing = section.fields.find((f) => f.required && !payload[f.name]);
+    if (missing) {
+      setError(`« ${missing.label} » est obligatoire.`);
       return;
     }
-    setErrors((e) => ({ ...e, [type]: "" }));
-    setBusyType(type);
+    setError("");
+    setBusy(section.id || "main");
     try {
-      await integrations[connector.connectKey](type);
+      await section.submit(api, payload);
+      toast.success(section.successMessage || "Enregistré.");
+      setValues((prev) => {
+        const next = { ...prev };
+        section.fields.forEach((f) => delete next[`${section.id || "main"}.${f.name}`]);
+        return next;
+      });
+      onDone?.();
     } catch (e) {
-      setErrors((err) => ({ ...err, [type]: e.message }));
+      setError(e.message);
     } finally {
-      setBusyType(null);
+      setBusy("");
+    }
+  }
+
+  async function clear(section) {
+    setBusy(section.id || "main");
+    try {
+      await section.clear(api);
+      toast.info("Réglage effacé.");
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy("");
     }
   }
 
   return (
-    <Frame active="integrations" onNavigate={onNavigate} focusEnabled={focusEnabled}>
-      <Topbar count={accounts.length} />
-      <div style={{ flex: 1, display: "flex", flexDirection: isMobile ? "column" : "row", minHeight: 0, overflow: "auto" }}>
-        <div style={{ flex: 1, padding: 22, overflow: isMobile ? "visible" : "auto", minWidth: 0 }}>
-          {accounts.length === 0 ? (
-            <div style={{ color: "var(--faint)", fontSize: 13 }}>
-              Aucun compte connecté — ajoute-en un {isMobile ? "en dessous" : "à droite"}.
-            </div>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14 }}>
-              {accounts.map((a) => (
-                <AccountCard key={a.id} account={a} onRemove={remove} />
-              ))}
-            </div>
-          )}
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={title}
+      description={description}
+      footer={
+        <button type="button" className="btn btn--ghost" onClick={onClose}>
+          Fermer
+        </button>
+      }
+    >
+      {error && (
+        <div className="alert alert--danger" role="alert">
+          <Icon name="alert" size={16} />
+          {error}
         </div>
-        <div
-          style={{
-            width: isMobile ? "100%" : 298,
-            flex: "none",
-            borderLeft: isMobile ? "none" : "1px solid var(--stroke-soft)",
-            borderTop: isMobile ? "1px solid var(--stroke-soft)" : "none",
-            background: "var(--bg-2)",
-            padding: "22px 20px",
-            display: "flex",
-            flexDirection: "column",
-            gap: 16,
-          }}
-        >
-          <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--faint)" }}>
-            Ajouter un compte
-          </div>
-          {CATALOG.map((entry) => (
-            <CatalogRow
-              key={entry.type}
-              entry={entry}
-              onConnect={handleConnect}
-              busy={busyType === entry.type}
-              error={errors[entry.type] || ""}
-            />
+      )}
+
+      {sections.map((section) => {
+        const blocked = section.requiresConfigured && !status?.configured;
+        return (
+          <section key={section.id || "main"} className="stack">
+            {sections.length > 1 && <h3 className="section-label">{section.title}</h3>}
+
+            {blocked && (
+              <div className="alert alert--warn">
+                <Icon name="info" size={16} />
+                Enregistrez d'abord la clé API ci-dessus.
+              </div>
+            )}
+
+            {section.fields.map((field) =>
+              field.type === "select" ? (
+                <SelectField
+                  key={field.name}
+                  label={field.label}
+                  hint={field.hint}
+                  value={valueOf(section, field)}
+                  onChange={(e) => setValue(section, field, e.target.value)}
+                >
+                  {field.options.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </SelectField>
+              ) : (
+                <TextField
+                  key={field.name}
+                  label={field.label}
+                  type={field.type || "text"}
+                  placeholder={field.placeholder}
+                  hint={field.hint}
+                  required={field.required}
+                  autoComplete="off"
+                  value={valueOf(section, field)}
+                  onChange={(e) => setValue(section, field, e.target.value)}
+                  disabled={blocked}
+                />
+              ),
+            )}
+
+            {section.hint && <p className="hint">{section.hint}</p>}
+
+            <div className="row" style={{ justifyContent: "flex-end" }}>
+              {section.clear && section.canClear?.(status || {}) && (
+                <button
+                  type="button"
+                  className="btn btn--danger btn--sm"
+                  onClick={() => clear(section)}
+                  disabled={busy !== ""}
+                >
+                  {section.clearLabel || "Effacer"}
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn btn--primary btn--sm"
+                onClick={() => submit(section)}
+                disabled={busy !== "" || blocked}
+              >
+                {busy === (section.id || "main") && <span className="spinner" aria-hidden="true" />}
+                {section.submitLabel || "Enregistrer"}
+              </button>
+            </div>
+          </section>
+        );
+      })}
+
+      {doc && (
+        <div className="alert">
+          <Icon name="info" size={16} />
+          {doc}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+/** En-tête de section : l'unique endroit où vivent les identifiants
+ * d'application d'un fournisseur, et où leur état est affiché. */
+function ProviderHeader({ group, status, provider, onConfigure }) {
+  return (
+    <div className="group-head">
+      <div className="view-heading spacer">
+        <h2 className="group-title">{group.title}</h2>
+        {group.description && <p className="hint">{group.description}</p>}
+      </div>
+
+      {provider && (
+        <div className="group-status">
+          {status?.configured ? (
+            <>
+              <StatusBadge tone="ok">identifiants enregistrés</StatusBadge>
+              <span className="hint">
+                {status.source === "console" ? "saisis ici" : "lus depuis .env"}
+                {status.region ? ` · région .${status.region}` : ""}
+                {status.client_id ? ` · ${status.client_id.slice(0, 16)}…` : ""}
+              </span>
+            </>
+          ) : (
+            <>
+              <StatusBadge tone="warn">identifiants manquants</StatusBadge>
+              <span className="hint">
+                Aucune connexion {provider.label} possible tant qu'ils ne sont pas remplis.
+              </span>
+            </>
+          )}
+          <button type="button" className="btn btn--sm" onClick={() => onConfigure(group)}>
+            <Icon name="key" size={15} />
+            {status?.configured ? "Modifier" : "Renseigner"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ServiceCard({
+  service,
+  provider,
+  providerReady,
+  accounts,
+  onConnect,
+  onConfigure,
+  onDisconnect,
+  connecting,
+}) {
+  const connected = accounts.length > 0;
+
+  return (
+    <div className="card card--interactive">
+      <div className="card-head" style={{ alignItems: "center" }}>
+        <span className="empty-icon" style={{ width: 36, height: 36 }} aria-hidden="true">
+          <Icon name={service.icon} size={17} />
+        </span>
+        <h3 className="card-title spacer">{service.label}</h3>
+        {connected && (
+          <StatusBadge tone="ok">{accounts.length > 1 ? `${accounts.length} comptes` : "connecté"}</StatusBadge>
+        )}
+      </div>
+
+      <p className="card-sub" style={{ whiteSpace: "normal", overflow: "visible" }}>
+        {service.summary}
+      </p>
+
+      {accounts.length > 0 && (
+        <ul className="account-list">
+          {accounts.map((a) => (
+            <li key={a.id} className="account-row">
+              <span className="dot dot--ok" aria-hidden="true" />
+              <span className="spacer account-label">{a.label}</span>
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                onClick={() => onDisconnect(a)}
+                aria-label={`Déconnecter ${a.label}`}
+              >
+                Déconnecter
+              </button>
+            </li>
           ))}
-          <div style={{ fontSize: 11, color: "var(--faint)" }}>
-            Plusieurs comptes peuvent être connectés en parallèle, y compris sur
-            différents services d'un même fournisseur — les résultats de chacun
-            sont fusionnés automatiquement.
-          </div>
-          <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
-            <GoogleAppSettings status={integrations.googleSettings} onSave={integrations.saveGoogleSettings} onClear={integrations.clearGoogleSettings} />
-            <ZohoAppSettings status={integrations.zohoSettings} onSave={integrations.saveZohoSettings} onClear={integrations.clearZohoSettings} />
-            <SpotifyAppSettings status={integrations.spotifySettings} onSave={integrations.saveSpotifySettings} onClear={integrations.clearSpotifySettings} />
-            <JellyfinConnect onConnect={integrations.connectJellyfin} />
-            <HomeAssistantConnect onConnect={integrations.connectHomeAssistant} />
-            <TisseoConnect
-              settings={integrations.tisseoSettings}
-              onSaveKey={integrations.saveTisseoSettings}
-              onClearKey={integrations.clearTisseoSettings}
-              onAddStop={integrations.connectTisseo}
-            />
-            <OrsSettings
-              status={integrations.orsSettings}
-              onSave={integrations.saveOrsSettings}
-              onClear={integrations.clearOrsSettings}
-              onSaveHome={integrations.saveHomeAddress}
-              onClearHome={integrations.clearHomeAddress}
-            />
+        </ul>
+      )}
+
+      <div className="card-actions">
+        {provider && (
+          <button
+            type="button"
+            className="btn btn--accent btn--sm"
+            onClick={() => onConnect(service)}
+            disabled={!providerReady || connecting}
+            title={providerReady ? undefined : `Renseignez d'abord les identifiants ${provider.label}`}
+          >
+            {connecting ? <span className="spinner" aria-hidden="true" /> : <Icon name="link" size={15} />}
+            {connected ? "Ajouter un compte" : "Connecter"}
+          </button>
+        )}
+        {service.connect && (
+          <button type="button" className="btn btn--accent btn--sm" onClick={() => onConfigure(service)}>
+            <Icon name="link" size={15} />
+            {connected ? "Ajouter un compte" : "Connecter"}
+          </button>
+        )}
+        {service.settings && (
+          <button type="button" className="btn btn--sm" onClick={() => onConfigure(service)}>
+            <Icon name="system" size={15} />
+            Configurer
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function Integrations() {
+  const api = useIntegrations();
+  const confirm = useConfirm();
+  const toast = useToast();
+  const [dialog, setDialog] = useState(null); // { kind: "provider" | "service", … }
+  const [connecting, setConnecting] = useState(null);
+
+  async function handleConnect(service) {
+    const group = GROUPS.find((g) => g.services.includes(service));
+    const provider = PROVIDERS[group.provider];
+    setConnecting(service.type);
+    try {
+      await api[provider.connectKey](service.type);
+      toast.info("Autorisez Jarvis dans la fenêtre qui vient de s'ouvrir.");
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setConnecting(null);
+    }
+  }
+
+  async function handleDisconnect(account) {
+    const ok = await confirm({
+      title: `Déconnecter « ${account.label} » ?`,
+      message: "Jarvis perdra l'accès à ce compte. Vous pourrez le reconnecter à tout moment.",
+      confirmLabel: "Déconnecter",
+    });
+    if (!ok) return;
+    await api.remove(account.id);
+    toast.success("Compte déconnecté.");
+  }
+
+  const accountsFor = (type) => api.accounts.filter((a) => a.type === type);
+
+  // Un seul dialogue générique, alimenté selon ce qui a été ouvert :
+  // identifiants d'un fournisseur, connexion directe, ou clé API.
+  let dialogProps = null;
+  if (dialog?.kind === "provider") {
+    const provider = PROVIDERS[dialog.group.provider];
+    const status = api[provider.settingsKey];
+    dialogProps = {
+      title: `Identifiants ${provider.label}`,
+      description: status.configured
+        ? "Déjà configuré — remplacez les valeurs ci-dessous pour les changer."
+        : `Compte d'application ${provider.label}, à créer une fois chez le fournisseur.`,
+      doc: provider.doc,
+      status,
+      sections: [
+        {
+          id: "app",
+          fields: provider.fields,
+          submitLabel: "Enregistrer",
+          submit: (a, v) => provider.save(a, v),
+          clear: (a) => provider.clear(a),
+          clearLabel: "Effacer",
+          canClear: (s) => s.configured,
+          successMessage: `Identifiants ${provider.label} enregistrés.`,
+        },
+      ],
+      closeOnDone: true,
+    };
+  } else if (dialog?.kind === "service") {
+    const service = dialog.service;
+    if (service.connect) {
+      dialogProps = {
+        title: service.connect.title,
+        doc: service.connect.doc,
+        status: null,
+        sections: [
+          {
+            id: "connect",
+            fields: service.connect.fields,
+            submitLabel: service.connect.submitLabel,
+            submit: service.connect.submit,
+            successMessage: `${service.label} connecté.`,
+          },
+        ],
+        // Une connexion réussie n'a pas de suite dans ce dialogue : on
+        // referme. Les réglages à deux temps (clé Tisséo puis arrêt
+        // favori) restent ouverts, la seconde section suit la première.
+        closeOnDone: true,
+      };
+    } else if (service.settings) {
+      dialogProps = {
+        title: service.settings.title,
+        doc: service.settings.doc,
+        status: api[service.settingsKey],
+        sections: service.settings.sections,
+      };
+    }
+  }
+
+  const connectedCount = api.accounts.length;
+
+  return (
+    <>
+      <ViewHeader
+        title="Intégrations"
+        subtitle={
+          connectedCount === 0
+            ? "Aucun compte connecté"
+            : `${connectedCount} compte${connectedCount > 1 ? "s" : ""} connecté${connectedCount > 1 ? "s" : ""}`
+        }
+      />
+
+      <div className="view-body">
+        <div className="view-main">
+          <div className="stack" style={{ gap: "var(--sp-8)", maxWidth: "var(--content-max)" }}>
+            {GROUPS.map((group) => {
+              const provider = group.provider ? PROVIDERS[group.provider] : null;
+              const status = provider ? api[provider.settingsKey] : null;
+              return (
+                <section key={group.id} className="group">
+                  <ProviderHeader
+                    group={group}
+                    provider={provider}
+                    status={status}
+                    onConfigure={(g) => setDialog({ kind: "provider", group: g })}
+                  />
+                  <div className="grid">
+                    {group.services.map((service) => (
+                      <ServiceCard
+                        key={service.type}
+                        service={service}
+                        provider={provider}
+                        providerReady={!!status?.configured}
+                        accounts={service.noAccounts ? [] : accountsFor(service.type)}
+                        connecting={connecting === service.type}
+                        onConnect={handleConnect}
+                        onConfigure={(s) => setDialog({ kind: "service", service: s })}
+                        onDisconnect={handleDisconnect}
+                      />
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
+
+            <p className="hint">
+              Plusieurs comptes peuvent être connectés en parallèle sur un même service — les résultats de
+              chacun sont fusionnés automatiquement.
+            </p>
           </div>
         </div>
       </div>
-    </Frame>
+
+      {dialogProps && (
+        <FormModal
+          open={!!dialog}
+          onClose={() => setDialog(null)}
+          api={api}
+          onDone={() => {
+            if (dialogProps.closeOnDone) setDialog(null);
+          }}
+          {...dialogProps}
+        />
+      )}
+    </>
   );
 }
