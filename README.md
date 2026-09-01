@@ -355,6 +355,32 @@ que je connais que Google/Spotify — si la recherche d'arrêt ou les horaires
 échouent, le message d'erreur inclut la réponse brute de l'API pour
 corriger vite le nom d'un paramètre au besoin.
 
+### Itinéraires (OpenRouteService)
+
+Alternative gratuite à Google Maps — écarté pour son exigence de carte
+bancaire (voir `docs/ROADMAP_DISPLAY_INTEGRATIONS.md`). Clé API simple,
+pas d'OAuth, pas de facturation :
+
+1. Inscription gratuite sur [openrouteservice.org](https://openrouteservice.org)
+   (bouton Sign Up) → une fois connecté, va sur le
+   [tableau de bord](https://openrouteservice.org/dev/#/home) → section
+   **Tokens**, en bas de page → demande un token gratuit → copie la clé
+   générée.
+2. Console web → Intégrations → déplie **Itinéraires (OpenRouteService)** →
+   colle la clé → **Enregistrer la clé**.
+3. Toujours dans ce bloc, renseigne ton **adresse domicile** →
+   **Enregistrer le domicile** — sert d'origine par défaut quand tu ne
+   donnes que la destination (optionnel : sans elle, Jarvis demande
+   l'adresse de départ).
+
+Une fois configuré, depuis la Console web :
+- « Jarvis, combien de temps pour aller à X ? » → part de ton domicile enregistré
+- « Jarvis, combien de temps de Y à X ? » → origine précisée, ignore le domicile
+- « Jarvis, la distance jusqu'à Y ? » → idem, vélo/à pied sur demande (voiture par défaut)
+
+Basé sur OpenStreetMap — bon pour un usage courant, mais moins précis que
+Google sur le trafic temps réel aux heures de pointe.
+
 > Voix personnalisée : le dossier `voice/` contient `jarvis-high.onnx` (Piper).
 > Pour l'utiliser, enregistrez-la dans votre instance Speaches puis pointez
 > `TTS_MODEL`/`TTS_VOICE` dessus dans `.env`.

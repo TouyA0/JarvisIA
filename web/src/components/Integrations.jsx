@@ -502,6 +502,121 @@ function TisseoConnect({ settings, onSaveKey, onClearKey, onAddStop }) {
   );
 }
 
+function OrsSettings({ status, onSave, onClear, onSaveHome, onClearHome }) {
+  const [open, setOpen] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const [homeAddress, setHomeAddress] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  // Pas de "compte" à créer (contrairement à Tisséo/Jellyfin) : un
+  // itinéraire ne se rattache à rien de persistant, juste la clé + une
+  // adresse domicile optionnelle (origine par défaut de directions()).
+  async function handleSaveKey() {
+    setError("");
+    setBusy(true);
+    try {
+      await onSave(apiKey.trim());
+      setApiKey("");
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSaveHome() {
+    setError("");
+    setBusy(true);
+    try {
+      await onSaveHome(homeAddress.trim());
+      setHomeAddress("");
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ borderTop: "1px solid var(--stroke-soft)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+      >
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--faint)" }}>
+          Itinéraires (OpenRouteService)
+        </span>
+        <span style={{ fontSize: 11, color: "var(--cyan)" }}>{open ? "−" : "+"}</span>
+      </button>
+
+      <div style={{ fontSize: 11, color: status.configured ? "var(--online)" : "var(--faint)" }}>
+        {status.configured ? "Clé API configurée" : "Non configuré — aucun calcul d'itinéraire possible tant que ça n'est pas rempli."}
+      </div>
+      {status.home_address && (
+        <div style={{ fontSize: 11, color: "var(--faint)" }}>Domicile : {status.home_address}</div>
+      )}
+
+      {open && (
+        <>
+          <input placeholder="Clé API OpenRouteService" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} style={_inputStyle} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={handleSaveKey}
+              disabled={busy || !apiKey.trim()}
+              style={{
+                flex: 1, border: "1px solid var(--stroke)", borderRadius: 9, padding: "8px 0", fontSize: 12,
+                background: "var(--cyan-dim)", color: "var(--cyan)", cursor: "pointer", opacity: busy ? 0.6 : 1,
+              }}
+            >
+              Enregistrer la clé
+            </button>
+            {status.configured && (
+              <button
+                onClick={onClear}
+                style={{ border: "1px solid var(--stroke-soft)", borderRadius: 9, padding: "8px 11px", fontSize: 12, background: "transparent", color: "var(--muted)", cursor: "pointer" }}
+              >
+                Effacer
+              </button>
+            )}
+          </div>
+
+          <div style={{ height: 1, background: "var(--stroke-soft)", margin: "4px 0" }} />
+
+          <input placeholder="Adresse domicile (ex. 12 rue de la Paix, Toulouse)" value={homeAddress} onChange={(e) => setHomeAddress(e.target.value)} style={_inputStyle} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={handleSaveHome}
+              disabled={busy || !homeAddress.trim()}
+              style={{
+                flex: 1, border: "1px solid var(--stroke)", borderRadius: 9, padding: "8px 0", fontSize: 12,
+                background: "var(--cyan-dim)", color: "var(--cyan)", cursor: "pointer", opacity: busy ? 0.6 : 1,
+              }}
+            >
+              Enregistrer le domicile
+            </button>
+            {status.home_address && (
+              <button
+                onClick={onClearHome}
+                style={{ border: "1px solid var(--stroke-soft)", borderRadius: 9, padding: "8px 11px", fontSize: 12, background: "transparent", color: "var(--muted)", cursor: "pointer" }}
+              >
+                Effacer
+              </button>
+            )}
+          </div>
+          {error && <div style={{ fontSize: 11, color: "#f87171" }}>{error}</div>}
+          <div style={{ fontSize: 11, color: "var(--faint)" }}>
+            Clé gratuite, sans facturation (voir README.md, section
+            Itinéraires) — inscription sur openrouteservice.org. L'adresse
+            domicile sert d'origine par défaut quand tu ne donnes que la
+            destination ("combien de temps pour aller à X ?").
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function CatalogRow({ entry, onConnect, busy, error }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -626,6 +741,13 @@ export default function Integrations({ onNavigate, focusEnabled }) {
               onSaveKey={integrations.saveTisseoSettings}
               onClearKey={integrations.clearTisseoSettings}
               onAddStop={integrations.connectTisseo}
+            />
+            <OrsSettings
+              status={integrations.orsSettings}
+              onSave={integrations.saveOrsSettings}
+              onClear={integrations.clearOrsSettings}
+              onSaveHome={integrations.saveHomeAddress}
+              onClearHome={integrations.clearHomeAddress}
             />
           </div>
         </div>

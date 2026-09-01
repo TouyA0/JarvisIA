@@ -9,21 +9,24 @@ export function useIntegrations() {
   const [zohoSettings, setZohoSettings] = useState({ configured: false, client_id: null, region: null });
   const [spotifySettings, setSpotifySettings] = useState({ configured: false, client_id: null });
   const [tisseoSettings, setTisseoSettings] = useState({ configured: false });
+  const [orsSettings, setOrsSettings] = useState({ configured: false });
 
   const refresh = useCallback(async () => {
     try {
-      const [accountsRes, googleRes, zohoRes, spotifyRes, tisseoRes] = await Promise.all([
+      const [accountsRes, googleRes, zohoRes, spotifyRes, tisseoRes, orsRes] = await Promise.all([
         authFetch("/api/integrations"),
         authFetch("/api/integrations/google/settings"),
         authFetch("/api/integrations/zoho/settings"),
         authFetch("/api/integrations/spotify/settings"),
         authFetch("/api/integrations/tisseo/settings"),
+        authFetch("/api/integrations/ors/settings"),
       ]);
       if (accountsRes.ok) setAccounts(await accountsRes.json());
       if (googleRes.ok) setGoogleSettings(await googleRes.json());
       if (zohoRes.ok) setZohoSettings(await zohoRes.json());
       if (spotifyRes.ok) setSpotifySettings(await spotifyRes.json());
       if (tisseoRes.ok) setTisseoSettings(await tisseoRes.json());
+      if (orsRes.ok) setOrsSettings(await orsRes.json());
     } catch {
       // brain injoignable — on garde la dernière liste connue
     }
@@ -207,6 +210,48 @@ export function useIntegrations() {
     await refresh();
   }, [refresh]);
 
+  const saveOrsSettings = useCallback(
+    async (apiKey) => {
+      const res = await authFetch("/api/integrations/ors/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: apiKey }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "échec de l'enregistrement");
+      }
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const clearOrsSettings = useCallback(async () => {
+    await authFetch("/api/integrations/ors/settings", { method: "DELETE" });
+    await refresh();
+  }, [refresh]);
+
+  const saveHomeAddress = useCallback(
+    async (address) => {
+      const res = await authFetch("/api/integrations/ors/home-address", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "échec de l'enregistrement");
+      }
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const clearHomeAddress = useCallback(async () => {
+    await authFetch("/api/integrations/ors/home-address", { method: "DELETE" });
+    await refresh();
+  }, [refresh]);
+
   return {
     accounts, remove,
     connectGoogle, googleSettings, saveGoogleSettings, clearGoogleSettings,
@@ -214,5 +259,6 @@ export function useIntegrations() {
     connectSpotify, spotifySettings, saveSpotifySettings, clearSpotifySettings,
     connectJellyfin,
     connectTisseo, tisseoSettings, saveTisseoSettings, clearTisseoSettings,
+    orsSettings, saveOrsSettings, clearOrsSettings, saveHomeAddress, clearHomeAddress,
   };
 }

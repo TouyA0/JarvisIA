@@ -543,6 +543,44 @@ async def connect_tisseo(body: dict) -> dict:
     return account
 
 
+@app.get("/api/integrations/ors/settings")
+async def ors_settings() -> dict:
+    return integrations_settings.ors_status()
+
+
+@app.post("/api/integrations/ors/settings")
+async def set_ors_settings(body: dict) -> dict:
+    api_key = (body.get("api_key") or "").strip()
+    if not api_key:
+        raise HTTPException(400, "api_key requis")
+    integrations_settings.set_ors_api_key(api_key)
+    return integrations_settings.ors_status()
+
+
+@app.delete("/api/integrations/ors/settings")
+async def clear_ors_settings() -> dict:
+    integrations_settings.clear_ors_api_key()
+    return integrations_settings.ors_status()
+
+
+@app.post("/api/integrations/ors/home-address")
+async def set_home_address(body: dict) -> dict:
+    """Adresse par défaut pour directions() quand Monsieur ne donne que la
+    destination — séparé de la clé API pour rester modifiable sans la
+    ressaisir (voir settings.py::get_home_address)."""
+    address = (body.get("address") or "").strip()
+    if not address:
+        raise HTTPException(400, "address requis")
+    integrations_settings.set_home_address(address)
+    return integrations_settings.ors_status()
+
+
+@app.delete("/api/integrations/ors/home-address")
+async def clear_home_address() -> dict:
+    integrations_settings.clear_home_address()
+    return integrations_settings.ors_status()
+
+
 @app.get("/api/confirmations")
 async def list_confirmations() -> list[dict]:
     """Actions d'écriture (Drive create/update/trash…) en attente d'un

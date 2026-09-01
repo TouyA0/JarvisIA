@@ -161,3 +161,52 @@ def clear_tisseo_api_key() -> None:
 
 def tisseo_status() -> dict:
     return {"configured": bool(get_tisseo_api_key())}
+
+
+# ── OpenRouteService ─────────────────────────────────────────────────────
+# Alternative gratuite à Google Maps (écarté pour la facturation
+# obligatoire) : clé simple, pas de carte bancaire. Pas de notion de
+# "compte" à connecter (contrairement à Tisséo/Jellyfin) — un itinéraire ne
+# se rattache à rien de persistant, la clé seule suffit à chaque appel.
+#
+# home_address (en clair, pas chiffré — une adresse n'est pas un secret au
+# même titre qu'un jeton) : origine par défaut de directions() quand
+# Monsieur ne donne que la destination ("combien de temps pour aller à
+# Y ?" sans préciser d'où il part).
+def get_ors_api_key() -> str:
+    data = _load().get("ors", {})
+    return crypto.decrypt(data["api_key_enc"]) if data.get("api_key_enc") else ""
+
+
+def set_ors_api_key(api_key: str) -> None:
+    data = _load()
+    data["ors"] = {**data.get("ors", {}), "api_key_enc": crypto.encrypt(api_key)}
+    _save(data)
+
+
+def clear_ors_api_key() -> None:
+    data = _load()
+    if "ors" in data:
+        data["ors"].pop("api_key_enc", None)
+    _save(data)
+
+
+def get_home_address() -> str:
+    return _load().get("ors", {}).get("home_address", "")
+
+
+def set_home_address(address: str) -> None:
+    data = _load()
+    data["ors"] = {**data.get("ors", {}), "home_address": address}
+    _save(data)
+
+
+def clear_home_address() -> None:
+    data = _load()
+    if "ors" in data:
+        data["ors"].pop("home_address", None)
+    _save(data)
+
+
+def ors_status() -> dict:
+    return {"configured": bool(get_ors_api_key()), "home_address": get_home_address() or None}

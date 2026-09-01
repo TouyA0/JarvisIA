@@ -10,7 +10,7 @@ deux listes de schémas, et route chaque tool_use vers le bon exécuteur
 """
 from __future__ import annotations
 
-from brain.integrations import google_calendar, google_contacts, google_drive, google_gmail, jellyfin, spotify, store, tisseo, zoho_mail
+from brain.integrations import google_calendar, google_contacts, google_drive, google_gmail, jellyfin, ors, spotify, store, tisseo, zoho_mail
 
 BRAIN_TOOLS = [
     {
@@ -345,6 +345,26 @@ BRAIN_TOOLS = [
             },
         },
     },
+    {
+        "name": "directions",
+        "description": (
+            "Calcule la distance et le temps de trajet entre deux adresses (OpenRouteService, "
+            "voiture/vélo/à pied). Utilise pour « combien de temps pour aller à X ? », "
+            "« la distance jusqu'à Y ». Si Monsieur ne précise QUE la destination, omets "
+            "`origin` — l'outil utilise automatiquement son adresse domicile enregistrée si "
+            "elle existe (et le dit dans l'erreur sinon, plutôt que d'inventer un point de "
+            "départ)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "origin": {"type": "string", "description": "Adresse ou lieu de départ. Omis = adresse domicile de Monsieur si configurée."},
+                "destination": {"type": "string", "description": "Adresse ou lieu d'arrivée, en texte libre."},
+                "mode": {"type": "string", "enum": ["voiture", "vélo", "à pied"], "description": "Moyen de transport. Défaut : voiture."},
+            },
+            "required": ["destination"],
+        },
+    },
 ]
 
 NAMES = {t["name"] for t in BRAIN_TOOLS}
@@ -654,5 +674,19 @@ def execute(name: str, args: dict):
             return "Aucun arrêt favori enregistré — ajoute-en un depuis la Console (Intégrations), Monsieur."
         departures = tisseo.next_departures(args.get("stop"))
         return _format_departures(departures)
+
+    if name == "directions":
+        if not ors.configured():
+            return "OpenRouteService n'est pas configuré, Monsieur — aucune clé API renseignée."
+        result = ors.directions(args.get("origin", ""), args.get("destination", ""), args.get("mode"))
+        if "error" in result:
+            return result["error"]
+        hours = result["duration_min"] // 60
+        minutes = result["duration_min"] % 60
+        duration = f"{hours} h {minutes:02d}" if hours else f"{minutes} min"
+        return (
+            f"{result['distance_km']} km, environ {duration} en {result['mode']}, "
+            f"de {result['origin']} à {result['destination']}."
+        )
 
     return f"Outil brain inconnu : {name}"
