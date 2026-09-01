@@ -8,6 +8,7 @@ import { useCardFeed } from "../lib/useCardFeed.js";
 import { useDevices } from "../lib/useDevices.js";
 import { useFullscreen } from "../lib/useFullscreen.js";
 import { useVoiceContext } from "../lib/VoiceContext.jsx";
+import { useModes } from "../lib/useSystem.js";
 
 /**
  * Le pupitre — écran d'accueil de la Console.
@@ -33,12 +34,75 @@ import { useVoiceContext } from "../lib/VoiceContext.jsx";
 // (agents/desktop/brain/router.py) : « musique », « mails », « agenda »…
 // Une question mal formulée part en conversation pure et ne produit
 // aucune carte, ce qui donnerait l'impression que le pupitre ne marche pas.
-const SUGGESTIONS = [
-  "Qu'est-ce que j'ai aujourd'hui ?",
-  "Mes derniers mails",
-  "Quelle musique joue en ce moment ?",
-  "Capture l'écran du PC fixe",
-];
+//
+// Le choix varie selon l'heure (le matin on part au travail, la nuit on
+// écoute de la musique) et selon le mode actif quand celui-ci a un usage
+// évident (mode Repas : minimal ; mode Détente : musique en avant).
+const SUGGESTIONS_BY_PERIOD = {
+  morning: [
+    "Mes rendez-vous du jour",
+    "Mes derniers mails",
+    "Qu'est-ce que j'ai aujourd'hui ?",
+    "Capture l'écran du PC fixe",
+  ],
+  afternoon: [
+    "Mes derniers mails",
+    "Mes rendez-vous du jour",
+    "Capture l'écran du PC fixe",
+    "Quelle musique joue en ce moment ?",
+  ],
+  evening: [
+    "Mets de la musique",
+    "Quelle musique joue en ce moment ?",
+    "Capture l'écran du PC fixe",
+    "Mes derniers mails",
+  ],
+  night: [
+    "Quelle musique joue en ce moment ?",
+    "Mets de la musique",
+    "Capture l'écran du PC fixe",
+    "Mes rendez-vous du jour",
+  ],
+};
+
+const SUGGESTIONS_BY_MODE = {
+  travail: [
+    "Qu'est-ce que j'ai aujourd'hui ?",
+    "Mes derniers mails",
+    "Mes rendez-vous du jour",
+    "Capture l'écran du PC fixe",
+  ],
+  projet: [
+    "Capture l'écran du PC fixe",
+    "Mes derniers mails",
+    "Qu'est-ce que j'ai aujourd'hui ?",
+    "Mes rendez-vous du jour",
+  ],
+  detente: [
+    "Mets de la musique",
+    "Quelle musique joue en ce moment ?",
+    "Qu'est-ce que j'ai aujourd'hui ?",
+    "Capture l'écran du PC fixe",
+  ],
+  repas: ["Quelle musique joue en ce moment ?", "Mes derniers mails"],
+};
+
+function periodForHour(hour) {
+  if (hour >= 5 && hour < 12) return "morning";
+  if (hour >= 12 && hour < 18) return "afternoon";
+  if (hour >= 18 && hour < 23) return "evening";
+  return "night";
+}
+
+/** Le mode ne prime que quand il implique un usage sans ambiguïté (Travail,
+ * Projet, Détente, Repas) ; sinon (Normal, Théologie…) l'heure décide. */
+function useSuggestions() {
+  const now = useClock();
+  const { current } = useModes();
+  const modeId = current?.mode_id;
+  if (modeId && SUGGESTIONS_BY_MODE[modeId]) return SUGGESTIONS_BY_MODE[modeId];
+  return SUGGESTIONS_BY_PERIOD[periodForHour(now.getHours())];
+}
 
 const STAGE_LABELS = {
   standby: "En veille",
@@ -205,6 +269,8 @@ export default function Hud() {
   const ambientCards = useAmbient();
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
 
+  const suggestions = useSuggestions();
+
   const lastLocalQuestionRef = useRef("");
   const localTurnAtRef = useRef(0);
   const lastWasVoiceRef = useRef(false);
@@ -353,7 +419,7 @@ export default function Hud() {
               </section>
             )}
             <div className="hud-suggestions">
-              {SUGGESTIONS.map((s) => (
+              {suggestions.map((s) => (
                 <button
                   key={s}
                   type="button"
