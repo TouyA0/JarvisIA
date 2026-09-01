@@ -59,6 +59,51 @@ def agent_tool_stats(months: int = 1) -> dict:
     }
 
 
+def search(query: str = "", since: str = "", until: str = "", limit: int = 100) -> list[dict]:
+    """Recherche plein texte (insensible à la casse, question+réponse),
+    optionnellement bornée par date (`since`/`until`, « AAAA-MM-JJ ») — C8.
+    Texte seul, période seule, ou les deux combinés ; tout vide = les
+    `limit` derniers échanges, comme recent(). Plus récent d'abord
+    (contrairement à recent(), pertinent pour une liste de résultats de
+    recherche, pas pour reconstruire un fil de conversation)."""
+    needle = query.strip().lower()
+    files = sorted(config.LOGS_DIR.glob("conversations-*.jsonl"), reverse=True)
+    results: list[dict] = []
+    for path in files:
+        # Filtre grossier par mois avant d'ouvrir le fichier — les noms
+        # sont triés du plus récent au plus ancien, donc un mois trop
+        # vieux pour `since` signifie que tous les suivants le sont aussi.
+        month = path.stem.removeprefix("conversations-")
+        if since and month < since[:7]:
+            break
+        if until and month > until[:7]:
+            continue
+        try:
+            with open(path, encoding="utf-8") as f:
+                lines = f.readlines()
+        except OSError:
+            continue
+        for line in reversed(lines):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            at = entry.get("at", "")
+            if since and at < since:
+                continue
+            if until and at > f"{until}T23:59:59":
+                continue
+            if needle and needle not in entry.get("question", "").lower() and needle not in entry.get("answer", "").lower():
+                continue
+            results.append(entry)
+            if len(results) >= limit:
+                return results
+    return results
+
+
 def recent(limit: int = 40) -> list[dict]:
     """Les `limit` derniers échanges, du plus ancien au plus récent.
 

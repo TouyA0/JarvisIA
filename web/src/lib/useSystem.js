@@ -147,7 +147,20 @@ export function useConversationLog(limit = 60) {
     refresh();
   }, [refresh]);
 
-  return { entries, loaded, refresh };
+  /** Recherche plein texte + période (C8) — mot-clé seul, dates seules, ou
+   * combinés ; tout vide se comporte comme refresh() (les derniers
+   * échanges), mais renvoyés du plus récent au plus ancien (pertinent
+   * pour une liste de résultats, pas pour reconstruire un fil). */
+  const search = useCallback(async ({ query = "", since = "", until = "" } = {}) => {
+    try {
+      const params = new URLSearchParams({ q: query, since, until, limit: String(limit) });
+      setEntries(await getJson(`/api/conversations/search?${params}`));
+    } catch {
+      // brain injoignable — on garde les derniers résultats affichés
+    }
+  }, [limit]);
+
+  return { entries, loaded, refresh, search };
 }
 
 /** Notes (C2) — carnet horodaté (brain/notes.py), auparavant écrit
@@ -204,5 +217,16 @@ export function useCardHistory(limit = 100) {
     refresh();
   }, [refresh]);
 
-  return { entries, loaded, refresh };
+  /** Recherche plein texte (titre/sous-titre/type) + période (C8) — même
+   * principe que useConversationLog::search. */
+  const search = useCallback(async ({ query = "", since = "", until = "" } = {}) => {
+    try {
+      const params = new URLSearchParams({ q: query, since, until, limit: String(limit) });
+      setEntries(await getJson(`/api/cards/search?${params}`));
+    } catch {
+      // brain injoignable — on garde les derniers résultats affichés
+    }
+  }, [limit]);
+
+  return { entries, loaded, refresh, search };
 }

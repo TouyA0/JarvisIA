@@ -966,6 +966,13 @@ async def cards_history(limit: int = 100) -> list[dict]:
     return cards.history(max(1, min(limit, 200)))
 
 
+@app.get("/api/cards/search")
+async def search_cards(q: str = "", since: str = "", until: str = "", limit: int = 100) -> list[dict]:
+    """Recherche plein texte + période sur les cartes passées (C8) — voir
+    cards.py::search. `q` seul, `since`/`until` seuls, ou combinés."""
+    return cards.search(q, since, until, max(1, min(limit, 500)))
+
+
 @app.delete("/api/cards")
 async def clear_cards() -> dict:
     cards.clear()
@@ -1013,6 +1020,14 @@ async def list_conversations(limit: int = 40) -> list[dict]:
     disparaissait à chaque F5, seule la dernière réponse restait à
     l'écran)."""
     return convlog.recent(max(1, min(limit, 200)))
+
+
+@app.get("/api/conversations/search")
+async def search_conversations(q: str = "", since: str = "", until: str = "", limit: int = 100) -> list[dict]:
+    """Recherche plein texte + période sur le journal de conversation (C8)
+    — voir convlog.py::search. `q` seul, `since`/`until` seuls, ou
+    combinés ; tout vide renvoie les derniers échanges comme /api/conversations."""
+    return convlog.search(q, since, until, max(1, min(limit, 500)))
 
 
 @app.get("/api/memory")

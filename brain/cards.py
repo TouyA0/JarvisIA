@@ -148,6 +148,49 @@ def history(limit: int = 100) -> list[dict]:
     return list(reversed(entries))
 
 
+def search(query: str = "", since: str = "", until: str = "", limit: int = 100) -> list[dict]:
+    """Recherche plein texte (titre/sous-titre/type, insensible à la
+    casse), optionnellement bornée par date (`since`/`until`,
+    « AAAA-MM-JJ ») — C8, même principe que convlog.py::search. Ne fouille
+    pas `data` : trop volumineux ou bruité pour une recherche utile (une
+    capture d'écran ou une liste de mails entière, par exemple). Plus
+    récent d'abord."""
+    needle = query.strip().lower()
+    files = sorted(config.LOGS_DIR.glob("cards-*.jsonl"), reverse=True)
+    results: list[dict] = []
+    for path in files:
+        month = path.stem.removeprefix("cards-")
+        if since and month < since[:7]:
+            break
+        if until and month > until[:7]:
+            continue
+        try:
+            with open(path, encoding="utf-8") as f:
+                lines = f.readlines()
+        except OSError:
+            continue
+        for line in reversed(lines):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            day = time.strftime("%Y-%m-%d", time.localtime(entry.get("at", 0)))
+            if since and day < since:
+                continue
+            if until and day > until:
+                continue
+            haystack = f"{entry.get('title', '')} {entry.get('subtitle', '')} {entry.get('type', '')}".lower()
+            if needle and needle not in haystack:
+                continue
+            results.append(entry)
+            if len(results) >= limit:
+                return results
+    return results
+
+
 def exchange(question: str, answer: str, source: str = "") -> None:
     """Diffuse un tour de conversation — quel que soit le client qui l'a
     déclenché. C'est ce qui permet à la Console de rester allumée en

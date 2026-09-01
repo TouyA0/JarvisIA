@@ -580,15 +580,96 @@ function MemorySection() {
   );
 }
 
+/** Champs de recherche (C8) partagés entre le journal de conversation et
+ * l'historique des affichages — mot-clé + période, chacun facultatif.
+ * `onSearch` reçoit {query, since, until} ; un formulaire vide équivaut à
+ * `onReset` (retour à la liste brute, ordre chronologique habituel). */
+function SearchFields({ onSearch, onReset, placeholder }) {
+  const [query, setQuery] = useState("");
+  const [since, setSince] = useState("");
+  const [until, setUntil] = useState("");
+
+  function submit(e) {
+    e.preventDefault();
+    if (!query.trim() && !since && !until) {
+      onReset();
+      return;
+    }
+    onSearch({ query: query.trim(), since, until });
+  }
+
+  function reset() {
+    setQuery("");
+    setSince("");
+    setUntil("");
+    onReset();
+  }
+
+  return (
+    <form className="row row--wrap" style={{ gap: "var(--sp-2)" }} onSubmit={submit}>
+      <input
+        className="input"
+        type="search"
+        value={query}
+        placeholder={placeholder}
+        onChange={(e) => setQuery(e.target.value)}
+        style={{ flex: "1 1 200px" }}
+      />
+      <input
+        className="input"
+        type="date"
+        value={since}
+        onChange={(e) => setSince(e.target.value)}
+        aria-label="Depuis"
+        style={{ flex: "0 1 150px" }}
+      />
+      <input
+        className="input"
+        type="date"
+        value={until}
+        onChange={(e) => setUntil(e.target.value)}
+        aria-label="Jusqu'au"
+        style={{ flex: "0 1 150px" }}
+      />
+      <button type="submit" className="btn btn--sm">
+        <Icon name="search" size={15} />
+        Chercher
+      </button>
+      {(query || since || until) && (
+        <button type="button" className="btn btn--ghost btn--sm" onClick={reset}>
+          Réinitialiser
+        </button>
+      )}
+    </form>
+  );
+}
+
 function LogSection() {
-  const { entries, loaded, refresh } = useConversationLog(60);
+  const { entries, loaded, refresh, search } = useConversationLog(60);
   const [open, setOpen] = useState(false);
+  const [searching, setSearching] = useState(false);
+
+  async function runSearch(params) {
+    await search(params);
+    setSearching(true);
+    setOpen(true);
+  }
+
+  async function reset() {
+    setSearching(false);
+    await refresh();
+  }
+
+  // search() renvoie déjà le plus récent d'abord (pertinent pour des
+  // résultats de recherche) ; refresh() renvoie le plus ancien d'abord
+  // (pour reconstruire un fil) — d'où l'inversion conditionnelle ici.
+  const shown = searching ? entries : [...entries].reverse();
 
   return (
     <section className="stack">
       <div className="row">
         <h2 className="section-label spacer">Journal des conversations</h2>
-        <button type="button" className="btn btn--ghost btn--sm" onClick={refresh} disabled={!loaded}>
+        <button type="button" className="btn btn--ghost btn--sm" onClick={reset} disabled={!loaded}>
           <Icon name="refresh" size={15} />
           Actualiser
         </button>
@@ -602,23 +683,28 @@ function LogSection() {
         </button>
       </div>
 
-      {open &&
-        (entries.length === 0 ? (
-          <p className="hint">Aucun échange journalisé.</p>
-        ) : (
-          <ul className="stack stack--tight" style={{ listStyle: "none", margin: 0, padding: 0 }}>
-            {[...entries].reverse().map((e, i) => (
-              <li key={i} className="card" style={{ gap: "var(--sp-2)" }}>
-                <span className="hint" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>
-                  {e.at?.replace("T", " ") || ""}
-                  {e.source ? ` · ${e.source}` : ""}
-                </span>
-                <span style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>{e.question}</span>
-                <span style={{ fontSize: "var(--text-sm)" }}>{e.answer}</span>
-              </li>
-            ))}
-          </ul>
-        ))}
+      {open && (
+        <>
+          <SearchFields onSearch={runSearch} onReset={reset} placeholder="Chercher dans les échanges…" />
+
+          {shown.length === 0 ? (
+            <p className="hint">{searching ? "Aucun résultat." : "Aucun échange journalisé."}</p>
+          ) : (
+            <ul className="stack stack--tight" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+              {shown.map((e, i) => (
+                <li key={i} className="card" style={{ gap: "var(--sp-2)" }}>
+                  <span className="hint" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>
+                    {e.at?.replace("T", " ") || ""}
+                    {e.source ? ` · ${e.source}` : ""}
+                  </span>
+                  <span style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>{e.question}</span>
+                  <span style={{ fontSize: "var(--text-sm)" }}>{e.answer}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
     </section>
   );
 }
@@ -627,14 +713,28 @@ function LogSection() {
  * mémoire vive — lecture seule (pas de bouton écarter, ni d'actions : ce
  * sont des instantanés passés, agir dessus n'aurait pas de sens). */
 function CardHistorySection() {
-  const { entries, loaded, refresh } = useCardHistory(100);
+  const { entries, loaded, refresh, search } = useCardHistory(100);
   const [open, setOpen] = useState(false);
+  const [searching, setSearching] = useState(false);
+
+  async function runSearch(params) {
+    await search(params);
+    setSearching(true);
+    setOpen(true);
+  }
+
+  async function reset() {
+    setSearching(false);
+    await refresh();
+  }
+
+  const shown = searching ? entries : [...entries].reverse();
 
   return (
     <section className="stack">
       <div className="row">
         <h2 className="section-label spacer">Historique des affichages</h2>
-        <button type="button" className="btn btn--ghost btn--sm" onClick={refresh} disabled={!loaded}>
+        <button type="button" className="btn btn--ghost btn--sm" onClick={reset} disabled={!loaded}>
           <Icon name="refresh" size={15} />
           Actualiser
         </button>
@@ -647,16 +747,21 @@ function CardHistorySection() {
         conservées en mémoire. Les captures d'écran y perdent leur image — jamais écrite sur disque.
       </p>
 
-      {open &&
-        (entries.length === 0 ? (
-          <p className="hint">Aucune carte journalisée.</p>
-        ) : (
-          <div className="hud-deck-grid">
-            {[...entries].reverse().map((card) => (
-              <CardView key={card.id} card={card} readOnly />
-            ))}
-          </div>
-        ))}
+      {open && (
+        <>
+          <SearchFields onSearch={runSearch} onReset={reset} placeholder="Chercher par titre, sous-titre, type…" />
+
+          {shown.length === 0 ? (
+            <p className="hint">{searching ? "Aucun résultat." : "Aucune carte journalisée."}</p>
+          ) : (
+            <div className="hud-deck-grid">
+              {shown.map((card) => (
+                <CardView key={card.id} card={card} readOnly />
+              ))}
+            </div>
+          )}
+        </>
+      )}
     </section>
   );
 }
