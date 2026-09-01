@@ -29,6 +29,10 @@ agents/desktop/wakeword/samples_negatifs/
 # Modèles (optionnel si lourd)
 *.onnx
 *.tflite
+# Modèle de mot d'éveil de la voix web (quelques centaines de Ko, pas un
+# binaire lourd comme onnxruntime) : nécessaire au clone pour que
+# InferenceSession.create() le trouve (voir web/src/lib/wakeWordDetector.js).
+!web/public/models/*.onnx
 
 # Web (web/)
 web/node_modules/
