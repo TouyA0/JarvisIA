@@ -34,7 +34,7 @@ from agents.protocol.messages import (
     RegisterAck,
     parse_message,
 )
-from brain import activity, cards, config, device_store, diagnostics, notes, pairing, proactive, routines, speech, timers, weather
+from brain import activity, cards, config, device_store, diagnostics, notes, pairing, preferences, proactive, routines, speech, timers, weather
 from brain import tools as brain_tools
 from brain.core import agent as pc_agent
 from brain.core import convlog
@@ -372,6 +372,78 @@ async def add_note(body: dict) -> dict:
         return notes.add(text)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
+
+
+# ── Réglages généraux (C6 / F26) ──────────────────────────────────────────
+# Ce qui était jusqu'ici uniquement dans .env, à redémarrer le brain pour
+# voir l'effet — voir brain/preferences.py pour le pourquoi de ce
+# périmètre (ville météo + proactivité seulement, pas voix/hotkeys/seuils
+# barge-in, propres au poste physique).
+
+
+@app.get("/api/preferences")
+async def get_preferences() -> dict:
+    return {"weather": preferences.get_weather(), "proactive": preferences.get_proactive()}
+
+
+@app.put("/api/preferences/weather")
+async def set_weather_preferences(body: dict) -> dict:
+    city = (body.get("city") or "").strip()
+    if not city:
+        raise HTTPException(400, "ville manquante")
+    try:
+        lat = float(body.get("lat"))
+        lon = float(body.get("lon"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "latitude/longitude invalides")
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        raise HTTPException(400, "latitude/longitude hors limites")
+    return preferences.set_weather(city, lat, lon)
+
+
+@app.delete("/api/preferences/weather")
+async def clear_weather_preferences() -> dict:
+    return preferences.clear_weather()
+
+
+@app.put("/api/preferences/proactive")
+async def set_proactive_preferences(body: dict) -> dict:
+    values: dict = {}
+    if "enabled" in body:
+        values["enabled"] = bool(body["enabled"])
+    for key in ("disk_threshold", "ram_threshold"):
+        if key in body:
+            try:
+                pct = int(body[key])
+            except (TypeError, ValueError):
+                raise HTTPException(400, f"{key} invalide")
+            if not (0 <= pct <= 100):
+                raise HTTPException(400, f"{key} doit être entre 0 et 100")
+            values[key] = pct
+    for key in ("bedtime_hour", "briefing_hour"):
+        if key in body:
+            try:
+                h = int(body[key])
+            except (TypeError, ValueError):
+                raise HTTPException(400, f"{key} invalide")
+            if not (0 <= h <= 23):
+                raise HTTPException(400, f"{key} doit être entre 0 et 23")
+            values[key] = h
+    for key in ("bedtime_minute", "briefing_minute"):
+        if key in body:
+            try:
+                m = int(body[key])
+            except (TypeError, ValueError):
+                raise HTTPException(400, f"{key} invalide")
+            if not (0 <= m <= 59):
+                raise HTTPException(400, f"{key} doit être entre 0 et 59")
+            values[key] = m
+    return preferences.set_proactive(values)
+
+
+@app.delete("/api/preferences/proactive")
+async def clear_proactive_preferences() -> dict:
+    return preferences.clear_proactive()
 
 
 @app.get("/api/integrations")
@@ -825,7 +897,7 @@ def _ambient_snapshot() -> dict:
     if w and w["temp"] is not None:
         out["weather"] = {
             "temp": w["temp"], "description": weather.description(w["code"]),
-            "wind": w["wind"], "city": config.WEATHER_CITY,
+            "wind": w["wind"], "city": preferences.get_weather()["city"],
         }
 
     if google_calendar.configured() and integrations_store.list_public("google_calendar"):

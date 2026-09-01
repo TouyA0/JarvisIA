@@ -11,7 +11,7 @@ import time
 
 import requests
 
-from brain import config
+from brain import config, preferences
 
 _WMO = {
     0: "ciel dégagé", 1: "plutôt dégagé", 2: "partiellement nuageux", 3: "couvert",
@@ -36,12 +36,13 @@ def get() -> dict | None:
         if fresh:
             return dict(_cache)
 
+    loc = preferences.get_weather()
     try:
         resp = requests.get(
             "https://api.open-meteo.com/v1/forecast",
             params={
-                "latitude": config.WEATHER_LAT,
-                "longitude": config.WEATHER_LON,
+                "latitude": loc["lat"],
+                "longitude": loc["lon"],
                 "current": "temperature_2m,weather_code,wind_speed_10m",
             },
             timeout=6,
@@ -62,3 +63,11 @@ def get() -> dict | None:
 
 def description(code: int | None) -> str:
     return _WMO.get(code, "conditions indéterminées")
+
+
+def clear_cache() -> None:
+    """Force un rafraîchissement au prochain get() — appelé après un
+    changement de ville/coordonnées (brain/preferences.py::set_weather),
+    sinon jusqu'à 30 min avant que le changement se voie."""
+    with _lock:
+        _cache.update(at=0.0, temp=None, code=None, wind=None)

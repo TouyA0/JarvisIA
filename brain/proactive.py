@@ -9,6 +9,12 @@ sans dépendre du réseau brain. Les deux partagent le même fichier d'état
 (data/proactive_state.json) : si le desktop a déjà annoncé une alerte à
 voix haute, ce module la voit en cooldown et ne la republie pas en double
 sous forme de carte quelques secondes plus tard.
+
+Les seuils/horaires eux-mêmes viennent de brain/preferences.py (C6) —
+éditables depuis la Console web, sans redémarrer, sans toucher `.env`.
+Ce réglage ne change QUE le comportement du brain : le desktop garde les
+siens (agents/desktop/config.py, toujours `.env` seul) tant que personne
+ne les aligne à la main — pas de synchronisation entre les deux.
 """
 from __future__ import annotations
 
@@ -16,7 +22,7 @@ import json
 import threading
 import time
 
-from brain import cards, config
+from brain import cards, config, preferences
 
 _CHECK_INTERVAL_S = 60
 _STATE_FILE = config.DATA_DIR / "proactive_state.json"
@@ -82,16 +88,18 @@ def _check_system() -> None:
     except ImportError:
         return
 
+    prefs = preferences.get_proactive()
+
     try:
         disk = psutil.disk_usage("C:\\" if _is_windows() else "/").percent
-        if disk >= config.PROACTIVE_DISK_THRESHOLD and _cooldown_ok("disk", 2 * 3600):
+        if disk >= prefs["disk_threshold"] and _cooldown_ok("disk", 2 * 3600):
             _announce("Disque presque plein", f"{int(disk)}% d'occupation sur le disque système, Monsieur.")
     except Exception:
         pass
 
     try:
         mem = psutil.virtual_memory().percent
-        if mem >= config.PROACTIVE_RAM_THRESHOLD and _cooldown_ok("ram", 3600):
+        if mem >= prefs["ram_threshold"] and _cooldown_ok("ram", 3600):
             _announce("Mémoire saturée", f"{int(mem)}% d'utilisation de la RAM, Monsieur.")
     except Exception:
         pass
@@ -107,7 +115,8 @@ def _check_system() -> None:
 # ── Coucher tardif ────────────────────────────────────────────────────────
 def _check_bedtime() -> None:
     now = time.localtime()
-    target = (config.PROACTIVE_BEDTIME_HOUR, config.PROACTIVE_BEDTIME_MINUTE)
+    prefs = preferences.get_proactive()
+    target = (prefs["bedtime_hour"], prefs["bedtime_minute"])
     if (now.tm_hour, now.tm_min) < target:
         return
     if now.tm_hour > target[0] or (now.tm_hour == target[0] and now.tm_min > target[1] + 5):
@@ -148,7 +157,8 @@ def _briefing_mail() -> str | None:
 
 def _check_briefing() -> None:
     now = time.localtime()
-    target = (config.PROACTIVE_BRIEFING_HOUR, config.PROACTIVE_BRIEFING_MINUTE)
+    prefs = preferences.get_proactive()
+    target = (prefs["briefing_hour"], prefs["briefing_minute"])
     if (now.tm_hour, now.tm_min) < target:
         return
     if now.tm_hour > target[0] or (now.tm_hour == target[0] and now.tm_min > target[1] + 5):
@@ -161,7 +171,8 @@ def _check_briefing() -> None:
     parts = [f"Il est {now.tm_hour} heures {now.tm_min:02d}, Monsieur."]
     w = weather.get()
     if w and w["temp"] is not None:
-        parts.append(f"Il fait {round(w['temp'])} degrés à {config.WEATHER_CITY}, {weather.description(w['code'])}.")
+        city = preferences.get_weather()["city"]
+        parts.append(f"Il fait {round(w['temp'])} degrés à {city}, {weather.description(w['code'])}.")
     try:
         agenda = _briefing_agenda()
         if agenda:
@@ -181,7 +192,10 @@ def _check_briefing() -> None:
 def _loop() -> None:
     while True:
         time.sleep(_CHECK_INTERVAL_S)
-        if not config.PROACTIVE_ENABLED:
+        # Lu à chaque tour (pas figé au démarrage) : basculer "enabled"
+        # depuis la Console (C6) doit prendre effet sans redémarrer le
+        # brain, contrairement à PROACTIVE_ENABLED en .env seul avant.
+        if not preferences.get_proactive()["enabled"]:
             continue
         try:
             _check_system()
@@ -195,11 +209,11 @@ _started = False
 
 
 def start() -> None:
+    """Le thread tourne toujours, même si désactivé au démarrage : c'est
+    `_loop()` qui revérifie `enabled` à chaque tour, pour qu'un bascule
+    depuis la Console prenne effet sans redémarrer le brain."""
     global _started
     if _started:
         return
     _started = True
-    if not config.PROACTIVE_ENABLED:
-        print("[brain][proactif] désactivé (PROACTIVE_ENABLED=0)")
-        return
     threading.Thread(target=_loop, daemon=True).start()

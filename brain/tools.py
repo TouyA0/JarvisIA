@@ -10,7 +10,7 @@ deux listes de schémas, et route chaque tool_use vers le bon exécuteur
 """
 from __future__ import annotations
 
-from brain import cards, config, diagnostics, weather
+from brain import cards, config, diagnostics, preferences, weather
 from brain.integrations import brave_search, google_calendar, google_contacts, google_drive, google_gmail, home_assistant, jellyfin, ors, spotify, store, tisseo, zoho_mail
 
 # Chaque outil qui rapporte de la donnée structurée émet, en plus du texte
@@ -974,11 +974,12 @@ def execute(name: str, args: dict):
         w = weather.get()
         if not w or w["temp"] is None:
             return "Les données météo ne sont pas disponibles pour l'instant, Monsieur."
+        city = preferences.get_weather()["city"]
         desc = weather.description(w["code"])
         cards.emit("weather", f"{round(w['temp'])}°C", {
-            "temp": w["temp"], "description": desc, "wind": w["wind"], "city": config.WEATHER_CITY,
+            "temp": w["temp"], "description": desc, "wind": w["wind"], "city": city,
         }, subtitle=desc.capitalize())
-        return f"Il fait {round(w['temp'])} degrés à {config.WEATHER_CITY}, {desc}, Monsieur."
+        return f"Il fait {round(w['temp'])} degrés à {city}, {desc}, Monsieur."
 
     if name == "system_diagnostics":
         d = diagnostics.snapshot()

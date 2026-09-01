@@ -8,6 +8,7 @@ import Hud from "./components/Hud.jsx";
 import Integrations from "./components/Integrations.jsx";
 import Notes from "./components/Notes.jsx";
 import Routines from "./components/Routines.jsx";
+import Settings from "./components/Settings.jsx";
 import System from "./components/System.jsx";
 import { ConfirmProvider } from "./components/ui/Confirm.jsx";
 import ErrorBoundary from "./components/ui/ErrorBoundary.jsx";
@@ -24,6 +25,7 @@ const SCREENS = {
   routines: Routines,
   integrations: Integrations,
   system: System,
+  settings: Settings,
 };
 
 export default function App() {

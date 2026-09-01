@@ -46,6 +46,10 @@ const PATHS = {
   expand: "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5",
   collapse: "M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5",
   note: "M6 3h9l4 4v14H6zM15 3v4h4M8.5 12h7M8.5 15.5h7M8.5 8.5h3",
+  sliders:
+    "M3 6h4M11 6h10M7 6A2 2 0 1 0 11 6A2 2 0 1 0 7 6" +
+    "M3 12h10M17 12h4M13 12A2 2 0 1 0 17 12A2 2 0 1 0 13 12" +
+    "M3 18h6M13 18h8M9 18A2 2 0 1 0 13 18A2 2 0 1 0 9 18",
 };
 
 export default function Icon({ name, size = 18, strokeWidth = 1.6, className = "" }) {

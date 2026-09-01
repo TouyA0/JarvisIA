@@ -31,6 +31,7 @@ const NAV_ITEMS = [
   { id: "routines", label: "Routines", icon: "routines", short: "Routines" },
   { id: "integrations", label: "Intégrations", icon: "integrations", short: "Comptes" },
   { id: "system", label: "Système", icon: "system", short: "Système" },
+  { id: "settings", label: "Réglages", icon: "sliders", short: "Réglages" },
 ];
 
 function reactorState(status) {
