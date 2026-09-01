@@ -160,7 +160,12 @@ export function useChat() {
   const ask = useCallback((text) => {
     const trimmed = text.trim();
     const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN || !trimmed) return false;
+    // pendingRef non nul = un tour précédent n'a pas encore reçu son
+    // chat.done. Sans ce garde-fou, le barge-in vocal (useVoice.js) peut
+    // désormais envoyer une nouvelle commande pendant que la réponse
+    // précédente streame encore — les chat.phrase restants du vieux tour
+    // se retrouveraient concaténés dans la bulle du nouveau.
+    if (!ws || ws.readyState !== WebSocket.OPEN || !trimmed || pendingRef.current) return false;
 
     const answerId = nextId();
     pendingRef.current = answerId;

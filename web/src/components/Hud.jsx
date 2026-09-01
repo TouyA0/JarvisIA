@@ -196,7 +196,13 @@ export default function Hud() {
   function handleVoiceCommand(text) {
     lastWasVoiceRef.current = true;
     voice.pause();
-    send(text);
+    // Le tour précédent n'a pas fini de streamer sa réponse (send() refuse) :
+    // rien à écouter côté chat, on reprend l'écoute au lieu de rester bloqué
+    // en pause sans qu'aucun chat.done ne vienne jamais la lever.
+    if (!send(text)) {
+      lastWasVoiceRef.current = false;
+      voice.resume();
+    }
   }
 
   // Relaie chaque phrase à la synthèse vocale dès son arrivée (si la

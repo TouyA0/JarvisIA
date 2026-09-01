@@ -21,9 +21,14 @@ import { useWakeWordDetector } from "./useWakeWordDetector.js";
  * c'est armé — plus besoin de compte à rebours puisque rien n'est envoyé
  * au réseau en continu.
  *
- * Pas de barge-in : `pause()` (interne) coupe la détection pendant la
- * capture d'une commande ou pendant que Jarvis parle, pour ne pas
- * s'entendre lui-même et se redéclencher en boucle.
+ * Barge-in : `pause()` (interne) coupe la détection pendant la capture
+ * d'une commande et pendant que Jarvis réfléchit/transcrit (rien à
+ * interrompre à ce moment-là), mais le détecteur reste actif pendant la
+ * lecture audio de la réponse (drainQueue) — le modèle tourne déjà en
+ * continu dans le navigateur, ça ne coûte rien de plus. Un « Jarvis »
+ * entendu pendant que Jarvis parle coupe net la lecture en cours
+ * (voir interruptSpeaking) et enchaîne directement sur la capture de la
+ * nouvelle commande, comme au repos.
  */
 export function useVoice({ onCommand }) {
   const [armed, setArmed] = useState(false);
@@ -47,12 +52,20 @@ export function useVoice({ onCommand }) {
   // au lieu d'attendre le bloc entier comme avant. Même principe que le
   // streaming phrase par phrase de agents/desktop/audio/tts.py côté PC.
   const audioQueueRef = useRef([]); // Promise<Blob|null>[], dans l'ordre d'arrivée
-  const playingRef = useRef(false); // une boucle de lecture est déjà active
+  const playingRef = useRef(false); // une boucle de lecture est déjà active — Jarvis parle (barge-in armé)
   const turnEndedRef = useRef(true); // plus aucune phrase à attendre pour le tour en cours
-  const playResolveRef = useRef(null); // débloque la lecture en cours depuis stopSpeaking
+  const playResolveRef = useRef(null); // débloque la lecture en cours depuis stopSpeaking/interruptSpeaking
+  const suppressResumeRef = useRef(false); // un barge-in gère lui-même la suite : sauter le resume() de fin de drainQueue
 
   const handleDetected = useCallback(async (score) => {
-    if (pausedRef.current) return; // Jarvis parle déjà, ignore ce déclenchement
+    if (pausedRef.current) {
+      if (!playingRef.current) return; // en pleine réflexion/transcription : rien à interrompre, on ignore
+      // Barge-in : Jarvis est en train de parler (playingRef actif depuis
+      // drainQueue) — on le coupe net et on enchaîne directement sur la
+      // capture de la nouvelle commande, comme si on partait du repos.
+      suppressResumeRef.current = true;
+      interruptSpeaking();
+    }
     setWakeWordHeard(true);
     setTimeout(() => setWakeWordHeard(false), 2000);
 
@@ -60,15 +73,18 @@ export function useVoice({ onCommand }) {
     // termine (pour ne pas se redéclencher tout seul juste après — bug réel
     // rencontré). Deux issues ci-dessous (rien dit / transcription vide) sont
     // des culs-de-sac : rien d'autre ne va appeler resume() derrière, donc il
-    // faut le faire explicitement ici. Seule l'issue "commande envoyée" laisse
-    // le détecteur en pause — c'est speakAnswer (Console.jsx) qui le réactive,
+    // faut le faire explicitement ici — y compris quand on arrive d'un
+    // barge-in (pausedRef.current est alors resté à true, il faut le
+    // relâcher nous-mêmes). Seule l'issue "commande envoyée" laisse le
+    // détecteur en pause — c'est speakAnswer (Console.jsx) qui le réactive,
     // une fois la réponse dite.
     setStatus("listening_command");
     const wavBlob = await detector.captureCommand();
     if (!wavBlob) {
       // rien dit après « Jarvis » (timeout d'attente de parole)
       setLastTranscript("(rien entendu après « Jarvis »)");
-      if (armedRef.current && !pausedRef.current) {
+      pausedRef.current = false;
+      if (armedRef.current) {
         detector.resume();
         setStatus("listening");
       }
@@ -79,10 +95,13 @@ export function useVoice({ onCommand }) {
     setLastTranscript(text.trim() || "(silence)");
     if (text.trim()) {
       onCommandRef.current(text.trim());
-    } else if (armedRef.current && !pausedRef.current) {
+    } else {
       // parole détectée mais transcription vide (bruit) — même impasse
-      detector.resume();
-      setStatus("listening");
+      pausedRef.current = false;
+      if (armedRef.current) {
+        detector.resume();
+        setStatus("listening");
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -156,8 +175,10 @@ export function useVoice({ onCommand }) {
   }, [stopStream]);
 
   const pause = useCallback(() => {
+    // Ne coupe pas le détecteur : il reste self-pausé par captureCommand()
+    // pendant la réflexion/transcription, et drainQueue le réactive lui-même
+    // dès que la lecture audio démarre (barge-in, voir handleDetected).
     pausedRef.current = true;
-    detector.pause();
     setStatus("speaking");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -194,6 +215,11 @@ export function useVoice({ onCommand }) {
   const drainQueue = useCallback(async () => {
     if (playingRef.current) return;
     playingRef.current = true;
+    // Second palier du barge-in : le modèle de détection tourne déjà en
+    // continu dans le navigateur, donc pas de coût à le laisser actif
+    // pendant que Jarvis parle — seule différence avec l'écoute au repos,
+    // handleDetected traite un « Jarvis » entendu ici comme une coupure.
+    if (armedRef.current) detector.resume();
     while (audioQueueRef.current.length) {
       const blob = await audioQueueRef.current.shift();
       if (blob) {
@@ -212,7 +238,13 @@ export function useVoice({ onCommand }) {
       }
     }
     playingRef.current = false;
-    if (turnEndedRef.current) resume();
+    if (turnEndedRef.current) {
+      // Un barge-in (handleDetected) a déjà pris la suite lui-même — cette
+      // boucle ne fait que se terminer après avoir été coupée court, il ne
+      // faut pas repasser en "listening" par-dessus son "listening_command".
+      if (suppressResumeRef.current) suppressResumeRef.current = false;
+      else resume();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resume]);
 
@@ -239,10 +271,11 @@ export function useVoice({ onCommand }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resume]);
 
-  // Coupe la lecture en cours (Échap) sans attendre la fin naturelle du
-  // clip, vide la file, et reprend l'écoute comme si le tour s'était
-  // terminé normalement.
-  const stopSpeaking = useCallback(() => {
+  // Coupe la lecture en cours sans attendre la fin naturelle du clip et
+  // vide la file — utilisé par Échap (stopSpeaking, qui reprend l'écoute
+  // ensuite) et par le barge-in vocal (handleDetected, qui enchaîne lui-même
+  // sur la capture d'une commande au lieu de reprendre l'écoute passive).
+  const interruptSpeaking = useCallback(() => {
     audioQueueRef.current = [];
     turnEndedRef.current = true;
     const audio = audioRef.current;
@@ -250,9 +283,15 @@ export function useVoice({ onCommand }) {
     if (audio) audio.pause();
     playResolveRef.current?.();
     playResolveRef.current = null;
+  }, []);
+
+  // Échap : coupe la parole et reprend l'écoute comme si le tour s'était
+  // terminé normalement.
+  const stopSpeaking = useCallback(() => {
+    interruptSpeaking();
     if (!playingRef.current) resume();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resume]);
+  }, [interruptSpeaking, resume]);
 
   useEffect(() => () => disarm(), [disarm]);
 

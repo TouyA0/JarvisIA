@@ -274,7 +274,13 @@ export default function Console() {
   function handleVoiceCommand(text) {
     lastWasVoiceRef.current = true;
     voice.pause();
-    ask(text);
+    // Le tour précédent n'a pas fini de streamer sa réponse (ask() refuse) :
+    // rien à écouter côté chat, on reprend l'écoute au lieu de rester bloqué
+    // en pause sans qu'aucun chat.done ne vienne jamais la lever.
+    if (!ask(text)) {
+      lastWasVoiceRef.current = false;
+      voice.resume();
+    }
   }
 
   // Relaie chaque phrase à la synthèse vocale dès son arrivée (si la
