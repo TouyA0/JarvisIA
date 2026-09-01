@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ErrorBoundary from "../ui/ErrorBoundary.jsx";
 import Icon from "../ui/Icon.jsx";
 import Modal from "../ui/Modal.jsx";
 import { useToast } from "../ui/Toast.jsx";
@@ -145,7 +146,12 @@ export default function CardView({ card, onDismiss, readOnly = false }) {
       </header>
 
       <div className="hud-card-body">
-        <Body data={card.data} onZoom={() => setZoomed(true)} />
+        {/* Boundary propre à la carte : un champ manquant côté brain
+            (data.events, data.image_b64…) ne doit coûter que cette tuile,
+            pas tout l'écran — voir ErrorBoundary.jsx. */}
+        <ErrorBoundary compact label={`card:${card.type}`}>
+          <Body data={card.data} onZoom={() => setZoomed(true)} />
+        </ErrorBoundary>
       </div>
 
       {!readOnly && card.type === "screenshot" && <ScreenshotActions data={card.data} toast={toast} />}

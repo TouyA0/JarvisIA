@@ -380,6 +380,14 @@
 .card-empty {
   color: var(--text-faint);
 }
+.card-broken {
+  display: flex;
+  align-items: center;
+  padding: var(--sp-3);
+  border: 1px dashed var(--line);
+  border-radius: var(--r-md);
+  color: var(--text-faint);
+}
 .card-more {
   font-family: var(--font-mono);
   font-size: var(--text-xs);

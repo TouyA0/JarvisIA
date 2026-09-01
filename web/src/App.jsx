@@ -9,6 +9,7 @@ import Integrations from "./components/Integrations.jsx";
 import Routines from "./components/Routines.jsx";
 import System from "./components/System.jsx";
 import { ConfirmProvider } from "./components/ui/Confirm.jsx";
+import ErrorBoundary from "./components/ui/ErrorBoundary.jsx";
 import { ToastProvider } from "./components/ui/Toast.jsx";
 import { ChatProvider } from "./lib/ChatContext.jsx";
 import { useConsoleAuth } from "./lib/useConsoleAuth.js";
@@ -49,7 +50,12 @@ export default function App() {
               active — voir ConfirmationBanner.jsx. */}
           <ConfirmationBanner />
           <AppShell view={view} onNavigate={navigate}>
-            <Screen />
+            {/* `key={view}` : changer d'écran repart d'une boundary saine —
+                un crash sur Console ne doit pas laisser le Pupitre KO au
+                retour. */}
+            <ErrorBoundary key={view} label={`screen:${view}`}>
+              <Screen />
+            </ErrorBoundary>
           </AppShell>
         </ChatProvider>
       </ConfirmProvider>
