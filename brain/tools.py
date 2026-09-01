@@ -10,7 +10,7 @@ deux listes de schémas, et route chaque tool_use vers le bon exécuteur
 """
 from __future__ import annotations
 
-from brain.integrations import google_calendar, google_contacts, google_drive, google_gmail, jellyfin, ors, spotify, store, tisseo, zoho_mail
+from brain.integrations import google_calendar, google_contacts, google_drive, google_gmail, home_assistant, jellyfin, ors, spotify, store, tisseo, zoho_mail
 
 BRAIN_TOOLS = [
     {
@@ -365,6 +365,76 @@ BRAIN_TOOLS = [
             "required": ["destination"],
         },
     },
+    {
+        "name": "ha_state",
+        "description": (
+            "Consulte l'état de TOUTES les entités Home Assistant dont le nom correspond "
+            "(pas juste la première) — utile pour un domaine entier plutôt qu'un seul appareil : "
+            "« le serveur » peut retourner CPU/RAM/température/disque comme plusieurs entités "
+            "distinctes, chacune avec tous ses attributs (pas juste l'état brut). Utilise pour "
+            "« est-ce que X est allumé ? », « quelle température ? », « qu'est-ce qui se passe "
+            "avec Y ? »."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "entity": {"type": "string", "description": "Nom (ou fragment) de l'appareil/capteur/domaine, en texte libre (friendly_name Home Assistant)."},
+            },
+            "required": ["entity"],
+        },
+    },
+    {
+        "name": "ha_list_all",
+        "description": (
+            "Liste TOUTES les entités Home Assistant (ou filtrées par domaine technique : "
+            "'sensor', 'binary_sensor', 'persistent_notification', 'device_tracker'...). Utilise "
+            "quand Monsieur demande un aperçu général (« qu'est-ce qui se passe sur Home "
+            "Assistant ? »), pour retrouver une notification/un résumé matinal "
+            "(domain='persistent_notification'), ou pour découvrir le nom exact d'une entité que "
+            "ha_state ne trouve pas. Peut retourner beaucoup de résultats sans `domain` — précise-le "
+            "si possible."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "domain": {"type": "string", "description": "Domaine technique HA pour filtrer (ex. 'sensor', 'persistent_notification'). Omis = tout."},
+            },
+        },
+    },
+    {
+        "name": "ha_control",
+        "description": (
+            "Allume/éteint/bascule un appareil Home Assistant par son nom (lumière, prise, volet, "
+            "ventilateur, media player…). Pour les serrures et l'alarme, ouvrir/désarmer déclenche "
+            "une confirmation à l'écran (rend la maison moins sûre) — verrouiller/armer jamais. "
+            "Si refusée ou expirée, dis-le simplement, ne réessaie pas seul."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "entity": {"type": "string", "description": "Nom de l'appareil, en texte libre."},
+                "action": {"type": "string", "enum": ["on", "off", "toggle"], "description": "on=allumer/verrouiller/armer, off=éteindre/déverrouiller/désarmer, toggle=basculer."},
+            },
+            "required": ["entity", "action"],
+        },
+    },
+    {
+        "name": "ha_set_temperature",
+        "description": "Règle la consigne d'un thermostat Home Assistant par son nom. Utilise pour « mets le chauffage du salon à 20 ».",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "entity": {"type": "string", "description": "Nom du thermostat, en texte libre."},
+                "temperature": {"type": "number", "description": "Température cible en degrés Celsius."},
+            },
+            "required": ["entity", "temperature"],
+        },
+    },
+    {
+        "name": "ha_network_status",
+        "description": "Compte les appareils en ligne/hors ligne sur le réseau (entités device_tracker Home Assistant — routeur, UniFi, etc.). Utilise pour « combien d'appareils en ligne ? », « y a-t-il des appareils inconnus connectés ? ». Requête globale, pas de nom d'entité à donner (différent de ha_state).",
+        "input_schema": {"type": "object", "properties": {}},
+    },
 ]
 
 NAMES = {t["name"] for t in BRAIN_TOOLS}
@@ -469,6 +539,24 @@ def _format_departures(departures: list[dict]) -> str:
             continue
         when = f" dans {d['waiting']}" if d.get("waiting") else f" à {d.get('datetime', '?')}"
         lines.append(f"- {d['stop']} — ligne {d.get('line', '?')} vers {d.get('destination', '?')}{when}")
+    return "\n".join(lines)
+
+
+def _format_ha_entities(entities: list[dict], limit_note: bool = False) -> str:
+    if not entities:
+        return "Aucune entité trouvée, Monsieur."
+    if len(entities) == 1 and "error" in entities[0]:
+        return entities[0]["error"]
+    lines = []
+    for e in entities:
+        if "error" in e:
+            lines.append(f"- [erreur : {e['error']}]")
+            continue
+        attrs = ", ".join(f"{k}={v}" for k, v in e.get("attributes", {}).items()) if e.get("attributes") else ""
+        extra = f" ({attrs})" if attrs else ""
+        lines.append(f"- {e['name']} [{e['entity_id']}] : {e['state']}{extra}")
+    if limit_note and len(entities) >= 50:
+        lines.append("[… liste tronquée, précise un domaine pour affiner]")
     return "\n".join(lines)
 
 
@@ -688,5 +776,46 @@ def execute(name: str, args: dict):
             f"{result['distance_km']} km, environ {duration} en {result['mode']}, "
             f"de {result['origin']} à {result['destination']}."
         )
+
+    if name == "ha_state":
+        if not store.list_public("home_assistant"):
+            return "Aucune instance Home Assistant connectée — ajoute-en une depuis la Console (Intégrations), Monsieur."
+        entities = home_assistant.get_state(args.get("entity", ""))
+        return _format_ha_entities(entities)
+
+    if name == "ha_list_all":
+        if not store.list_public("home_assistant"):
+            return "Aucune instance Home Assistant connectée — ajoute-en une depuis la Console (Intégrations), Monsieur."
+        entities = home_assistant.list_all(domain=args.get("domain"))
+        return _format_ha_entities(entities, limit_note=True)
+
+    if name == "ha_control":
+        if not store.list_public("home_assistant"):
+            return "Aucune instance Home Assistant connectée — ajoute-en une depuis la Console (Intégrations), Monsieur."
+        result = home_assistant.control(args.get("entity", ""), args.get("action", ""))
+        if "error" in result:
+            return result["error"]
+        verbs = {"on": "allumé/verrouillé/armé", "off": "éteint/déverrouillé/désarmé", "toggle": "basculé"}
+        return f"{result['name']} : {verbs.get(result['action'], result['action'])}."
+
+    if name == "ha_set_temperature":
+        if not store.list_public("home_assistant"):
+            return "Aucune instance Home Assistant connectée — ajoute-en une depuis la Console (Intégrations), Monsieur."
+        result = home_assistant.set_temperature(args.get("entity", ""), float(args.get("temperature", 20)))
+        if "error" in result:
+            return result["error"]
+        return f"{result['name']} réglé à {result['temperature']}°C."
+
+    if name == "ha_network_status":
+        if not store.list_public("home_assistant"):
+            return "Aucune instance Home Assistant connectée — ajoute-en une depuis la Console (Intégrations), Monsieur."
+        result = home_assistant.network_status()
+        if "error" in result:
+            return result["error"]
+        online, offline = result["online"], result["offline"]
+        lines = [f"{len(online)} en ligne, {len(offline)} hors ligne."]
+        if online:
+            lines.append("En ligne : " + ", ".join(online))
+        return "\n".join(lines)
 
     return f"Outil brain inconnu : {name}"

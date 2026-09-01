@@ -44,6 +44,9 @@ PC_COMMAND_KEYWORDS = [
     "tisséo", "bus", "métro", "tram", "arrêt",
     # Itinéraires (voir brain/tools.py::directions)
     "itinéraire", "trajet", "combien de temps pour aller", "distance jusqu'à",
+    # Home Assistant / domotique (voir brain/tools.py::ha_*)
+    "domotique", "home assistant", "lumière", "lumières", "allume", "éteins",
+    "chauffage", "thermostat", "volet", "volets", "prise", "serrure", "alarme",
     # Gmail / Zoho Mail (voir brain/tools.py::gmail_* / zoho_*)
     "mail", "mails", "email", "emails", "e-mail", "e-mails", "gmail",
     "courriel", "courriels", "boîte mail", "boite mail", "brouillon", "zoho",

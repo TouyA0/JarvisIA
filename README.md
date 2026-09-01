@@ -381,6 +381,31 @@ Une fois configuré, depuis la Console web :
 Basé sur OpenStreetMap — bon pour un usage courant, mais moins précis que
 Google sur le trafic temps réel aux heures de pointe.
 
+### Home Assistant
+
+Domotique — pas d'OAuth, un token longue durée. Panneau **Intégrations** →
+bloc **Home Assistant** :
+
+1. Dans Home Assistant, clique sur ton profil (photo en bas à gauche) →
+   descends jusqu'à **Jetons d'accès de longue durée** → **Créer un jeton**
+   → nomme-le (« Jarvis » par ex.) → copie le jeton (affiché une seule
+   fois, à sauvegarder tout de suite).
+2. Console web → Intégrations → déplie **Home Assistant** → renseigne
+   l'URL de l'instance (ex. `http://192.168.1.x:8123`, adresse locale si
+   le brain est sur le même réseau) → colle le jeton → **Connecter**.
+
+Une fois connecté, depuis la Console web :
+- « Jarvis, est-ce que la lumière du salon est allumée ? », « quelle température
+  dans la chambre ? » → lecture d'état (nom en texte libre, pas d'entity_id à donner)
+- « Jarvis, allume/éteins la lumière du salon » → contrôle direct, aucune confirmation
+- « Jarvis, mets le chauffage du salon à 20 » → réglage thermostat
+
+**Sécurité** : déverrouiller une serrure ou désarmer l'alarme déclenche une
+**bannière de confirmation** avant d'agir (ça rend la maison moins sûre) —
+verrouiller/armer, en revanche, jamais de confirmation (ça ne fait que
+sécuriser). Tout le reste (lumières, prises, volets, chauffage…) reste un
+contrôle direct sans friction, comme Spotify.
+
 > Voix personnalisée : le dossier `voice/` contient `jarvis-high.onnx` (Piper).
 > Pour l'utiliser, enregistrez-la dans votre instance Speaches puis pointez
 > `TTS_MODEL`/`TTS_VOICE` dessus dans `.env`.

@@ -11,6 +11,7 @@ const TYPE_LABELS = {
   zoho_mail: "Zoho Mail",
   spotify: "Spotify",
   jellyfin: "Jellyfin",
+  home_assistant: "Home Assistant",
   tisseo: "Tisséo (arrêt favori)",
 };
 
@@ -403,6 +404,66 @@ function JellyfinConnect({ onConnect }) {
   );
 }
 
+function HomeAssistantConnect({ onConnect }) {
+  const [open, setOpen] = useState(false);
+  const [baseUrl, setBaseUrl] = useState("");
+  const [token, setToken] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleConnect() {
+    setError("");
+    setBusy(true);
+    try {
+      await onConnect(baseUrl.trim(), token.trim());
+      setBaseUrl("");
+      setToken("");
+      setOpen(false);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ borderTop: "1px solid var(--stroke-soft)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+      >
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: ".16em", textTransform: "uppercase", color: "var(--faint)" }}>
+          Home Assistant
+        </span>
+        <span style={{ fontSize: 11, color: "var(--cyan)" }}>{open ? "−" : "+"}</span>
+      </button>
+
+      {open && (
+        <>
+          <input placeholder="URL de l'instance (http://192.168.1.x:8123)" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} style={_inputStyle} />
+          <input placeholder="Token longue durée" type="password" value={token} onChange={(e) => setToken(e.target.value)} style={_inputStyle} />
+          {error && <div style={{ fontSize: 11, color: "#f87171" }}>{error}</div>}
+          <button
+            onClick={handleConnect}
+            disabled={busy || !baseUrl.trim() || !token.trim()}
+            style={{
+              border: "1px solid var(--stroke)", borderRadius: 9, padding: "8px 0", fontSize: 12,
+              background: "var(--cyan-dim)", color: "var(--cyan)", cursor: "pointer", opacity: busy ? 0.6 : 1,
+            }}
+          >
+            Connecter
+          </button>
+          <div style={{ fontSize: 11, color: "var(--faint)" }}>
+            Token généré depuis ton profil Home Assistant (en bas de la page
+            profil → « Jetons d'accès de longue durée » → Créer un jeton).
+            Voir README.md, section Home Assistant.
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function TisseoConnect({ settings, onSaveKey, onClearKey, onAddStop }) {
   const [open, setOpen] = useState(false);
   const [apiKey, setApiKey] = useState("");
@@ -736,6 +797,7 @@ export default function Integrations({ onNavigate, focusEnabled }) {
             <ZohoAppSettings status={integrations.zohoSettings} onSave={integrations.saveZohoSettings} onClear={integrations.clearZohoSettings} />
             <SpotifyAppSettings status={integrations.spotifySettings} onSave={integrations.saveSpotifySettings} onClear={integrations.clearSpotifySettings} />
             <JellyfinConnect onConnect={integrations.connectJellyfin} />
+            <HomeAssistantConnect onConnect={integrations.connectHomeAssistant} />
             <TisseoConnect
               settings={integrations.tisseoSettings}
               onSaveKey={integrations.saveTisseoSettings}

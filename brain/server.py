@@ -38,6 +38,7 @@ from brain.core.chat import ask_stream
 from brain.devices import Device, registry
 from brain.integrations import confirm as integrations_confirm
 from brain.integrations import google_calendar, google_contacts, google_drive, google_gmail, google_oauth, settings as integrations_settings
+from brain.integrations import home_assistant
 from brain.integrations import jellyfin
 from brain.integrations import spotify, spotify_oauth
 from brain.integrations import store as integrations_store
@@ -504,6 +505,21 @@ async def connect_jellyfin(body: dict) -> dict:
         raise HTTPException(400, "base_url et api_key requis")
     try:
         account = jellyfin.connect(base_url, api_key, username)
+    except RuntimeError as exc:
+        raise HTTPException(400, str(exc))
+    return account
+
+
+@app.post("/api/integrations/home_assistant/connect")
+async def connect_home_assistant(body: dict) -> dict:
+    """Pas d'OAuth — instance perso, token longue durée saisi directement
+    (voir home_assistant.py::connect)."""
+    base_url = (body.get("base_url") or "").strip()
+    token = (body.get("token") or "").strip()
+    if not base_url or not token:
+        raise HTTPException(400, "base_url et token requis")
+    try:
+        account = home_assistant.connect(base_url, token)
     except RuntimeError as exc:
         raise HTTPException(400, str(exc))
     return account

@@ -100,6 +100,24 @@ export function useIntegrations() {
     [refresh],
   );
 
+  // Home Assistant : pas d'OAuth, token longue durée direct — voir
+  // brain/server.py::connect_home_assistant.
+  const connectHomeAssistant = useCallback(
+    async (baseUrl, token) => {
+      const res = await authFetch("/api/integrations/home_assistant/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base_url: baseUrl, token }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "échec de la connexion");
+      }
+      await refresh();
+    },
+    [refresh],
+  );
+
   // Tisséo : pas d'OAuth, enregistre un arrêt favori par nom (résolu côté
   // brain) — voir brain/server.py::connect_tisseo.
   const connectTisseo = useCallback(
@@ -258,6 +276,7 @@ export function useIntegrations() {
     connectZoho, zohoSettings, saveZohoSettings, clearZohoSettings,
     connectSpotify, spotifySettings, saveSpotifySettings, clearSpotifySettings,
     connectJellyfin,
+    connectHomeAssistant,
     connectTisseo, tisseoSettings, saveTisseoSettings, clearTisseoSettings,
     orsSettings, saveOrsSettings, clearOrsSettings, saveHomeAddress, clearHomeAddress,
   };

@@ -98,7 +98,7 @@ Légende effort : ▲ = un soir · ▲▲ = un week-end · ▲▲▲ = plusieurs
   quoi ce titre ? ». Les touches média marchent déjà, ceci ajoute le choix.
 - **F18 · Transports Toulouse** ▲ — API Tisséo : « quand passe le prochain
   bus ? » (config arrêt favori).
-- **F19 · Domotique** ▲▲ — Home Assistant REST si équipement un jour.
+- **F19 · Domotique** ✓ *(fait)* — Home Assistant REST, voir `docs/ROADMAP_DISPLAY_INTEGRATIONS.md` (I13).
 
 ### 🖥️ Contrôle PC avancé
 
