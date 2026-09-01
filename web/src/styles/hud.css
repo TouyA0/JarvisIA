@@ -393,6 +393,21 @@
   font-size: var(--text-xs);
   color: var(--text-faint);
 }
+.card-more-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--cyan);
+  cursor: pointer;
+}
+.card-more-btn:hover,
+.card-more-btn:focus-visible {
+  text-decoration: underline;
+}
 .card-prose {
   display: flex;
   flex-direction: column;

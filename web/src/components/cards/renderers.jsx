@@ -1,3 +1,4 @@
+import { useState } from "react";
 import Icon from "../ui/Icon.jsx";
 
 /**
@@ -12,12 +13,19 @@ import Icon from "../ui/Icon.jsx";
 const MAX_ROWS = 5;
 
 function Rows({ items, empty, children }) {
+  const [expanded, setExpanded] = useState(false);
   if (!items || items.length === 0) return <p className="card-empty">{empty}</p>;
+  const shown = expanded ? items : items.slice(0, MAX_ROWS);
+  const hidden = items.length - MAX_ROWS;
   return (
     <ul className="card-rows">
-      {items.slice(0, MAX_ROWS).map(children)}
-      {items.length > MAX_ROWS && (
-        <li className="card-more">+ {items.length - MAX_ROWS} de plus</li>
+      {shown.map(children)}
+      {hidden > 0 && (
+        <li className="card-more">
+          <button type="button" className="card-more-btn" onClick={() => setExpanded((v) => !v)}>
+            {expanded ? "réduire" : `+ ${hidden} de plus`}
+          </button>
+        </li>
       )}
     </ul>
   );
