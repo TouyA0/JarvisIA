@@ -13,6 +13,7 @@ import ErrorBoundary from "./components/ui/ErrorBoundary.jsx";
 import { ToastProvider } from "./components/ui/Toast.jsx";
 import { ChatProvider } from "./lib/ChatContext.jsx";
 import { useConsoleAuth } from "./lib/useConsoleAuth.js";
+import { VoiceProvider } from "./lib/VoiceContext.jsx";
 
 const SCREENS = {
   hud: Hud,
@@ -45,18 +46,23 @@ export default function App() {
             Conversation ne doit pas fermer la socket /ws/chat en plein
             tour — voir lib/ChatContext.jsx. */}
         <ChatProvider>
-          {/* Montée ici (pas dans un panneau précis) : une confirmation
-              d'écriture Drive doit rester visible quelle que soit la vue
-              active — voir ConfirmationBanner.jsx. */}
-          <ConfirmationBanner />
-          <AppShell view={view} onNavigate={navigate}>
-            {/* `key={view}` : changer d'écran repart d'une boundary saine —
-                un crash sur Console ne doit pas laisser le Pupitre KO au
-                retour. */}
-            <ErrorBoundary key={view} label={`screen:${view}`}>
-              <Screen />
-            </ErrorBoundary>
-          </AppShell>
+          {/* Montée ici (pas dans Hud/Console) : changer d'écran ne doit
+              pas couper le flux micro ni désarmer l'écoute — voir
+              lib/VoiceContext.jsx. */}
+          <VoiceProvider>
+            {/* Montée ici (pas dans un panneau précis) : une confirmation
+                d'écriture Drive doit rester visible quelle que soit la vue
+                active — voir ConfirmationBanner.jsx. */}
+            <ConfirmationBanner />
+            <AppShell view={view} onNavigate={navigate}>
+              {/* `key={view}` : changer d'écran repart d'une boundary saine —
+                  un crash sur Console ne doit pas laisser le Pupitre KO au
+                  retour. */}
+              <ErrorBoundary key={view} label={`screen:${view}`}>
+                <Screen />
+              </ErrorBoundary>
+            </AppShell>
+          </VoiceProvider>
         </ChatProvider>
       </ConfirmProvider>
     </ToastProvider>

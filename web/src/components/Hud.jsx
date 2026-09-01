@@ -6,7 +6,7 @@ import { authFetch } from "../lib/consoleAuth.js";
 import { useChatContext } from "../lib/ChatContext.jsx";
 import { useCardFeed } from "../lib/useCardFeed.js";
 import { useDevices } from "../lib/useDevices.js";
-import { useVoice } from "../lib/useVoice.js";
+import { useVoiceContext } from "../lib/VoiceContext.jsx";
 
 /**
  * Le pupitre — écran d'accueil de la Console.
@@ -196,7 +196,12 @@ export default function Hud() {
     send(text);
   }
 
-  const voice = useVoice({ onCommand: handleVoiceCommand });
+  // Instance partagée avec Console (montée dans App.jsx) : on enregistre
+  // notre gestionnaire à chaque rendu, pas dans un effet — une commande ne
+  // doit jamais pouvoir arriver avant que le Pupitre ait pris la main sur
+  // l'écoute (voir lib/VoiceContext.jsx).
+  const voice = useVoiceContext();
+  voice.setCommandHandler(handleVoiceCommand);
 
   function send(text) {
     lastLocalQuestionRef.current = text.trim();

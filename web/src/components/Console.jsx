@@ -6,7 +6,7 @@ import StatusBadge from "./ui/StatusBadge.jsx";
 import { authFetch } from "../lib/consoleAuth.js";
 import { useChatContext } from "../lib/ChatContext.jsx";
 import { useCardFeed } from "../lib/useCardFeed.js";
-import { useVoice } from "../lib/useVoice.js";
+import { useVoiceContext } from "../lib/VoiceContext.jsx";
 
 const SUGGESTIONS = [
   "Quel temps fait-il ?",
@@ -271,7 +271,12 @@ export default function Console() {
     ask(text);
   }
 
-  const voice = useVoice({ onCommand: handleVoiceCommand });
+  // Instance partagée avec Hud (montée dans App.jsx) : on enregistre notre
+  // gestionnaire à chaque rendu, pas dans un effet — une commande ne doit
+  // jamais pouvoir arriver avant que la Conversation ait pris la main sur
+  // l'écoute (voir lib/VoiceContext.jsx).
+  const voice = useVoiceContext();
+  voice.setCommandHandler(handleVoiceCommand);
 
   // Garde sous la main le texte complet de la dernière réponse : c'est lui
   // qu'on envoie à la synthèse vocale une fois le tour terminé.
