@@ -210,3 +210,27 @@ def clear_home_address() -> None:
 
 def ors_status() -> dict:
     return {"configured": bool(get_ors_api_key()), "home_address": get_home_address() or None}
+
+
+# ── Brave Search ─────────────────────────────────────────────────────────
+# Une seule clé, gratuite (2000 requêtes/mois) — pas d'OAuth, pas de
+# facturation, même mécanique que Tisséo/OpenRouteService.
+def get_brave_api_key() -> str:
+    data = _load().get("brave", {})
+    return crypto.decrypt(data["api_key_enc"]) if data.get("api_key_enc") else ""
+
+
+def set_brave_api_key(api_key: str) -> None:
+    data = _load()
+    data["brave"] = {"api_key_enc": crypto.encrypt(api_key)}
+    _save(data)
+
+
+def clear_brave_api_key() -> None:
+    data = _load()
+    data.pop("brave", None)
+    _save(data)
+
+
+def brave_status() -> dict:
+    return {"configured": bool(get_brave_api_key())}

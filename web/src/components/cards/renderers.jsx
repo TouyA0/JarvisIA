@@ -94,6 +94,24 @@ function Files({ data }) {
   );
 }
 
+function WebResults({ data }) {
+  return (
+    <Rows items={data.results} empty="Aucun résultat.">
+      {(r, i) => (
+        <li key={i} className="card-row">
+          <Icon name="link" size={15} />
+          <span className="card-row-main">
+            <a href={r.url} target="_blank" rel="noreferrer">
+              <strong>{r.title}</strong>
+            </a>
+            {r.snippet && <span className="card-row-snippet">{r.snippet}</span>}
+          </span>
+        </li>
+      )}
+    </Rows>
+  );
+}
+
 function DocumentCard({ data }) {
   return (
     <div className="card-prose">
@@ -283,6 +301,7 @@ export const CARD_META = {
   weather: { icon: "sun", source: "Météo" },
   diagnostics: { icon: "system", source: "Système" },
   file_preview: { icon: "copy", source: "Fichier" },
+  web_results: { icon: "search", source: "Recherche web" },
 };
 
 export const RENDERERS = {
@@ -301,6 +320,7 @@ export const RENDERERS = {
   weather: Weather,
   diagnostics: Diagnostics,
   file_preview: DocumentCard,
+  web_results: WebResults,
 };
 
 export { Fallback };

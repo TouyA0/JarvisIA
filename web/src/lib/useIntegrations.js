@@ -10,16 +10,18 @@ export function useIntegrations() {
   const [spotifySettings, setSpotifySettings] = useState({ configured: false, client_id: null });
   const [tisseoSettings, setTisseoSettings] = useState({ configured: false });
   const [orsSettings, setOrsSettings] = useState({ configured: false });
+  const [braveSettings, setBraveSettings] = useState({ configured: false });
 
   const refresh = useCallback(async () => {
     try {
-      const [accountsRes, googleRes, zohoRes, spotifyRes, tisseoRes, orsRes] = await Promise.all([
+      const [accountsRes, googleRes, zohoRes, spotifyRes, tisseoRes, orsRes, braveRes] = await Promise.all([
         authFetch("/api/integrations"),
         authFetch("/api/integrations/google/settings"),
         authFetch("/api/integrations/zoho/settings"),
         authFetch("/api/integrations/spotify/settings"),
         authFetch("/api/integrations/tisseo/settings"),
         authFetch("/api/integrations/ors/settings"),
+        authFetch("/api/integrations/brave/settings"),
       ]);
       if (accountsRes.ok) setAccounts(await accountsRes.json());
       if (googleRes.ok) setGoogleSettings(await googleRes.json());
@@ -27,6 +29,7 @@ export function useIntegrations() {
       if (spotifyRes.ok) setSpotifySettings(await spotifyRes.json());
       if (tisseoRes.ok) setTisseoSettings(await tisseoRes.json());
       if (orsRes.ok) setOrsSettings(await orsRes.json());
+      if (braveRes.ok) setBraveSettings(await braveRes.json());
     } catch {
       // brain injoignable — on garde la dernière liste connue
     }
@@ -270,6 +273,27 @@ export function useIntegrations() {
     await refresh();
   }, [refresh]);
 
+  const saveBraveSettings = useCallback(
+    async (apiKey) => {
+      const res = await authFetch("/api/integrations/brave/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: apiKey }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "échec de l'enregistrement");
+      }
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const clearBraveSettings = useCallback(async () => {
+    await authFetch("/api/integrations/brave/settings", { method: "DELETE" });
+    await refresh();
+  }, [refresh]);
+
   return {
     accounts, remove,
     connectGoogle, googleSettings, saveGoogleSettings, clearGoogleSettings,
@@ -279,5 +303,6 @@ export function useIntegrations() {
     connectHomeAssistant,
     connectTisseo, tisseoSettings, saveTisseoSettings, clearTisseoSettings,
     orsSettings, saveOrsSettings, clearOrsSettings, saveHomeAddress, clearHomeAddress,
+    braveSettings, saveBraveSettings, clearBraveSettings,
   };
 }

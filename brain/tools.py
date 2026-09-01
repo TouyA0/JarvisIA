@@ -11,7 +11,7 @@ deux listes de schémas, et route chaque tool_use vers le bon exécuteur
 from __future__ import annotations
 
 from brain import cards, config, diagnostics, weather
-from brain.integrations import google_calendar, google_contacts, google_drive, google_gmail, home_assistant, jellyfin, ors, spotify, store, tisseo, zoho_mail
+from brain.integrations import brave_search, google_calendar, google_contacts, google_drive, google_gmail, home_assistant, jellyfin, ors, spotify, store, tisseo, zoho_mail
 
 # Chaque outil qui rapporte de la donnée structurée émet, en plus du texte
 # destiné à la voix, une **carte** que la Console affiche (voir brain/cards.py
@@ -453,6 +453,43 @@ BRAIN_TOOLS = [
         "description": "État du PC qui héberge Jarvis : CPU, RAM, disque, coût API du mois. Utilise pour « comment va le PC ? », « l'ordinateur rame ? », « combien ça m'a coûté ce mois-ci ? ».",
         "input_schema": {"type": "object", "properties": {}},
     },
+    {
+        "name": "web_search",
+        "description": (
+            "Cherche sur le web (Brave Search) — titres, liens, extraits. Utilise pour toute "
+            "information récente, actuelle, ou que tu ne connais pas avec certitude : dernière "
+            "version d'un logiciel, actualité, définition d'un terme récent, disponibilité d'un "
+            "produit... Ne réponds JAMAIS de mémoire à une question qui dépend de la date "
+            "d'aujourd'hui ou d'un événement récent — ta connaissance a une date de coupure, "
+            "cherche d'abord. Pour approfondir un résultat précis, utilise ensuite fetch_page "
+            "sur son lien."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Termes de recherche."},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "fetch_page",
+        "description": (
+            "Lit le contenu texte complet d'une page web (article nettoyé de la navigation/"
+            "pubs/scripts) à partir de son URL — utilise EXACTEMENT un lien retourné par "
+            "web_search, ou une URL que Monsieur a donnée directement. Utilise pour « résume "
+            "cette page/cet article », ou pour répondre à une question précise dont web_search "
+            "seul (juste des extraits courts) ne suffit pas. Peut échouer sur une page purement "
+            "en JavaScript, un PDF, ou un contenu payant — dans ce cas dis-le, n'invente rien."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "URL complète de la page à lire."},
+            },
+            "required": ["url"],
+        },
+    },
 ]
 
 NAMES = {t["name"] for t in BRAIN_TOOLS}
@@ -595,6 +632,20 @@ def _format_ha_entities(entities: list[dict], limit_note: bool = False) -> str:
         lines.append(f"- {e['name']} [{e['entity_id']}] : {e['state']}{extra}")
     if limit_note and len(entities) >= 50:
         lines.append("[… liste tronquée, précise un domaine pour affiner]")
+    return "\n".join(lines)
+
+
+def _format_search_results(results: list[dict]) -> str:
+    if not results:
+        return "Aucun résultat, Monsieur."
+    if len(results) == 1 and "error" in results[0]:
+        return results[0]["error"]
+    lines = []
+    for r in results:
+        if "error" in r:
+            lines.append(f"- [erreur : {r['error']}]")
+            continue
+        lines.append(f"- {r['title']} — {r['url']}\n  {r['snippet']}")
     return "\n".join(lines)
 
 
@@ -936,5 +987,28 @@ def execute(name: str, args: dict):
             f"CPU à {d['cpu']}%, RAM à {d['mem']}%, disque à {d['disk']}%. "
             f"{d['month_calls']} appels API ce mois-ci, {d['month_cost_usd'] * 0.92:.2f} euros, Monsieur."
         )
+
+    if name == "web_search":
+        if not brave_search.configured():
+            return "La recherche web n'est pas configurée, Monsieur — aucune clé API renseignée."
+        results = brave_search.search(args.get("query", ""))
+        if not (len(results) == 1 and "error" in results[0]):
+            cards.emit("web_results", args.get("query", "") or "Recherche web", {"results": results},
+                       subtitle=_plural(len(results), "résultat"))
+        return _format_search_results(results)
+
+    if name == "fetch_page":
+        url = args.get("url", "")
+        if not url:
+            return "URL manquante, Monsieur."
+        result = brave_search.fetch_page(url)
+        if "error" in result:
+            return result["error"]
+        text = result["text"]
+        cards.emit("document", url, {"text": text, "mime_type": "text/html", "truncated": result["truncated"]},
+                   subtitle="Page web")
+        if result["truncated"]:
+            text += "\n\n[… contenu tronqué, la page est plus longue que ce qui a été lu ici]"
+        return text
 
     return f"Outil brain inconnu : {name}"

@@ -388,6 +388,26 @@ Une fois configuré, depuis la Console web :
 Basé sur OpenStreetMap — bon pour un usage courant, mais moins précis que
 Google sur le trafic temps réel aux heures de pointe.
 
+### Recherche web (Brave Search)
+
+Clé API simple, pas d'OAuth, pas de facturation (2000 requêtes/mois
+gratuites) :
+
+1. Inscription gratuite sur [brave.com/search/api](https://brave.com/search/api/)
+   → choisis le plan gratuit (Data for Search — Free) → copie la clé API
+   générée.
+2. Console web → Intégrations → carte **Recherche web** → **Configurer** →
+   colle la clé → **Enregistrer la clé**.
+
+Une fois configuré, depuis la Console web :
+- « Jarvis, cherche la dernière version de Python » → recherche + réponse parlée
+- « Jarvis, résume cet article : [url] » → lecture et résumé de la page
+- Toute question dépendant de l'actualité ou de la date du jour déclenche
+  automatiquement une recherche plutôt qu'une réponse de mémoire (le modèle
+  a une date de coupure de connaissance).
+
+Carte **Recherche web** affichée avec les liens trouvés, cliquables.
+
 ### Home Assistant
 
 Domotique — pas d'OAuth, un token longue durée. Panneau **Intégrations** →

@@ -57,6 +57,9 @@ PC_COMMAND_KEYWORDS = [
     # conversation pure et le modèle inventerait une météo plausible.
     "météo", "quel temps", "il fait beau", "va-t-il pleuvoir", "diagnostic",
     "diagnostics", "le pc rame", "l'ordinateur rame", "comment va le pc",
+    # Recherche web (voir brain/tools.py::web_search / fetch_page)
+    "internet", "sur le web", "sur google", "actualité", "actualités",
+    "dernière version", "résume cette page", "résume cet article",
 ]
 
 

@@ -255,6 +255,30 @@ const GROUPS = [
           doc: "Clé gratuite et sans facturation, sur openrouteservice.org (voir README.md, section Itinéraires).",
         },
       },
+      {
+        type: "brave",
+        label: "Recherche web",
+        icon: "search",
+        summary: "Chercher sur le web et résumer une page pour répondre à une question d'actualité.",
+        settingsKey: "braveSettings",
+        noAccounts: true,
+        settings: {
+          title: "Recherche web (Brave Search)",
+          sections: [
+            {
+              id: "key",
+              title: "Clé API",
+              fields: [{ name: "apiKey", label: "Clé API Brave Search", type: "password", required: true }],
+              submitLabel: "Enregistrer la clé",
+              submit: (api, v) => api.saveBraveSettings(v.apiKey),
+              clearLabel: "Effacer la clé",
+              clear: (api) => api.clearBraveSettings(),
+              canClear: (s) => s.configured,
+            },
+          ],
+          doc: "Clé gratuite (2000 requêtes/mois), sur brave.com/search/api (voir README.md, section Recherche web).",
+        },
+      },
     ],
   },
 ];

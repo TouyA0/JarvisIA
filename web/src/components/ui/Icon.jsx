@@ -42,6 +42,7 @@ const PATHS = {
   "skip-next": "M6 5v14l10-7-10-7Zm12 0v14",
   "skip-prev": "M18 5v14L8 12l10-7Zm-12 0v14",
   download: "M12 3v12M8 11l4 4 4-4M5 19h14",
+  search: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14ZM21 21l-4.35-4.35",
 };
 
 export default function Icon({ name, size = 18, strokeWidth = 1.6, className = "" }) {

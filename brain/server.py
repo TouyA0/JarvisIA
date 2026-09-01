@@ -623,6 +623,26 @@ async def clear_home_address() -> dict:
     return integrations_settings.ors_status()
 
 
+@app.get("/api/integrations/brave/settings")
+async def brave_settings() -> dict:
+    return integrations_settings.brave_status()
+
+
+@app.post("/api/integrations/brave/settings")
+async def set_brave_settings(body: dict) -> dict:
+    api_key = (body.get("api_key") or "").strip()
+    if not api_key:
+        raise HTTPException(400, "api_key requis")
+    integrations_settings.set_brave_api_key(api_key)
+    return integrations_settings.brave_status()
+
+
+@app.delete("/api/integrations/brave/settings")
+async def clear_brave_settings() -> dict:
+    integrations_settings.clear_brave_api_key()
+    return integrations_settings.brave_status()
+
+
 @app.get("/api/confirmations")
 async def list_confirmations() -> list[dict]:
     """Actions d'écriture (Drive create/update/trash…) en attente d'un

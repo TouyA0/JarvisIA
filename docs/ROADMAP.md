@@ -36,7 +36,7 @@ Légende effort : ▲ = un soir · ▲▲ = un week-end · ▲▲▲ = plusieurs
 |------|---------|----------|--------|
 | ★1 | **F1 — Voix Jarvis custom** | Le fichier est déjà dans `voice/` ; impact immersion maximal | ▲ |
 | ~~★2~~ | ~~F5 — Proactivité (alertes système + briefing)~~ ✓ *(fait)* | — | — |
-| ★3 | **F2 — Recherche web + résumé vocal** | L'utilité quotidienne n°1 qui manque (« Jarvis, cherche… ») — permettrait aussi les titres d'actu dans le briefing (F6) | ▲▲ |
+| ~~★3~~ | ~~F2 — Recherche web + résumé vocal~~ ✓ *(fait)* | — | — |
 | ★4 | **F7 — Tool-use local Ollama** | Coût API → quasi zéro, latence réduite, vie privée | ▲▲ |
 | ★5 | **F4 — Wake word ONNX + bruits** | Fiabilité de la porte d'entrée + boot 3 s plus rapide, -500 Mo | ▲▲ |
 
@@ -63,18 +63,20 @@ Légende effort : ▲ = un soir · ▲▲ = un week-end · ▲▲▲ = plusieurs
 
 ### 🧠 Cerveau & IA
 
-- **F2 · Recherche web réelle** ▲▲ — outil `web_search` (API Brave Search,
-  gratuite 2000 req/mois, ou DuckDuckGo) + `fetch_page` → l'agent cherche,
-  lit, et résume à voix haute. Ouvre « Jarvis, c'est quoi la dernière version
-  de Python ? », l'actu, les définitions…
+- **F2 · Recherche web réelle** ✓ *(fait)* — outils `web_search` (Brave
+  Search, gratuite 2000 req/mois) + `fetch_page` (extraction d'article via
+  `trafilatura`) : l'agent cherche, lit, et résume à voix haute. Carte
+  `web_results` (liens cliquables). Règle anti-hallucination ajoutée au
+  prompt (7. HONNÊTETÉ RADICALE) pour forcer l'appel plutôt qu'une réponse
+  de mémoire sur les questions datées/actu.
 - **F5 · Proactivité** ✓ *(fait)* — `agents/desktop/services/proactive.py` :
   thread de règles qui surveille et PARLE seul, disque/RAM/batterie
   (seuils + cooldown par règle), suggestion de coucher à heure configurée.
   Rappels/minuteurs déjà faits séparément (`services/timers.py`).
-- **F6 · Briefing matinal réel** ✓ *(fait, sans les titres d'actu — F2 pas
-  fait)* — même module : heure + météo ✓ + agenda (F14 ✓) + mails non lus
-  (F15 ✓), une fois par jour à heure configurée. Titres d'actu à ajouter
-  quand F2 (recherche web) existera.
+- **F6 · Briefing matinal réel** ✓ *(fait, sans les titres d'actu)* — même
+  module : heure + météo ✓ + agenda (F14 ✓) + mails non lus (F15 ✓), une
+  fois par jour à heure configurée. Titres d'actu : F2 (recherche web) est
+  fait, mais pas encore branché dans le briefing lui-même.
 - **F7 · Tool-use local** ▲▲ — qwen3 gère les tools dans Ollama : router
   d'abord les commandes PC vers le local, escalade vers Claude si échec ou
   tâche complexe. Coût mensuel divisé par 5-10.
