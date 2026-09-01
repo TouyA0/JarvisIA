@@ -71,6 +71,15 @@
   background: var(--danger-dim);
   color: var(--danger-text);
 }
+.hud-chip--timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-color: transparent;
+  background: var(--cyan-dim);
+  color: var(--cyan);
+  font-family: var(--font-mono);
+}
 
 .hud-body {
   flex: 1;

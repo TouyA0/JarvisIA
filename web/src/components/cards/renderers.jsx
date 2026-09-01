@@ -294,6 +294,15 @@ function Diagnostics({ data }) {
   );
 }
 
+/** Émise par brain/timers.py à l'échéance d'un minuteur/rappel — c'est
+ * elle qui déclenche la notification navigateur (voir Hud.jsx). Le titre
+ * et le sous-titre de la carte (posés par brain/timers.py) suffisent déjà
+ * à tout dire ; ce corps n'ajoute qu'un repère visuel. Le compte à rebours
+ * en cours, lui, vit dans le bandeau ambiant, pas ici. */
+function Timer() {
+  return <p className="card-text card-empty">Écoulé.</p>;
+}
+
 function Fallback({ data }) {
   return <pre className="card-text card-raw">{JSON.stringify(data, null, 1)}</pre>;
 }
@@ -316,6 +325,7 @@ export const CARD_META = {
   diagnostics: { icon: "system", source: "Système" },
   file_preview: { icon: "copy", source: "Fichier" },
   web_results: { icon: "search", source: "Recherche web" },
+  timer: { icon: "clock", source: "Minuteur" },
 };
 
 export const RENDERERS = {
@@ -335,6 +345,7 @@ export const RENDERERS = {
   diagnostics: Diagnostics,
   file_preview: DocumentCard,
   web_results: WebResults,
+  timer: Timer,
 };
 
 export { Fallback };

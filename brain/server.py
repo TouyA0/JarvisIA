@@ -33,7 +33,7 @@ from agents.protocol.messages import (
     RegisterAck,
     parse_message,
 )
-from brain import activity, cards, config, device_store, diagnostics, pairing, routines, speech, weather
+from brain import activity, cards, config, device_store, diagnostics, pairing, routines, speech, timers, weather
 from brain import tools as brain_tools
 from brain.core import agent as pc_agent
 from brain.core import convlog
@@ -50,6 +50,7 @@ from brain.integrations import spotify, spotify_oauth
 from brain.integrations import store as integrations_store
 from brain.integrations import tisseo
 from brain.integrations import zoho_mail, zoho_oauth
+from common import durations as brain_durations
 
 # Un module par service Google, tous partagent la même mécanique OAuth
 # (google_oauth.py) et le même callback — seul auth-url/callback ont besoin
@@ -68,6 +69,7 @@ _ZOHO_SERVICES = {
 }
 
 config.ensure_dirs()
+timers.start()
 
 app = FastAPI(title="Jarvis Brain")
 
@@ -273,6 +275,39 @@ async def run_routine(routine_id: str) -> dict:
 @app.get("/api/routines/{routine_id}/status")
 async def routine_status(routine_id: str) -> dict:
     return routines.status(routine_id) or {"status": "idle"}
+
+
+@app.get("/api/timers")
+async def list_timers() -> list[dict]:
+    return timers.list_active()
+
+
+@app.post("/api/timers")
+async def create_timer(body: dict) -> dict:
+    """`duration` est un texte libre (« 5 minutes », « 1h30 ») reparsé côté
+    brain — même format que ce qu'on dirait à voix haute — pour que le
+    formulaire web n'ait pas à réinventer un sélecteur h/min/s."""
+    seconds = body.get("seconds")
+    if not seconds:
+        text = (body.get("duration") or "").strip()
+        seconds = brain_durations.parse_duration(text) if text else None
+    if not seconds:
+        raise HTTPException(400, "durée manquante ou incomprise")
+    label = (body.get("label") or "").strip()
+    kind = body.get("kind") or ("reminder" if label else "timer")
+    return timers.add(int(seconds), kind, label)
+
+
+@app.delete("/api/timers/{timer_id}")
+async def cancel_timer(timer_id: str) -> dict:
+    if not timers.cancel(timer_id):
+        raise HTTPException(404, f"minuteur {timer_id!r} inconnu")
+    return {"ok": True}
+
+
+@app.delete("/api/timers")
+async def cancel_all_timers() -> dict:
+    return {"cancelled": timers.cancel_all()}
 
 
 @app.get("/api/integrations")
@@ -947,6 +982,16 @@ async def ws_chat(websocket: WebSocket) -> None:
             data = await websocket.receive_json()
             question = (data.get("question") or "").strip()
             if not question:
+                continue
+
+            # Minuteurs & rappels (C1) : routage direct, avant tout appel à
+            # Claude/Ollama — même logique que agents/desktop/brain/router.py
+            # pour le pilotage PC (D10 : pas de tokens dépensés pour une
+            # commande que du texte suffit à résoudre).
+            timer_reply = timers.handle(question)
+            if timer_reply:
+                await websocket.send_json({"type": "chat.phrase", "text": timer_reply})
+                await websocket.send_json({"type": "chat.done", "source": "direct"})
                 continue
 
             if is_pc_command(question):

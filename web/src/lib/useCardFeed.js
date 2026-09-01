@@ -38,13 +38,21 @@ function saveDismissed(set) {
   }
 }
 
-export function useCardFeed() {
+/** `onLiveCard` : appelé uniquement pour une carte reçue en direct par le
+ * WebSocket — jamais pour celles rechargées au montage depuis /api/cards.
+ * Sert à la notification navigateur des minuteurs (Hud.jsx) : sans cette
+ * distinction, rouvrir la Console renotifierait tous les minuteurs déjà
+ * écoulés depuis la dernière visite. */
+export function useCardFeed(onLiveCard) {
   const [cards, setCards] = useState([]);
   const [lastExchange, setLastExchange] = useState(null);
   const [connected, setConnected] = useState(false);
   const dismissedRef = useRef(loadDismissed());
+  const onLiveCardRef = useRef(onLiveCard);
+  onLiveCardRef.current = onLiveCard;
 
   const addCard = useCallback((card) => {
+    onLiveCardRef.current?.(card);
     if (dismissedRef.current.has(card.id)) return;
     setCards((list) => [card, ...list.filter((c) => c.id !== card.id)].slice(0, 30));
   }, []);

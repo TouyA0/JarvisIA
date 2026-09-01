@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import CardView from "./cards/CardView.jsx";
 import Icon from "./ui/Icon.jsx";
 import ModeSwitcher from "./ui/ModeSwitcher.jsx";
@@ -9,6 +9,7 @@ import { useDevices } from "../lib/useDevices.js";
 import { useFullscreen } from "../lib/useFullscreen.js";
 import { useVoiceContext } from "../lib/VoiceContext.jsx";
 import { useModes } from "../lib/useSystem.js";
+import { formatCountdown, useTimers } from "../lib/useTimers.js";
 
 /**
  * Le pupitre — écran d'accueil de la Console.
@@ -125,8 +126,9 @@ function useClock() {
 /** Bandeau permanent : l'information qui a sa place à l'écran même quand
  * personne ne parle — c'est ce qui fait la différence entre un assistant
  * et une fenêtre de messagerie. */
-function Ambient({ devicesOnline, connected, isFullscreen, onToggleFullscreen }) {
+function Ambient({ devicesOnline, connected, isFullscreen, onToggleFullscreen, timers }) {
   const now = useClock();
+  const next = timers[0];
   return (
     <div className="hud-ambient">
       <span className="hud-clock">
@@ -136,6 +138,13 @@ function Ambient({ devicesOnline, connected, isFullscreen, onToggleFullscreen })
         {now.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
       </span>
       <span className="spacer" />
+      {next && (
+        <span className="hud-chip hud-chip--timer" title={next.label || "Minuteur"}>
+          <Icon name="clock" size={13} />
+          {formatCountdown(next.remaining)}
+          {timers.length > 1 && ` (+${timers.length - 1})`}
+        </span>
+      )}
       <ModeSwitcher variant="chip" />
       <span className="hud-chip">
         {devicesOnline} appareil{devicesOnline > 1 ? "s" : ""} en ligne
@@ -278,7 +287,16 @@ export default function Hud() {
   const { status, messages: allMessages, activity, busy, ask, setPhraseHandler, setDoneHandler } =
     useChatContext();
   const messages = allMessages.filter((m) => !m.historical);
-  const { cards, lastExchange, connected, dismiss, clearAll } = useCardFeed();
+  // Notification navigateur à l'échéance d'un minuteur/rappel (C1) — la
+  // permission, elle, est demandée au moment où Monsieur en pose un
+  // (System.jsx), un vrai geste utilisateur, pas ici en silence.
+  const notifyTimer = useCallback((card) => {
+    if (card.type !== "timer") return;
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    new Notification(card.title, { body: card.subtitle, icon: "/favicon.svg", tag: card.id });
+  }, []);
+  const { cards, lastExchange, connected, dismiss, clearAll } = useCardFeed(notifyTimer);
+  const { timers } = useTimers();
   const { devices } = useDevices();
   const ambientCards = useAmbient();
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
@@ -390,6 +408,7 @@ export default function Hud() {
         connected={connected && online}
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggleFullscreen}
+        timers={timers}
       />
 
       <div className="hud-body">

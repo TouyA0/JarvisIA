@@ -8,6 +8,7 @@ import { useToast } from "./ui/Toast.jsx";
 import { reportAuthFailure } from "../lib/consoleAuth.js";
 import { useCardHistory, useConversationLog, useMemoryFacts, useModes, useUsage } from "../lib/useSystem.js";
 import { useTheme } from "../lib/useTheme.js";
+import { formatCountdown, useTimers } from "../lib/useTimers.js";
 
 /**
  * Vue Système : ce que Jarvis coûte, ce qu'il retient, dans quel mode il
@@ -163,6 +164,122 @@ function ModesSection() {
           );
         })}
       </div>
+    </section>
+  );
+}
+
+/** Minuteurs & rappels (C1) — jusqu'ici uniquement pilotables à la voix
+ * sur le PC fixe (agents/desktop/services/timers.py), invisibles du web.
+ * brain/timers.py porte maintenant sa propre liste, commune à toutes les
+ * Consoles ; celle du desktop reste séparée et continue de fonctionner
+ * sans réseau (voir brain/timers.py, docstring). */
+function TimersSection() {
+  const { timers, create, cancel } = useTimers();
+  const [duration, setDuration] = useState("");
+  const [label, setLabel] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const toast = useToast();
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!duration.trim()) return;
+    // Geste utilisateur explicite : le bon moment pour demander la
+    // permission de notification, pas au chargement de la page.
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await create(duration.trim(), label.trim());
+      setDuration("");
+      setLabel("");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCancel(id) {
+    try {
+      await cancel(id);
+    } catch (err) {
+      toast.error(err.message);
+    }
+  }
+
+  return (
+    <section className="stack">
+      <h2 className="section-label">Minuteurs & rappels</h2>
+      <p className="hint" style={{ maxWidth: 640 }}>
+        Se posent aussi à la voix (« minuteur cinq minutes », « rappelle-moi d'appeler maman dans vingt
+        minutes ») — depuis n'importe quel appareil, ici comme sur le PC fixe. Le compte à rebours du
+        prochain minuteur s'affiche en permanence dans le bandeau du pupitre.
+      </p>
+
+      <form className="memory-add" onSubmit={submit}>
+        <div className="field">
+          <label className="label" htmlFor="timer-duration">
+            Durée
+          </label>
+          <input
+            id="timer-duration"
+            className="input"
+            value={duration}
+            placeholder="5 minutes, 1h30…"
+            onChange={(e) => setDuration(e.target.value)}
+          />
+        </div>
+        <div className="field spacer">
+          <label className="label" htmlFor="timer-label">
+            Rappel (facultatif)
+          </label>
+          <input
+            id="timer-label"
+            className="input"
+            value={label}
+            placeholder="appeler maman"
+            onChange={(e) => setLabel(e.target.value)}
+          />
+        </div>
+        <button type="submit" className="btn btn--primary" disabled={busy || !duration.trim()}>
+          <Icon name="plus" size={16} />
+          Lancer
+        </button>
+      </form>
+      {error && (
+        <p className="field-error" role="alert">
+          {error}
+        </p>
+      )}
+
+      {timers.length === 0 ? (
+        <p className="hint">Aucun minuteur actif.</p>
+      ) : (
+        <ul className="fact-list">
+          {timers.map((t) => (
+            <li key={t.id} className="fact">
+              <span className="fact-text">
+                {t.kind === "reminder" && t.label ? t.label : "Minuteur"}
+                <span className="hint" style={{ marginLeft: "var(--sp-2)", fontFamily: "var(--font-mono)" }}>
+                  {formatCountdown(t.remaining)}
+                </span>
+              </span>
+              <button
+                type="button"
+                className="icon-btn icon-btn--sm"
+                onClick={() => handleCancel(t.id)}
+                aria-label={`Annuler : ${t.label || "minuteur"}`}
+                title="Annuler"
+              >
+                <Icon name="trash" size={14} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
@@ -563,6 +680,7 @@ export default function System() {
         <div className="view-main">
           <div className="stack" style={{ gap: "var(--sp-8)", maxWidth: "var(--content-max)" }}>
             <UsageSection />
+            <TimersSection />
             <ThemeSection />
             <ModesSection />
             <MemorySection />
