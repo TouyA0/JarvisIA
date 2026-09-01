@@ -96,7 +96,10 @@ function Stage({ state, question, answer, activity, compact }) {
       </div>
 
       <div className="hud-speech">
-        <span className="hud-state" role="status">
+        {/* Purement visuel : les transitions d'état (veille, écoute, analyse…)
+         * ne sont pas des actions à annoncer. Seule la région vivante unique
+         * plus bas relaie ce qui appelle une réaction de Monsieur. */}
+        <span className="hud-state">
           {STAGE_LABELS[state]}
           {activity && busy && <span className="hud-activity"> · {activity}</span>}
         </span>
@@ -297,6 +300,15 @@ export default function Hud() {
         )}
       </div>
 
+      {/* Région vivante unique pour la voix : le seul rôle="status" du pupitre.
+       * On n'y annonce que ce qui appelle une action de Monsieur — pas les
+       * transitions d'état (déjà visibles dans .hud-state ci-dessus). Les
+       * erreurs micro sont annoncées par l'alerte role="alert" plus bas, pas
+       * ici, pour ne pas les vocaliser deux fois. */}
+      <span className="sr-only" role="status" aria-live="polite">
+        {!voice.error && state === "heard" ? "Je vous écoute" : ""}
+      </span>
+
       {voice.error && (
         <div className="alert alert--danger hud-alert" role="alert">
           <Icon name="alert" size={16} />
@@ -305,7 +317,7 @@ export default function Hud() {
       )}
 
       {voice.armed && (
-        <div className="hud-listen" role="status" aria-live="polite">
+        <div className="hud-listen">
           <span className={`dot ${voice.wakeWordHeard ? "dot--ok" : "dot--cyan"} dot--pulse`} aria-hidden="true" />
           {voice.wakeWordHeard ? "« Jarvis » détecté" : "En écoute — dites « Jarvis »"}
           <span className="meter" aria-hidden="true">
