@@ -32,7 +32,7 @@ const nextId = () => `m${++messageSeq}`;
  * On expose maintenant une vraie liste de messages, amorcée avec
  * /api/conversations.
  */
-export function useChat({ withHistory = true } = {}) {
+export function useChat() {
   const wsRef = useRef(null);
   const [status, setStatus] = useState("connecting"); // connecting | online | offline
   const [messages, setMessages] = useState([]);
@@ -44,13 +44,10 @@ export function useChat({ withHistory = true } = {}) {
   // arrivent une par une, il faut les concaténer dans la même bulle.
   const pendingRef = useRef(null);
   useEffect(() => {
-    // Le pupitre (Hud.jsx) n'en veut pas : il montre ce qui se passe
-    // maintenant, pas le fil d'hier — sans ça, il rouvrait en affichant la
-    // dernière réponse du journal comme si Jarvis venait de la prononcer.
-    if (!withHistory) {
-      setHistoryLoaded(true);
-      return undefined;
-    }
+    // Chaque message restauré porte `historical: true` : le Pupitre
+    // (Hud.jsx) filtre sur ce flag pour ne montrer que ce qui se passe
+    // maintenant, pas le fil d'hier — sans ça, il afficherait la dernière
+    // réponse du journal comme si Jarvis venait de la prononcer.
     let cancelled = false;
     (async () => {
       try {
@@ -60,8 +57,15 @@ export function useChat({ withHistory = true } = {}) {
         const restored = [];
         for (const e of entries) {
           const at = e.at ? Date.parse(e.at) : null;
-          restored.push({ id: nextId(), role: "user", text: e.question, at });
-          restored.push({ id: nextId(), role: "jarvis", text: e.answer, at, source: e.source });
+          restored.push({ id: nextId(), role: "user", text: e.question, at, historical: true });
+          restored.push({
+            id: nextId(),
+            role: "jarvis",
+            text: e.answer,
+            at,
+            source: e.source,
+            historical: true,
+          });
         }
         // Concaténation plutôt que remplacement : un tour peut déjà avoir
         // eu lieu pendant le chargement (la voix est armée très tôt).
@@ -76,7 +80,7 @@ export function useChat({ withHistory = true } = {}) {
     return () => {
       cancelled = true;
     };
-  }, [withHistory]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

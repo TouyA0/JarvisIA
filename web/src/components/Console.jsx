@@ -4,8 +4,8 @@ import CardView from "./cards/CardView.jsx";
 import Icon from "./ui/Icon.jsx";
 import StatusBadge from "./ui/StatusBadge.jsx";
 import { authFetch } from "../lib/consoleAuth.js";
+import { useChatContext } from "../lib/ChatContext.jsx";
 import { useCardFeed } from "../lib/useCardFeed.js";
-import { useChat } from "../lib/useChat.js";
 import { useVoice } from "../lib/useVoice.js";
 
 const SUGGESTIONS = [
@@ -255,7 +255,7 @@ function CardStrip({ cards, dismiss, clearAll }) {
 }
 
 export default function Console() {
-  const { status, messages, activity, busy, historyLoaded, ask, clear } = useChat();
+  const { status, messages, activity, busy, historyLoaded, ask, clear } = useChatContext();
   const { cards, dismiss, clearAll } = useCardFeed();
   const lastWasVoiceRef = useRef(false);
   const wasBusyRef = useRef(false);

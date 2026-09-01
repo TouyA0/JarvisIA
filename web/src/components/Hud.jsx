@@ -3,8 +3,8 @@ import CardView from "./cards/CardView.jsx";
 import Icon from "./ui/Icon.jsx";
 import ModeSwitcher from "./ui/ModeSwitcher.jsx";
 import { authFetch } from "../lib/consoleAuth.js";
+import { useChatContext } from "../lib/ChatContext.jsx";
 import { useCardFeed } from "../lib/useCardFeed.js";
-import { useChat } from "../lib/useChat.js";
 import { useDevices } from "../lib/useDevices.js";
 import { useVoice } from "../lib/useVoice.js";
 
@@ -175,7 +175,12 @@ function Composer({ online, busy, onSend, voice }) {
 }
 
 export default function Hud() {
-  const { status, messages, activity, busy, ask } = useChat({ withHistory: false });
+  // Le contexte partagé (ChatContext) charge le journal pour la Console ;
+  // le Pupitre n'en veut pas — il montre ce qui se passe maintenant, pas le
+  // fil d'hier. Sans le filtre `historical`, il rouvrirait en affichant la
+  // dernière réponse du journal comme si Jarvis venait de la prononcer.
+  const { status, messages: allMessages, activity, busy, ask } = useChatContext();
+  const messages = allMessages.filter((m) => !m.historical);
   const { cards, lastExchange, connected, dismiss, clearAll } = useCardFeed();
   const { devices } = useDevices();
 

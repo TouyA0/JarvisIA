@@ -10,6 +10,7 @@ import Routines from "./components/Routines.jsx";
 import System from "./components/System.jsx";
 import { ConfirmProvider } from "./components/ui/Confirm.jsx";
 import { ToastProvider } from "./components/ui/Toast.jsx";
+import { ChatProvider } from "./lib/ChatContext.jsx";
 import { useConsoleAuth } from "./lib/useConsoleAuth.js";
 
 const SCREENS = {
@@ -39,13 +40,18 @@ export default function App() {
   return (
     <ToastProvider>
       <ConfirmProvider>
-        {/* Montée ici (pas dans un panneau précis) : une confirmation
-            d'écriture Drive doit rester visible quelle que soit la vue
-            active — voir ConfirmationBanner.jsx. */}
-        <ConfirmationBanner />
-        <AppShell view={view} onNavigate={navigate}>
-          <Screen />
-        </AppShell>
+        {/* Montée ici (pas dans Hud/Console) : passer du Pupitre à la
+            Conversation ne doit pas fermer la socket /ws/chat en plein
+            tour — voir lib/ChatContext.jsx. */}
+        <ChatProvider>
+          {/* Montée ici (pas dans un panneau précis) : une confirmation
+              d'écriture Drive doit rester visible quelle que soit la vue
+              active — voir ConfirmationBanner.jsx. */}
+          <ConfirmationBanner />
+          <AppShell view={view} onNavigate={navigate}>
+            <Screen />
+          </AppShell>
+        </ChatProvider>
       </ConfirmProvider>
     </ToastProvider>
   );
