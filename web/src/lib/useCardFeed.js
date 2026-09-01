@@ -14,17 +14,35 @@ import { authFetch, reportAuthFailure, wsAuthQuery } from "./consoleAuth.js";
  */
 const AUTH_CLOSE_CODE = 4401;
 const RECONNECT_MS = 2000;
+const DISMISSED_STORAGE_KEY = "jarvis.dismissedCards";
 
 function wsUrl() {
   const proto = location.protocol === "https:" ? "wss" : "ws";
   return `${proto}://${location.host}/ws/cards${wsAuthQuery()}`;
 }
 
+function loadDismissed() {
+  try {
+    return new Set(JSON.parse(sessionStorage.getItem(DISMISSED_STORAGE_KEY)) || []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveDismissed(set) {
+  try {
+    sessionStorage.setItem(DISMISSED_STORAGE_KEY, JSON.stringify([...set]));
+  } catch {
+    // stockage indisponible (navigation privée, quota) — tant pis, la
+    // session en mémoire suffit pour la vue courante.
+  }
+}
+
 export function useCardFeed() {
   const [cards, setCards] = useState([]);
   const [lastExchange, setLastExchange] = useState(null);
   const [connected, setConnected] = useState(false);
-  const dismissedRef = useRef(new Set());
+  const dismissedRef = useRef(loadDismissed());
 
   const addCard = useCallback((card) => {
     if (dismissedRef.current.has(card.id)) return;
@@ -40,7 +58,7 @@ export function useCardFeed() {
         const recent = await res.json();
         // Le brain les renvoie de la plus ancienne à la plus récente ; le
         // pupitre affiche la dernière en premier.
-        setCards(recent.reverse());
+        setCards(recent.reverse().filter((c) => !dismissedRef.current.has(c.id)));
       } catch {
         // brain injoignable — le pupitre démarre vide, le WebSocket
         // rattrapera dès qu'il répond.
@@ -84,6 +102,7 @@ export function useCardFeed() {
    * évite qu'un rechargement depuis /api/cards ne la fasse revenir. */
   const dismiss = useCallback((id) => {
     dismissedRef.current.add(id);
+    saveDismissed(dismissedRef.current);
     setCards((list) => list.filter((c) => c.id !== id));
   }, []);
 
