@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import CardView from "./cards/CardView.jsx";
+import CardDeck from "./cards/CardDeck.jsx";
 import Icon from "./ui/Icon.jsx";
+import MicButton from "./ui/MicButton.jsx";
 import ModeSwitcher from "./ui/ModeSwitcher.jsx";
 import { useAmbient } from "../lib/useAmbient.js";
 import { useChatContext } from "../lib/ChatContext.jsx";
@@ -8,6 +10,7 @@ import { useCardFeed } from "../lib/useCardFeed.js";
 import { useDevices } from "../lib/useDevices.js";
 import { useFullscreen } from "../lib/useFullscreen.js";
 import { useVoiceContext } from "../lib/VoiceContext.jsx";
+import { useVoiceRelay } from "../lib/useVoiceRelay.js";
 import { useModes } from "../lib/useSystem.js";
 import { formatCountdown, useTimers } from "../lib/useTimers.js";
 
@@ -235,24 +238,9 @@ function Composer({ online, busy, onSend, voice }) {
     if (onSend(text)) setValue("");
   }
 
-  const micState = voice.armed
-    ? voice.status === "listening_command" || voice.status === "transcribing"
-      ? "mic--active"
-      : "mic--armed"
-    : "";
-
   return (
     <form className="hud-composer" onSubmit={submit}>
-      <button
-        type="button"
-        className={`mic mic--lg ${micState}`.trim()}
-        onClick={() => (voice.armed ? voice.disarm() : voice.arm())}
-        aria-pressed={voice.armed}
-        aria-label={voice.armed ? "Couper l'écoute vocale" : "Activer l'écoute vocale"}
-        title={`${voice.armed ? "Couper l'écoute vocale" : "Activer l'écoute vocale"} (Ctrl+Alt+J)`}
-      >
-        <Icon name="mic" size={22} />
-      </button>
+      <MicButton voice={voice} large />
 
       <label className="sr-only" htmlFor="hud-input">
         Demander quelque chose à Jarvis
@@ -306,43 +294,12 @@ export default function Hud() {
 
   const lastLocalQuestionRef = useRef("");
   const localTurnAtRef = useRef(0);
-  const lastWasVoiceRef = useRef(false);
   const [remote, setRemote] = useState(null);
 
-  function handleVoiceCommand(text) {
-    lastWasVoiceRef.current = true;
-    voice.pause();
-    // Le tour précédent n'a pas fini de streamer sa réponse (send() refuse) :
-    // rien à écouter côté chat, on reprend l'écoute au lieu de rester bloqué
-    // en pause sans qu'aucun chat.done ne vienne jamais la lever.
-    if (!send(text)) {
-      lastWasVoiceRef.current = false;
-      voice.resume();
-    }
-  }
-
-  // Relaie chaque phrase à la synthèse vocale dès son arrivée (si la
-  // question venait de la voix), au lieu d'attendre le bloc entier à
-  // chat.done comme avant — voir useVoice.js::speakPhrase.
-  function handlePhrase(text) {
-    if (lastWasVoiceRef.current) voice.speakPhrase(text);
-  }
-
-  function handleDone() {
-    if (lastWasVoiceRef.current) {
-      lastWasVoiceRef.current = false;
-      voice.speakEnd();
-    }
-  }
-
-  // Instance partagée avec Console (montée dans App.jsx) : on enregistre nos
-  // gestionnaires à chaque rendu, pas dans un effet — une commande ou une
-  // phrase ne doit jamais pouvoir arriver avant que le Pupitre ait pris la
-  // main (voir lib/VoiceContext.jsx et lib/ChatContext.jsx).
+  // Instance partagée avec Console (montée dans App.jsx) — voir
+  // lib/useVoiceRelay.js pour le câblage commun aux deux vues.
   const voice = useVoiceContext();
-  voice.setCommandHandler(handleVoiceCommand);
-  setPhraseHandler(handlePhrase);
-  setDoneHandler(handleDone);
+  useVoiceRelay(voice, send, setPhraseHandler, setDoneHandler);
 
   function send(text) {
     lastLocalQuestionRef.current = text.trim();
@@ -423,20 +380,7 @@ export default function Hud() {
         <Subtitles text={answer} visible={state === "speaking"} />
 
         {hasCards ? (
-          <section className="hud-deck" aria-label="Affichages de Jarvis">
-            <div className="hud-deck-head">
-              <h2 className="section-label">Affichage</h2>
-              <button type="button" className="btn btn--ghost btn--sm" onClick={clearAll}>
-                <Icon name="x" size={15} />
-                Tout effacer
-              </button>
-            </div>
-            <div className="hud-deck-grid">
-              {cards.map((card) => (
-                <CardView key={card.id} card={card} onDismiss={dismiss} />
-              ))}
-            </div>
-          </section>
+          <CardDeck cards={cards} dismiss={dismiss} clearAll={clearAll} />
         ) : (
           <>
             {/* Un écran laissé allumé dans une pièce doit dire quelque

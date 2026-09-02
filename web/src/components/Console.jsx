@@ -1,11 +1,13 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { ViewHeader } from "./AppShell.jsx";
-import CardView from "./cards/CardView.jsx";
+import CardDeck from "./cards/CardDeck.jsx";
 import Icon from "./ui/Icon.jsx";
+import MicButton from "./ui/MicButton.jsx";
 import StatusBadge from "./ui/StatusBadge.jsx";
 import { useChatContext } from "../lib/ChatContext.jsx";
 import { useCardFeed } from "../lib/useCardFeed.js";
 import { useVoiceContext } from "../lib/VoiceContext.jsx";
+import { useVoiceRelay } from "../lib/useVoiceRelay.js";
 
 const SUGGESTIONS = [
   "Quel temps fait-il ?",
@@ -182,12 +184,6 @@ function Composer({ online, busy, onSend, onUploadImage, voice }) {
     }
   }
 
-  const micState = voice.armed
-    ? voice.status === "listening_command" || voice.status === "transcribing"
-      ? "mic--active"
-      : "mic--armed"
-    : "";
-
   // Dépôt d'image (C9) : le texte déjà tapé sert de question — « décris
   // cette image » n'a pas besoin d'un second champ dédié, le composer
   // suffit. Le <input type=file> reste cosmétiquement invisible, activé
@@ -211,16 +207,10 @@ function Composer({ online, busy, onSend, onUploadImage, voice }) {
   return (
     <>
       <div className="composer">
-        <button
-          type="button"
-          className={`mic ${micState}`.trim()}
-          onClick={() => (voice.armed ? voice.disarm() : voice.arm())}
-          aria-pressed={voice.armed}
-          aria-label={voice.armed ? "Couper l'écoute vocale" : "Activer l'écoute vocale"}
+        <MicButton
+          voice={voice}
           title={`${voice.armed ? VOICE_LABELS[voice.status] : "Activer l'écoute vocale"} (Ctrl+Alt+J)`}
-        >
-          <Icon name="mic" size={20} />
-        </button>
+        />
 
         <input
           ref={fileInputRef}
@@ -283,76 +273,15 @@ function Composer({ online, busy, onSend, onUploadImage, voice }) {
   );
 }
 
-/** Bandeau de cartes au-dessus du fil — auparavant réservé au pupitre
- * (Hud.jsx). Sans ça, quelqu'un qui vit dans la vue Conversation ne
- * voyait jamais l'agenda/les mails/la capture d'écran en carte, seulement
- * en texte — voir docs/ROADMAP_DISPLAY_INTEGRATIONS.md §2, item resté
- * ouvert : « le rendu riche n'existe que dans le Hud ». */
-function CardStrip({ cards, dismiss, clearAll }) {
-  if (cards.length === 0) return null;
-  return (
-    <section className="hud-deck hud-deck--strip" aria-label="Affichages de Jarvis">
-      <div className="hud-deck-head">
-        <h2 className="section-label">Affichage</h2>
-        <button type="button" className="btn btn--ghost btn--sm" onClick={clearAll}>
-          <Icon name="x" size={15} />
-          Tout effacer
-        </button>
-      </div>
-      <div className="hud-deck-grid">
-        {cards.map((card) => (
-          <CardView key={card.id} card={card} onDismiss={dismiss} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
 export default function Console() {
   const { status, messages, activity, busy, historyLoaded, ask, uploadImage, clear, setPhraseHandler, setDoneHandler } =
     useChatContext();
   const { cards, dismiss, clearAll } = useCardFeed();
-  const lastWasVoiceRef = useRef(false);
 
-  // Déclaration de fonction (hoistée) : peut référencer `voice` avant sa
-  // ligne `const` ci-dessous, tant qu'elle n'est appelée qu'après coup
-  // (useVoice ne l'appelle que plus tard, de façon asynchrone, une fois
-  // le composant entièrement rendu — voir onCommandRef dans useVoice.js).
-  function handleVoiceCommand(text) {
-    lastWasVoiceRef.current = true;
-    voice.pause();
-    // Le tour précédent n'a pas fini de streamer sa réponse (ask() refuse) :
-    // rien à écouter côté chat, on reprend l'écoute au lieu de rester bloqué
-    // en pause sans qu'aucun chat.done ne vienne jamais la lever.
-    if (!ask(text)) {
-      lastWasVoiceRef.current = false;
-      voice.resume();
-    }
-  }
-
-  // Relaie chaque phrase à la synthèse vocale dès son arrivée (si la
-  // question venait de la voix — une réponse à une question tapée ne doit
-  // pas se mettre à parler toute seule), au lieu d'attendre le bloc entier
-  // à chat.done comme avant — voir useVoice.js::speakPhrase.
-  function handlePhrase(text) {
-    if (lastWasVoiceRef.current) voice.speakPhrase(text);
-  }
-
-  function handleDone() {
-    if (lastWasVoiceRef.current) {
-      lastWasVoiceRef.current = false;
-      voice.speakEnd();
-    }
-  }
-
-  // Instance partagée avec Hud (montée dans App.jsx) : on enregistre nos
-  // gestionnaires à chaque rendu, pas dans un effet — une commande ou une
-  // phrase ne doit jamais pouvoir arriver avant que la Conversation ait
-  // pris la main (voir lib/VoiceContext.jsx et lib/ChatContext.jsx).
+  // Instance partagée avec Hud (montée dans App.jsx) — voir
+  // lib/useVoiceRelay.js pour le câblage commun aux deux vues.
   const voice = useVoiceContext();
-  voice.setCommandHandler(handleVoiceCommand);
-  setPhraseHandler(handlePhrase);
-  setDoneHandler(handleDone);
+  useVoiceRelay(voice, ask, setPhraseHandler, setDoneHandler);
 
   const online = status === "online";
   const empty = messages.length === 0;
@@ -384,7 +313,7 @@ export default function Console() {
       />
 
       <div className="chat">
-        <CardStrip cards={cards} dismiss={dismiss} clearAll={clearAll} />
+        <CardDeck cards={cards} dismiss={dismiss} clearAll={clearAll} className="hud-deck--strip" />
         {empty && historyLoaded ? (
           <div className="chat-welcome">
             <h2>Bonsoir, Monsieur.</h2>
