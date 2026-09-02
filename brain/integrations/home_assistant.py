@@ -206,6 +206,44 @@ def control(entity_query: str, action: str, account_hint: str | None = None) -> 
     return {"name": name, "action": action}
 
 
+def cast_media(entity_query: str, media_url: str, media_type: str = "video", account_hint: str | None = None) -> dict:
+    """C7 — diffuse une URL de média sur une entité `media_player` via le
+    service HA `media_player.play_media`. Pensé pour un lecteur Cast
+    (Chromecast/Google TV) : l'intégration native "Google Cast" de HA
+    découvre l'appareil toute seule (aucune config côté Jarvis), ce qui
+    évite de réimplémenter le protocole Cast ici — voir
+    docs/ROADMAP_DISPLAY_INTEGRATIONS.md §4/C7 pour pourquoi cette voie est
+    préférée à Miracast (non supporté par Google TV) et au mirroring plein
+    écran (non pilotable proprement). `media_type` : mime type ("video/mp4",
+    "image/jpeg") ou générique ("video", "music", "image") — transmis tel
+    quel au récepteur Cast, best effort selon ce qu'il accepte."""
+    if not media_url or not media_url.strip():
+        return {"error": "URL de média manquante, Monsieur."}
+    account = _pick_account(account_hint)
+    if not account:
+        return {"error": "Aucune instance Home Assistant connectée, Monsieur."}
+    try:
+        entity = _find_entity(account, entity_query)
+    except RuntimeError as exc:
+        return {"error": str(exc)}
+    if not entity:
+        return {"error": f"Aucune entité trouvée pour « {entity_query} », Monsieur."}
+    entity_id = entity["entity_id"]
+    if not entity_id.startswith("media_player."):
+        return {"error": f"« {entity_query} » n'est pas un lecteur média (domaine {entity_id.split('.')[0]}), Monsieur — vérifie que l'intégration Google Cast de Home Assistant a bien découvert l'appareil."}
+    name = entity.get("attributes", {}).get("friendly_name", entity_query)
+
+    resp = requests.post(
+        f"{_base_url(account)}/api/services/media_player/play_media",
+        headers=_headers(account),
+        json={"entity_id": entity_id, "media_content_id": media_url.strip(), "media_content_type": media_type},
+        timeout=10,
+    )
+    if resp.status_code != 200:
+        return {"error": f"Diffusion refusée par Home Assistant ({resp.status_code}) : {resp.text[:200]}"}
+    return {"name": name, "media_url": media_url.strip(), "media_type": media_type}
+
+
 def set_temperature(entity_query: str, temperature: float, account_hint: str | None = None) -> dict:
     account = _pick_account(account_hint)
     if not account:

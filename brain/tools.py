@@ -482,6 +482,30 @@ BRAIN_TOOLS = [
         },
     },
     {
+        "name": "ha_cast_media",
+        "description": (
+            "Diffuse une vidéo/musique/image sur un lecteur Cast (Chromecast/Google TV) via Home "
+            "Assistant — pour « caste cette vidéo sur la télé », « diffuse ça sur le Chromecast ». "
+            "Nécessite que l'entité visée soit un media_player Home Assistant : l'intégration "
+            "native « Google Cast » de HA découvre automatiquement un stick Chromecast/Google TV, "
+            "rien à configurer côté Jarvis pour ça, juste que Monsieur l'ait ajoutée côté HA. "
+            "Différent de send_to_tv (qui pilote la télé du salon directement par ADB, lien "
+            "profond app par app) : ha_cast_media passe par le protocole Cast standard — utile "
+            "pour un fichier média brut ou quand Monsieur cible explicitement l'entité Home "
+            "Assistant plutôt que « la télé ». Ne permet PAS de dupliquer l'écran entier du PC "
+            "(mirroring) — seulement une URL de contenu précise."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "entity": {"type": "string", "description": "Nom du lecteur Cast, en texte libre (ex. 'télé du salon')."},
+                "url": {"type": "string", "description": "URL du média à diffuser (vidéo, musique, image)."},
+                "media_type": {"type": "string", "description": "Type MIME ('video/mp4', 'image/jpeg'...) ou générique ('video', 'music', 'image'). Défaut : video."},
+            },
+            "required": ["entity", "url"],
+        },
+    },
+    {
         "name": "ha_network_status",
         "description": "Compte les appareils en ligne/hors ligne sur le réseau (entités device_tracker Home Assistant — routeur, UniFi, etc.). Utilise pour « combien d'appareils en ligne ? », « y a-t-il des appareils inconnus connectés ? ». Requête globale, pas de nom d'entité à donner (différent de ha_state).",
         "input_schema": {"type": "object", "properties": {}},
@@ -1267,6 +1291,16 @@ def execute(name: str, args: dict):
         if "error" in result:
             return result["error"]
         return f"{result['name']} réglé à {result['temperature']}°C."
+
+    if name == "ha_cast_media":
+        if not store.list_public("home_assistant"):
+            return "Aucune instance Home Assistant connectée — ajoute-en une depuis la Console (Intégrations), Monsieur."
+        result = home_assistant.cast_media(
+            args.get("entity", ""), args.get("url", ""), args.get("media_type", "video"),
+        )
+        if "error" in result:
+            return result["error"]
+        return f"Diffusion lancée sur {result['name']} : {result['media_url']}."
 
     if name == "ha_network_status":
         if not store.list_public("home_assistant"):
