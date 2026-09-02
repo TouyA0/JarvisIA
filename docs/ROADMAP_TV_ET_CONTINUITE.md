@@ -45,7 +45,7 @@ saisie de texte, capture d'écran (avec carte `screenshot` dans la Console).
 
 | # | Manque | Pourquoi ça compte | Effort |
 |---|---|---|---|
-| T6 | **Volume absolu** (« le son à 30 % ») | seuls up/down/mute existent ; `media volume --set N --stream 3` le fait, et permet aussi de *lire* le niveau | ▲ |
+| ~~T6~~ | ~~Volume absolu~~ **Résolu** | `tv_volume` accepte désormais `level` (0-100 %) — `android_tv._read_volume()` lit l'index/max réels via `media volume --stream 3 --get`, convertit le pourcentage en index et applique `--set` ; sans argument, l'outil renvoie juste le niveau actuel (lecture). | ▲ |
 | T7 | **Touches média complètes** | pas de suivant/précédent/avance rapide/retour/stop, pas de `seek` (« recule de 30 secondes », « saute le générique ») | ▲ |
 | T8 | **Sous-titres & piste audio** | « mets les sous-titres », « passe en VO » — pas de chemin générique, à faire app par app via `ui_dump` | ▲▲ |
 | T9 | **Source HDMI / CEC** | basculer sur la console, le lecteur Blu-ray, la TNT — hors périmètre ADB, passerait par HA (CEC) ou une télécommande IR | ▲▲ |

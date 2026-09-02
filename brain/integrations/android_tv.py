@@ -156,7 +156,47 @@ def probe() -> None:
     _shell("echo ok")
 
 
-def volume(direction: str) -> dict:
+_STREAM_MUSIC = 3  # AudioManager.STREAM_MUSIC — flux utilisé par la quasi-totalité des apps média sur Android TV.
+_VOLUME_GET_RE = re.compile(r"volume is (\d+) in range \[(-?\d+)\.\.(\d+)\]")
+
+
+def _read_volume() -> dict:
+    """`media volume --stream 3 --get` (VolumeShellCommand AOSP) → index
+    courant + index max réel de l'appareil (varie selon le fabricant, pas
+    de valeur en dur possible) — sert à la fois à *lire* le niveau (T6) et
+    à convertir un pourcentage absolu en index avant `--set`."""
+    raw = _shell(f"media volume --stream {_STREAM_MUSIC} --get")
+    m = _VOLUME_GET_RE.search(raw)
+    if not m:
+        raise RuntimeError(f"Format de sortie de volume inattendu, Monsieur ({raw.strip()!r}).")
+    current, _min, maximum = (int(g) for g in m.groups())
+    percent = round(current * 100 / maximum) if maximum else 0
+    return {"index": current, "max_index": maximum, "percent": percent}
+
+
+def volume(direction: str | None = None, level: int | None = None) -> dict:
+    """Réglage relatif (`direction` : up/down/mute, touches matérielles,
+    comportement historique) OU absolu (`level` 0-100, "le son à 30 %") via
+    `media volume --stream 3 --set` — seule commande qui connaisse l'index
+    maximum réel de l'appareil. Sans argument : lit le niveau actuel."""
+    if level is not None:
+        if not isinstance(level, (int, float)) or not 0 <= level <= 100:
+            return {"error": "Le niveau doit être un pourcentage entre 0 et 100, Monsieur."}
+        try:
+            current = _read_volume()
+            index = round(level * current["max_index"] / 100)
+            _shell(f"media volume --stream {_STREAM_MUSIC} --set {index}")
+        except RuntimeError as exc:
+            return {"error": str(exc)}
+        return {"ok": True, "level_percent": int(level)}
+
+    if direction is None:
+        try:
+            current = _read_volume()
+        except RuntimeError as exc:
+            return {"error": str(exc)}
+        return {"ok": True, "level_percent": current["percent"]}
+
     keys = {"up": "KEYCODE_VOLUME_UP", "down": "KEYCODE_VOLUME_DOWN", "mute": "KEYCODE_VOLUME_MUTE"}
     key = keys.get(direction)
     if not key:

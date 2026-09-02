@@ -503,13 +503,18 @@ BRAIN_TOOLS = [
     },
     {
         "name": "tv_volume",
-        "description": "Monte, baisse ou coupe le son de la télé du salon (stick Android TV). Utilise pour « monte/baisse le son de la télé », « coupe le son ».",
+        "description": (
+            "Règle ou lit le son de la télé du salon (stick Android TV). Passe `direction` pour "
+            "monter/baisser/couper (« monte/baisse le son de la télé », « coupe le son »), ou "
+            "`level` (0-100) pour un volume absolu (« mets le son à 30 % »). Sans argument : "
+            "renvoie juste le niveau actuel."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "direction": {"type": "string", "enum": ["up", "down", "mute"], "description": "Sens du réglage."},
+                "direction": {"type": "string", "enum": ["up", "down", "mute"], "description": "Sens du réglage relatif."},
+                "level": {"type": "integer", "minimum": 0, "maximum": 100, "description": "Volume absolu souhaité, en pourcentage (0-100)."},
             },
-            "required": ["direction"],
         },
     },
     {
@@ -1182,9 +1187,11 @@ def execute(name: str, args: dict):
     if name == "tv_volume":
         if not android_tv.configured():
             return "La télé du salon n'est pas configurée, Monsieur — ANDROID_TV_HOST manquant dans .env."
-        result = android_tv.volume(args.get("direction", ""))
+        result = android_tv.volume(args.get("direction"), args.get("level"))
         if "error" in result:
             return result["error"]
+        if "level_percent" in result:
+            return f"Volume : {result['level_percent']} %."
         return f"Volume : {result['direction']}."
 
     if name == "tv_key":
