@@ -605,7 +605,17 @@ BRAIN_TOOLS = [
             "de recherche, ou un résultat à sélectionner quand tv_launch_app n'a pas mené "
             "directement au bon endroit. Enchaîne avec tv_tap sur les coordonnées d'un élément, "
             "ou tv_type_text pour écrire dans un champ. Si ça échoue ('aucun élément exploitable'), "
-            "utilise tv_screenshot en dernier recours."
+            "utilise tv_screenshot en dernier recours.\n"
+            "SOUS-TITRES / PISTE AUDIO (« mets les sous-titres », « passe en VO », « piste "
+            "française ») : il n'existe AUCUNE commande générique ADB pour ça — chaque appli "
+            "(Netflix, Disney+, Prime Video, YouTube…) a son propre menu. Marche à suivre : "
+            "pendant la lecture, envoie DPAD_UP ou DPAD_DOWN via tv_key (ou tv_tap au centre de "
+            "l'écran) pour faire apparaître les contrôles de lecture, puis tv_screen_dump pour "
+            "repérer l'icône/le libellé du menu audio-sous-titres (souvent 'Audio et sous-titres', "
+            "une bulle de dialogue, ou un engrenage) et tv_tap dessus ; re-dump pour lister les "
+            "langues/pistes proposées, tv_tap sur celle demandée, puis re-dump une dernière fois "
+            "pour confirmer avant de répondre à Monsieur. Si tv_screen_dump ne renvoie rien "
+            "d'exploitable à une étape, passe par tv_screenshot pour ce même écran."
         ),
         "input_schema": {"type": "object", "properties": {}},
     },
