@@ -842,10 +842,20 @@ BRAIN_TOOLS = [
     {
         "name": "tv_screenshot",
         "description": (
-            "Prend une capture d'écran de la télé du salon — dernier recours uniquement, quand "
-            "tv_screen_dump ne renvoie rien d'exploitable (interface non standard). Plus lent : "
-            "regarde l'image, décide où taper (tv_tap), n'utilise pas ça en boucle plus de "
-            "quelques fois de suite."
+            "Prend une capture d'écran de la télé du salon et te la montre directement (image, "
+            "pas juste du texte). Deux usages bien distincts :\n"
+            "1. NAVIGATION UI (dernier recours uniquement, quand tv_screen_dump ne renvoie rien "
+            "d'exploitable — interface non standard) : regarde l'image, décide où taper (tv_tap), "
+            "n'utilise pas ça en boucle plus de quelques fois de suite.\n"
+            "2. IDENTIFIER CE QUI EST À L'ÉCRAN — pour « c'est qui cet acteur ? », « il joue dans "
+            "quoi d'autre ? », « quel est ce film/cette série ? », « résume-moi ce que j'ai raté » : "
+            "c'est ici le premier réflexe, PAS tv_screen_dump (qui ne donne que des éléments "
+            "d'interface, jamais le contenu photo/vidéo réel). Regarde l'image reçue ; si un titre "
+            "ou nom est visible (jaquette, sous-titre, générique), utilise-le directement. Si "
+            "seul un visage est visible sans nom lisible, ne devine JAMAIS un acteur d'après une "
+            "vague ressemblance — enchaîne avec web_search (ex. décris la scène/le contexte du "
+            "film ou de la série déjà identifié) pour confirmer avant de répondre, ou dis "
+            "honnêtement que tu ne peux pas identifier la personne avec certitude."
         ),
         "input_schema": {"type": "object", "properties": {}},
     },

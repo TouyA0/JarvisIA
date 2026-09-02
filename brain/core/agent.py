@@ -299,6 +299,12 @@ async def ask_with_tools(question: str, device_id: str | None) -> str | None:
     empty_turn_retried = False
     t0 = time.time()
     first_response = True
+    # S1 — dernière capture tv_screenshot de ce tour (image_b64/media_type) :
+    # si Claude conclut après l'avoir regardée ("c'est qui cet acteur ?", "quel
+    # film ?"...), on la réutilise pour une carte qui montre l'image ET la
+    # réponse ensemble, plutôt que la capture brute déjà postée par
+    # brain_tools.execute (carte "tv", sans le texte d'identification).
+    last_tv_screenshot: dict | None = None
 
     for _ in range(12):
         if tool_call_count >= 5 and not help_requested:
@@ -345,6 +351,12 @@ async def ask_with_tools(question: str, device_id: str | None) -> str | None:
             _notify("")
             _notify_source("claude-agent")
             history.remember_exchange(question, final, source="claude-agent")
+            if last_tv_screenshot:
+                cards.emit(
+                    "vision", "Télé du salon",
+                    {"text": final, **last_tv_screenshot},
+                    subtitle="Identifié depuis la télé",
+                )
             return final
 
         if response.stop_reason == "tool_use":
@@ -358,6 +370,11 @@ async def ask_with_tools(question: str, device_id: str | None) -> str | None:
                 if block.name in brain_tools.NAMES:
                     print(f"[Outil brain] {block.name}({block.input})")
                     result = await asyncio.to_thread(brain_tools.execute, block.name, block.input)
+                    if block.name == "tv_screenshot" and isinstance(result, dict) and result.get("image_b64"):
+                        last_tv_screenshot = {
+                            "image_b64": result["image_b64"],
+                            "media_type": result.get("media_type", "image/jpeg"),
+                        }
                 elif not device_id:
                     result = {"text": "Aucun appareil connecté pour exécuter ça, Monsieur."}
                 else:
