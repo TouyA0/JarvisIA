@@ -195,6 +195,38 @@ export function useNotes() {
   return { notes, loaded, add, refresh };
 }
 
+/** Presse-papier partagé (C11) — une seule valeur, voir brain/clipboard.py. */
+export function useSharedClipboard() {
+  const [entry, setEntry] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+
+  const refresh = useCallback(async () => {
+    try {
+      const data = await getJson("/api/clipboard");
+      setEntry(data.text ? data : null);
+    } catch {
+      // brain injoignable — on garde la dernière valeur connue
+    } finally {
+      setLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const set = useCallback(
+    async (text) => {
+      const data = await sendJson("/api/clipboard", "POST", { text, source: "web" });
+      setEntry(data);
+      return data;
+    },
+    [],
+  );
+
+  return { entry, loaded, set, refresh };
+}
+
 /** Cartes passées (au-delà des 30 gardées en mémoire par useCardFeed) —
  * relit le journal disque du brain (brain/cards.py::history). Les captures
  * d'écran y perdent leur image (jamais écrite sur disque), le Fallback

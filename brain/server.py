@@ -34,7 +34,7 @@ from agents.protocol.messages import (
     RegisterAck,
     parse_message,
 )
-from brain import activity, cards, config, device_store, diagnostics, files as file_store, notes, pairing, preferences, proactive, routines, session_tokens, speech, timers, vision, weather
+from brain import activity, cards, clipboard, config, device_store, diagnostics, files as file_store, notes, pairing, preferences, proactive, routines, session_tokens, speech, timers, vision, weather
 from brain import health as account_health
 from brain import tools as brain_tools
 from brain.core import agent as pc_agent
@@ -424,6 +424,22 @@ async def add_note(body: dict) -> dict:
         raise HTTPException(400, "texte manquant")
     try:
         return notes.add(text)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.get("/api/clipboard")
+async def get_shared_clipboard() -> dict:
+    return clipboard.get() or {"text": "", "source": "", "updated_at": None}
+
+
+@app.post("/api/clipboard")
+async def set_shared_clipboard(body: dict) -> dict:
+    text = (body.get("text") or "").strip()
+    if not text:
+        raise HTTPException(400, "texte manquant")
+    try:
+        return clipboard.set(text, body.get("source", ""))
     except ValueError as exc:
         raise HTTPException(400, str(exc))
 

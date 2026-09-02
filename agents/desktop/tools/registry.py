@@ -159,6 +159,18 @@ PC_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "write_clipboard",
+            "description": "Écrit du texte dans le presse-papier de Monsieur, prêt pour un Ctrl+V. Utilise après get_shared_clipboard pour coller sur ce PC le contenu partagé depuis un autre appareil.",
+            "parameters": {
+                "type": "object",
+                "properties": {"text": {"type": "string", "description": "Le texte à mettre dans le presse-papier"}},
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "search_file",
             "description": "Cherche un fichier ou dossier par nom sur le disque. UNIQUEMENT pour des documents, dossiers, fichiers personnels. NE PAS utiliser pour chercher des applications installées (.exe) — pour ça, utilise run_powershell avec Get-StartApps ou Get-ChildItem sur Program Files.",
             "parameters": {
@@ -257,6 +269,8 @@ def execute(name: str, args: dict, turn_state: dict | None = None):
         return screen.read_screen()
     elif name == "read_clipboard":
         return system.read_clipboard()
+    elif name == "write_clipboard":
+        return system.write_clipboard(args.get("text", ""))
     elif name == "search_file":
         return system.search_file(args.get("name", ""), args.get("location"))
     elif name == "open_file":

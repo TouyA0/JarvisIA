@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import time
 
-from brain import cards, config, diagnostics, preferences, weather
+from brain import cards, clipboard, config, diagnostics, preferences, weather
 from brain import files as file_store
 from brain.integrations import android_tv, brave_search, google_calendar, google_contacts, google_drive, google_gmail, home_assistant, jellyfin, ors, spotify, store, tisseo, zoho_mail
 
@@ -816,6 +816,30 @@ BRAIN_TOOLS = [
         },
     },
     {
+        "name": "share_clipboard",
+        "description": (
+            "Partage un texte sur le presse-papier commun, visible depuis n'importe quel "
+            "appareil (PC, téléphone, autre PC). Utilise quand Monsieur dit « copie ça sur mon "
+            "autre PC », « partage ce lien », « mets ça sur le presse-papier partagé ». Sur PC, "
+            "lis d'abord le contenu avec read_clipboard puis passe-le ici."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"text": {"type": "string", "description": "Le texte à partager."}},
+            "required": ["text"],
+        },
+    },
+    {
+        "name": "get_shared_clipboard",
+        "description": (
+            "Récupère le dernier texte posé sur le presse-papier partagé (voir share_clipboard). "
+            "Utilise pour « colle-moi le lien du téléphone », « qu'est-ce que j'ai copié tout à "
+            "l'heure », « récupère le presse-papier partagé ». Sur PC, tu peux ensuite appeler "
+            "write_clipboard avec le texte reçu pour le coller directement."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
         "name": "tv_screenshot",
         "description": (
             "Prend une capture d'écran de la télé du salon — dernier recours uniquement, quand "
@@ -1014,6 +1038,19 @@ def _format_search_results(results: list[dict]) -> str:
 
 
 def execute(name: str, args: dict):
+    if name == "share_clipboard":
+        try:
+            clipboard.set(args.get("text", ""))
+        except ValueError:
+            return "Rien à partager, Monsieur — le texte est vide."
+        return "Partagé sur le presse-papier commun, Monsieur."
+
+    if name == "get_shared_clipboard":
+        entry = clipboard.get()
+        if not entry:
+            return "Le presse-papier partagé est vide, Monsieur."
+        return entry["text"]
+
     if name == "calendar_events":
         if not google_calendar.configured():
             return "Google Calendar n'est pas configuré, Monsieur — aucun compte connecté."

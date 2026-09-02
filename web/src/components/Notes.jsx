@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { ViewHeader } from "./AppShell.jsx";
 import Icon from "./ui/Icon.jsx";
-import { useNotes } from "../lib/useSystem.js";
+import { useNotes, useSharedClipboard } from "../lib/useSystem.js";
+import { useToast } from "./ui/Toast.jsx";
 
 /**
  * Vue Notes (C2) — le carnet de « prends note que… », jusqu'ici écrit
@@ -31,6 +32,81 @@ function groupByDate(notes) {
     current.entries.push(note);
   }
   return groups;
+}
+
+/** Presse-papier partagé (C11) — pousser un texte/lien depuis ce téléphone
+ * vers le PC (« colle-moi le lien du téléphone »), ou récupérer ce qu'un
+ * autre appareil vient d'y déposer (« copie ça sur mon autre PC »). */
+function SharedClipboard() {
+  const { entry, set } = useSharedClipboard();
+  const toast = useToast();
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    const text = draft.trim();
+    if (!text) return;
+    setBusy(true);
+    try {
+      await set(text);
+      setDraft("");
+      toast.success("Partagé — récupérable depuis n'importe quel appareil.");
+    } catch (err) {
+      toast.error(err.message || "échec du partage");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copy() {
+    if (!entry?.text) return;
+    try {
+      await navigator.clipboard?.writeText(entry.text);
+      toast.info("Copié dans le presse-papier de cet appareil.");
+    } catch {
+      toast.error("Copie impossible depuis ce navigateur.");
+    }
+  }
+
+  return (
+    <section className="stack stack--tight">
+      <h2 className="section-label">Presse-papier partagé</h2>
+      {entry?.text && (
+        <div className="card">
+          <div className="card-head">
+            <span className="card-title" style={{ wordBreak: "break-all" }}>
+              {entry.text}
+            </span>
+          </div>
+          <div className="row" style={{ gap: "var(--sp-3)" }}>
+            <button type="button" className="btn btn--ghost" onClick={copy}>
+              <Icon name="copy" size={16} />
+              Copier ici
+            </button>
+          </div>
+        </div>
+      )}
+      <form className="memory-add" onSubmit={submit}>
+        <div className="field spacer">
+          <label className="sr-only" htmlFor="clipboard-input">
+            Partager un texte
+          </label>
+          <input
+            id="clipboard-input"
+            className="input"
+            value={draft}
+            placeholder="un lien, un texte à récupérer sur un autre appareil…"
+            onChange={(e) => setDraft(e.target.value)}
+          />
+        </div>
+        <button type="submit" className="btn btn--primary" disabled={busy || !draft.trim()}>
+          <Icon name="send" size={16} />
+          Partager
+        </button>
+      </form>
+    </section>
+  );
 }
 
 export default function Notes() {
@@ -69,6 +145,8 @@ export default function Notes() {
       <div className="view-body">
         <div className="view-main">
           <div className="stack" style={{ gap: "var(--sp-6)", maxWidth: "var(--content-max)" }}>
+            <SharedClipboard />
+
             <form className="memory-add" onSubmit={submit}>
               <div className="field spacer">
                 <label className="label" htmlFor="note-input">

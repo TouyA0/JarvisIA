@@ -77,6 +77,32 @@ def read_clipboard() -> str:
         return f"Erreur lecture presse-papier : {e}"
 
 
+def write_clipboard(text: str) -> str:
+    """Écrit dans le presse-papier local — utilisé pour coller le contenu
+    reçu du presse-papier partagé (voir brain/clipboard.py, share_clipboard/
+    get_shared_clipboard) directement prêt pour un Ctrl+V.
+
+    Passe par base64 (pas d'argument -Command en clair) : le texte peut
+    contenir guillemets, accents, backticks — aucun risque d'injection ou
+    d'échappement cassé côté PowerShell.
+    """
+    text = text.strip()
+    if not text:
+        return "Rien à écrire dans le presse-papier."
+    import base64
+    b64 = base64.b64encode(text.encode("utf-8")).decode("ascii")
+    ps = f"[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{b64}')) | Set-Clipboard"
+    try:
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps],
+            capture_output=True, timeout=config.SHORT_REQUEST_TIMEOUT,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        return "Collé dans le presse-papier, Monsieur."
+    except Exception as e:
+        return f"Erreur écriture presse-papier : {e}"
+
+
 def search_file(name: str, location: str | None = None) -> str:
     if not location:
         location = os.path.expanduser("~")
