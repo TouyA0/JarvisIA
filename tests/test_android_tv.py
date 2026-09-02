@@ -3,6 +3,7 @@ from unittest.mock import patch
 from brain.integrations import android_tv
 from brain.integrations.android_tv import (
     _extract_youtube,
+    _parse_media_session,
     _parse_ui_dump,
     _parse_youtube_timestamp,
     _resolve_app,
@@ -121,3 +122,57 @@ def test_send_to_tv_non_youtube_url_passed_through_unchanged():
 
 def test_send_to_tv_empty_url_returns_error():
     assert "error" in android_tv.send_to_tv("")
+
+
+def test_parse_media_session_extracts_media_id_from_description_object():
+    raw = (
+        "package=com.google.android.youtube.tv\n"
+        "  description=MediaDescription {mMediaId=dQw4w9WgXcQ, mMediaUri=null, "
+        "mTitle=Never Gonna Give You Up, mSubtitle=Rick Astley}\n"
+        "  state=PlaybackState {state=3 (PLAYING), position=42000, ...}\n"
+    )
+    info = _parse_media_session(raw)
+    assert info["media_id"] == "dQw4w9WgXcQ"
+    assert info["title"] == "Never Gonna Give You Up"
+    assert info["position_ms"] == 42000
+
+
+def test_parse_media_session_no_media_id_in_legacy_triplet_format():
+    raw = (
+        "package=com.netflix.ninja\n"
+        "  description=Some Show, null, null\n"
+        "  state=PlaybackState {state=3 (PLAYING), position=5000, ...}\n"
+    )
+    info = _parse_media_session(raw)
+    assert info["media_id"] is None
+    assert info["title"] == "Some Show"
+
+
+def test_now_playing_url_builds_youtube_url_with_timestamp():
+    raw = (
+        "package=com.google.android.youtube.tv\n"
+        "  description=MediaDescription {mMediaId=dQw4w9WgXcQ, mTitle=Some Video, mSubtitle=null}\n"
+        "  state=PlaybackState {state=3 (PLAYING), position=90000, ...}\n"
+    )
+    with patch.object(android_tv, "_shell", return_value=raw):
+        result = android_tv.now_playing_url()
+    assert result["url"] == "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=90s"
+    assert result["position_seconds"] == 90
+
+
+def test_now_playing_url_falls_back_to_text_for_non_youtube_app():
+    raw = (
+        "package=com.netflix.ninja\n"
+        "  description=Some Show, null, null\n"
+        "  state=PlaybackState {state=3 (PLAYING), position=5000, ...}\n"
+    )
+    with patch.object(android_tv, "_shell", return_value=raw):
+        result = android_tv.now_playing_url()
+    assert result["url"] is None
+    assert "Some Show" in result["text"]
+
+
+def test_now_playing_url_returns_error_when_nothing_playing():
+    with patch.object(android_tv, "_shell", return_value="no sessions"):
+        result = android_tv.now_playing_url()
+    assert "error" in result

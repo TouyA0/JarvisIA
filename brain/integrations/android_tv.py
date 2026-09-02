@@ -830,7 +830,7 @@ def _parse_media_session(raw: str) -> dict | None:
     package_m = re.search(r"package=(\S+)", raw)
     state_m = re.search(r"state=PlaybackState\s*\{state=(\d+)[^,]*,\s*position=(-?\d+)", raw)
 
-    title = artist = None
+    title = artist = media_id = None
     desc_m = re.search(r"description=(.+)", raw)
     if desc_m:
         desc = desc_m.group(1).strip()
@@ -844,6 +844,15 @@ def _parse_media_session(raw: str) -> dict | None:
                 title = parts[0]
             if len(parts) > 2 and parts[2] and parts[2].lower() != "null":
                 artist = parts[2]
+        # mMediaId (C2) : sur ce stick, correspond à l'ID vidéo pour l'appli
+        # YouTube TV — best effort, pas garanti pour les autres apps (voir
+        # now_playing_url()). Absent de l'ancien format triplet ci-dessus,
+        # uniquement dans l'objet MediaDescription{...}.
+        id_m = re.search(r"mMediaId=([^,}]*)", desc)
+        if id_m:
+            candidate = id_m.group(1).strip()
+            if candidate and candidate.lower() != "null":
+                media_id = candidate
 
     if not package_m and not title:
         return None
@@ -855,6 +864,7 @@ def _parse_media_session(raw: str) -> dict | None:
         "artist": artist,
         "state": _PLAYBACK_STATES.get(state_m.group(1)) if state_m else None,
         "position_ms": position,
+        "media_id": media_id,
     }
 
 
@@ -873,6 +883,56 @@ def status() -> dict:
         "screen_on": _screen_on(power_raw),
         "foreground_app": _foreground_app(activity_raw),
         "media": _parse_media_session(media_raw),
+    }
+
+
+_YOUTUBE_PACKAGES = {"com.google.android.youtube.tv", "com.google.android.youtube"}
+
+
+def now_playing_url() -> dict:
+    """C2 — l'inverse de send_to_tv (C1) : reconstruit l'URL PC permettant
+    de reprendre exactement ce qui joue sur la télé, à la bonne position, à
+    partir de dumpsys media_session (T3, voir _parse_media_session).
+
+    Best effort, comme launch_app()/send_to_tv() : ADB ne donne jamais
+    directement une URL, seulement les métadonnées de la session média
+    active. `mMediaId` correspond à l'ID vidéo pour l'appli YouTube TV
+    (constaté sur ce stick) — quand il est présent et exploitable, l'URL est
+    reconstruite exactement. Pour les autres apps (Netflix, Prime Video…),
+    aucun ID exploitable n'est exposé par media_session : plutôt que
+    d'inventer un lien, renvoie titre/artiste/position et laisse Claude
+    chercher (web_search) avant d'appeler open_url — jamais de faux lien."""
+    try:
+        media_raw = _shell("dumpsys media_session")
+    except RuntimeError as exc:
+        return {"error": str(exc)}
+    info = _parse_media_session(media_raw)
+    if not info or not (info.get("title") or info.get("media_id")):
+        return {"error": "Rien ne joue actuellement sur la télé, Monsieur."}
+
+    seconds = (info["position_ms"] // 1000) if info.get("position_ms") is not None else None
+    package = info.get("package") or ""
+    media_id = info.get("media_id")
+
+    if package in _YOUTUBE_PACKAGES and media_id and _YOUTUBE_ID_RE.match(media_id):
+        url = f"https://www.youtube.com/watch?v={media_id}"
+        if seconds:
+            url += f"&t={seconds}s"
+        return {"ok": True, "url": url, "title": info.get("title"), "position_seconds": seconds}
+
+    return {
+        "ok": True,
+        "url": None,
+        "title": info.get("title"),
+        "artist": info.get("artist"),
+        "package": package or None,
+        "position_seconds": seconds,
+        "text": (
+            "Impossible de reconstruire un lien direct depuis la télé pour cette application "
+            f"— titre détecté : {info.get('title') or 'inconnu'}"
+            + (f", à {seconds}s" if seconds else "")
+            + ". Cherche ce titre (web_search) pour retrouver l'URL exacte avant d'appeler open_url."
+        ),
     }
 
 

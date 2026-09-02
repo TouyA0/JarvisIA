@@ -618,6 +618,19 @@ BRAIN_TOOLS = [
         },
     },
     {
+        "name": "tv_resume_on_pc",
+        "description": (
+            "Donne l'URL et la position pour reprendre sur le PC ce qui joue actuellement sur "
+            "la télé du salon — pour « reprends ça sur le PC », « je continue sur mon "
+            "ordinateur ». Lit la session média active de la télé (titre, position). Quand "
+            "c'est reconstructible (YouTube), renvoie directement l'URL exacte avec "
+            "l'horodatage : appelle ensuite open_url (outil PC) avec cette URL. Sinon (autres "
+            "apps), renvoie titre/artiste/position à la place — utilise web_search pour "
+            "retrouver le lien avant d'appeler open_url, n'invente jamais une URL."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
         "name": "tv_apps_list",
         "description": "Liste les applications installées sur la télé du salon. Utilise avant tv_launch_app si tu n'es pas sûr qu'une app précise soit installée.",
         "input_schema": {"type": "object", "properties": {}},
@@ -1299,6 +1312,17 @@ def execute(name: str, args: dict):
             return result["error"]
         cards.emit("tv", result["target"], {}, subtitle="Envoyé depuis le PC", actions=_tv_actions())
         return f"Envoyé sur la télé : {result['target']}."
+
+    if name == "tv_resume_on_pc":
+        if not android_tv.configured():
+            return "La télé du salon n'est pas configurée, Monsieur — ANDROID_TV_HOST manquant dans .env."
+        result = android_tv.now_playing_url()
+        if "error" in result:
+            return result["error"]
+        if result.get("url"):
+            pos = f" à {result['position_seconds']}s" if result.get("position_seconds") else ""
+            return f"Titre : {result.get('title') or 'inconnu'}{pos}. URL à ouvrir sur le PC : {result['url']}"
+        return result["text"]
 
     if name == "tv_apps_list":
         if not android_tv.configured():
