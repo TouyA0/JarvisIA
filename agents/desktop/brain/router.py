@@ -60,6 +60,10 @@ PC_COMMAND_KEYWORDS = [
     # Recherche web (voir brain/tools.py::web_search / fetch_page)
     "internet", "sur le web", "sur google", "actualité", "actualités",
     "dernière version", "résume cette page", "résume cet article",
+    # Android TV / télé du salon (voir brain/tools.py::tv_*)
+    "télé", "tele", "tv", "salon", "netflix", "youtube", "prime video",
+    "disney+", "disney plus", "twitch", "molotov", "canal+", "canal plus",
+    "chromecast", "google tv", "android tv",
 ]
 
 

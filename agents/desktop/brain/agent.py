@@ -232,7 +232,14 @@ def ask_with_tools(question: str) -> str | None:
         history.remember_exchange(question, local_answer, source="ollama-agent")
         return local_answer
 
-    claude_tools = registry.to_claude_tools(cached=True)
+    # Outils pilotage PC (locaux) + outils natifs brain (comptes externes,
+    # domotique, télé du salon — brain/tools.py) : un seul appel Claude voit
+    # les deux, la boucle tool_use ci-dessous route chaque appel vers le bon
+    # exécuteur selon son nom (brain_tools.NAMES). Miroir de
+    # brain/core/agent.py::ask_with_tools.
+    claude_tools = registry.to_claude_tools(cached=False) + brain_tools.to_claude_tools()
+    if claude_tools:
+        claude_tools[-1]["cache_control"] = {"type": "ephemeral"}
     static_prompt, dynamic_prompt = prompts.get_system_prompt()
     # Bloc statique (personnalité + contexte + instructions) → mis en cache
     static_text = static_prompt + "\n\n" + prompts.AGENT_INSTRUCTIONS
@@ -314,9 +321,13 @@ def ask_with_tools(question: str) -> str | None:
             for block in response.content:
                 if block.type != "tool_use":
                     continue
-                print(f"[Outil] {block.name}({block.input})")
                 _notify(f"OUTIL : {block.name}")
-                result = registry.execute(block.name, block.input, turn_state)
+                if block.name in brain_tools.NAMES:
+                    print(f"[Outil brain] {block.name}({block.input})")
+                    result = brain_tools.execute(block.name, block.input)
+                else:
+                    print(f"[Outil] {block.name}({block.input})")
+                    result = registry.execute(block.name, block.input, turn_state)
                 result_text = result.get("text", "") if isinstance(result, dict) else result
                 print(f"[Résultat] {result_text[:200]}")
                 tool_call_count += 1
