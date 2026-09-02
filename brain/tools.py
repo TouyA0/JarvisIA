@@ -524,7 +524,9 @@ BRAIN_TOOLS = [
             "droite/valider/retour/accueil/lecture-pause/suivant/précédent/avance rapide/retour "
             "rapide/stop). Utilise pour naviguer dans un menu à la voix, contrôler la lecture "
             "(« piste/épisode suivant », « stoppe la lecture »), ou après tv_screen_dump pour te "
-            "déplacer vers un élément plutôt que d'y taper directement."
+            "déplacer vers un élément plutôt que d'y taper directement. STOP déclenche une "
+            "confirmation à l'écran dans la Console web avant d'agir (peut couper ce que "
+            "quelqu'un regarde) — si refusée ou expirée, dis-le simplement, ne réessaie pas seul."
         ),
         "input_schema": {
             "type": "object",

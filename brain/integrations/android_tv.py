@@ -25,8 +25,13 @@ Trois couches, de la plus rapide/fiable à la plus lente/universelle :
      et l'afficher en carte (voir tools.py::execute ici, même schéma que
      brain/vision.py).
 
-Sécurité : ADB donne un accès quasi-shell complet à l'appareil — n'exposer
-`ANDROID_TV_HOST` que sur le réseau local, jamais par redirection de port.
+Sécurité (T15) : ADB donne un accès quasi-shell complet à l'appareil —
+`_connect_to()` refuse toute IP publique pour `ANDROID_TV_HOST`/l'hôte
+redécouvert (voir `_is_lan_host()`), jamais de redirection de port. Et
+`send_key()` exige une confirmation à l'écran (voir confirm.py) avant les
+commandes qui coupent ce que quelqu'un est peut-être en train de regarder
+(STOP — voir `_DISRUPTIVE_KEYS`) ; la navigation et les autres touches
+média (pause, volume…) restent immédiates, elles se rattrapent d'un appui.
 Première connexion : l'appareil affiche une popup "Autoriser le débogage
 USB ?" à l'écran — à accepter une fois manuellement (télécommande), ensuite
 la clé RSA générée ici (ANDROID_TV_ADB_KEY_PATH) est mémorisée par
@@ -35,12 +40,14 @@ l'appareil, plus rien à refaire.
 from __future__ import annotations
 
 import base64
+import ipaddress
 import json
 import re
 import threading
 import time
 
 from brain import config
+from brain.integrations import confirm
 
 _lock = threading.Lock()
 _device = None  # AdbDeviceTcp connecté, mis en cache — une seule connexion réutilisée.
@@ -194,12 +201,40 @@ def _signer():
     return PythonRSASigner(pub, priv)
 
 
+class _PublicHostRefused(RuntimeError):
+    """Distingue le refus délibéré d'une IP publique (config à corriger,
+    voir _is_lan_host()) d'une simple panne réseau — _connect() ne doit pas
+    l'avaler dans le message générique "injoignable" ni tenter mDNS/repli,
+    sans quoi Monsieur ne comprendrait jamais pourquoi ça ne marche pas."""
+
+
+def _is_lan_host(host: str) -> bool:
+    """False seulement si `host` est reconnaissable comme une IP publique —
+    voir docstring du module : ADB donne un accès quasi-shell complet à
+    l'appareil, `ANDROID_TV_HOST` ne doit jamais sortir du LAN (redirection
+    de port, tunnel, DDNS mal configuré…). Un nom d'hôte (pas une IP)
+    passe tel quel : pas de résolution DNS ici, et ce n'est de toute façon
+    pas le format attendu (IP fixe en .env, voir config.py)."""
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return True
+    return not ip.is_global
+
+
 def _connect_to(host: str):
     """Une tentative de connexion ADB à `host`, sans repli. Laisse remonter
     les exceptions brutes (ConnectionRefusedError, TimeoutError,
     DeviceAuthError…) — c'est `_connect()` qui les interprète pour choisir
     entre repli mDNS et message d'erreur (T13)."""
     from adb_shell.adb_device import AdbDeviceTcp
+
+    if not _is_lan_host(host):
+        raise _PublicHostRefused(
+            f"{host} est une adresse IP publique — ANDROID_TV_HOST ne doit jamais "
+            "sortir du réseau local (ADB donne un accès quasi-shell complet à "
+            "l'appareil), connexion refusée, Monsieur."
+        )
 
     device = AdbDeviceTcp(host, config.ANDROID_TV_PORT, default_transport_timeout_s=9.0)
     device.connect(rsa_keys=[_signer()], auth_timeout_s=10.0)
@@ -252,6 +287,8 @@ def _connect():
         for host in candidates:
             try:
                 device = _connect_to(host)
+            except _PublicHostRefused:
+                raise
             except DeviceAuthError as exc:
                 auth_failed = True
                 last_exc = exc
@@ -411,10 +448,19 @@ def volume(direction: str | None = None, level: int | None = None) -> dict:
     return {"ok": True, "direction": direction}
 
 
+_DISRUPTIVE_KEYS = {"STOP"}  # coupe la lecture en cours — quelqu'un peut être en train de
+# regarder (voir docstring du module, T15) : confirmation obligatoire, contrairement à la
+# navigation/aux touches média non destructives (pause/volume se rattrapent d'un appui).
+
+
 def send_key(command: str) -> dict:
     key = _KEYCODES.get(command.upper())
     if not key:
         return {"error": f"Touche inconnue : {command!r}, Monsieur — valeurs possibles : {', '.join(_KEYCODES)}."}
+    if command.upper() in _DISRUPTIVE_KEYS:
+        summary = "Arrêter la lecture en cours sur la télé du salon, Monsieur — quelqu'un est peut-être en train de regarder."
+        if not confirm.request(summary):
+            return {"error": "Action refusée par Monsieur ou confirmation expirée, Monsieur."}
     try:
         _shell(f"input keyevent {key}")
     except RuntimeError as exc:
