@@ -23,7 +23,19 @@ const SCREENS = {
   integrations: lazy(() => import("./components/Integrations.jsx")),
   system: lazy(() => import("./components/System.jsx")),
   settings: lazy(() => import("./components/Settings.jsx")),
+  // Cible du share_target Android (C3, manifest.webmanifest) — pas dans le
+  // menu de navigation (AppShell::NAV_ITEMS), atteint uniquement via un
+  // partage entrant (voir viewFromHash ci-dessous).
+  share: lazy(() => import("./components/Share.jsx")),
 };
+
+// `share_url`/`share_text` : présents une seule fois, juste après un
+// partage Android vers la PWA installée (voir share_target dans
+// manifest.webmanifest) — le navigateur ouvre `/?share_url=...` sans hash.
+function hasIncomingShare() {
+  const params = new URLSearchParams(window.location.search);
+  return params.has("share_url") || params.has("share_text");
+}
 
 // URL = état de navigation, pas juste un useState (P1) : sans ça, F5 ramène
 // toujours au Pupitre, le bouton retour du navigateur quitte l'appli, et le
@@ -34,7 +46,9 @@ const SCREENS = {
 // sert web/dist en statique, sans repli SPA sur les chemins profonds).
 function viewFromHash() {
   const id = window.location.hash.replace(/^#\/?/, "");
-  return SCREENS[id] ? id : "hud";
+  if (SCREENS[id]) return id;
+  if (hasIncomingShare()) return "share";
+  return "hud";
 }
 
 export default function App() {
@@ -59,6 +73,12 @@ export default function App() {
 
   const navigate = useCallback((next) => {
     if (!SCREENS[next]) return;
+    // Quitter l'écran de partage (C3) nettoie `?share_url=...` de la barre
+    // d'adresse — sinon un simple rafraîchissement y renverrait Monsieur
+    // (viewFromHash retombe sur hasIncomingShare quand le hash est absent).
+    if (next !== "share" && hasIncomingShare()) {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
     // Le hashchange déclenché par cette assignation met à jour `view` via
     // l'effet ci-dessus ; pas besoin de setView ici.
     window.location.hash = `#/${next}`;
@@ -91,7 +111,9 @@ export default function App() {
                   retour. */}
               <ErrorBoundary key={view} label={`screen:${view}`}>
                 <Suspense fallback={null}>
-                  <Screen />
+                  {/* onNavigate n'est utilisé que par Share.jsx (bouton
+                      retour) — les autres écrans l'ignorent sans effet. */}
+                  <Screen onNavigate={navigate} />
                 </Suspense>
               </ErrorBoundary>
             </AppShell>
