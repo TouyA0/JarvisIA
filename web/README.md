@@ -8,6 +8,9 @@ et `/ws` vers le brain (`:8420`) — voir `vite.config.js`.
 npm install
 npm run dev     # développement, avec rechargement à chaud
 npm run build   # produit web/dist, servi ensuite par le brain
+npm run lint    # eslint (react-hooks, jsx-a11y)
+npm run format  # prettier --write
+npm test        # vitest, sur les hooks/lib purs
 ```
 
 Le design de référence est dans `docs/site web design/`.

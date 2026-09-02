@@ -486,4 +486,16 @@ python -m agents.desktop.ui.hud             # démo du HUD seul (états simulés
 python -m agents.desktop.ui.preview_render  # rendu PNG de chaque état → agents/desktop/build_preview/
 ```
 
+### Tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest                # common/, brain/core/memory.py, routeur FastAPI (voir tests/)
+```
+
+Côté front (`web/`) : `npm run lint`, `npm run format`, `npm test` — voir
+`web/README.md`. `scripts/test_ollama_tools.py` n'est pas un test
+automatisé : c'est un banc d'essai manuel pour comparer des modèles Ollama
+sur le tool-use, à lancer à la main.
+
 La v1 monolithique reste consultable dans `legacy/`.

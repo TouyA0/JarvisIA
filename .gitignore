@@ -4,6 +4,7 @@
 # Python
 __pycache__/
 *.pyc
+.pytest_cache/
 
 # Sorties de rendu du HUD (preview design)
 agents/desktop/build_preview/
