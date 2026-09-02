@@ -20,8 +20,8 @@ le code réel. Rien n'est présenté comme fait s'il ne l'est pas.
 
 ## 1. La télé aujourd'hui — état réel
 
-`brain/integrations/android_tv.py` (315 lignes, **non commité**, non testé)
-+ 8 outils dans `brain/tools.py`. ADB TCP direct via `adb-shell`, clé RSA
+`brain/integrations/android_tv.py` (**non commité**, non testé)
++ 9 outils dans `brain/tools.py` (dont `tv_status`, voir T3 résolu ci-dessous). ADB TCP direct via `adb-shell`, clé RSA
 persistée, trois couches : touches/deep-links → `ui_dump` + `tap`/`type_text`
 → `screenshot` en dernier recours. C'est une bonne base, plus capable que
 l'intégration Home Assistant « Android TV Remote » (qui ne sait pas rendre
@@ -37,7 +37,7 @@ saisie de texte, capture d'écran (avec carte `screenshot` dans la Console).
 |---|---|---|---|
 | **T1** | **La télé est inatteignable à la voix** | `router.PC_COMMAND_KEYWORDS` ne contient ni « télé », ni « tv », ni « netflix », ni « youtube », ni « salon ». **Mesuré** sur le vrai `is_pc_command()` : « mets youtube sur la télé » → ❌, « mets netflix » → ❌, « pause sur la télé » → ❌, « coupe la télé » → ❌, « qu'est-ce qui passe sur la télé » → ❌. Seuls « allume la télé » et « baisse le son de la télé » passent — **par accident** (mots-clés domotique/PC). Et même quand ça passe, `runtime.py:102` route vers `agents/desktop/brain/agent.py`, qui n'a **que** les outils PC : aucun `tv_*` n'y est exposé. Conclusion : aujourd'hui, la télé n'est pilotable que depuis le chat de la Console web. | ▲ (mots-clés) / ▲▲ (vrai correctif, voir E9) |
 | **T2** | **Aucune configuration depuis la Console** | `ANDROID_TV_HOST` en `.env` uniquement — pas de carte dans **Intégrations** (aucune référence à la télé dans `web/src/components/integrations/`), donc pas de bouton connecter, pas de test de connexion, pas de sonde de santé (`/api/integrations/health` l'ignore). Une télé injoignable ressemblera à un bug. | ▲ |
-| **T3** | **Jarvis ne sait pas ce que la télé fait** | Aucun outil d'état : impossible de répondre à « qu'est-ce qui joue ? », « la télé est allumée ? », « on en est où dans l'épisode ? ». Tout existe côté ADB (`dumpsys media_session` pour titre/artiste/position/état lecture, `dumpsys power` pour l'écran, `dumpsys activity activities` pour l'app au premier plan) — juste pas branché. C'est ce qui manque pour que la télé soit un vrai appareil du système et pas une télécommande aveugle. | ▲ |
+| ~~T3~~ | ~~Jarvis ne sait pas ce que la télé fait~~ **Résolu** | Nouvel outil `tv_status` (`android_tv.status()` dans `brain/integrations/android_tv.py`) : combine `dumpsys power` (écran allumé/éteint), `dumpsys activity activities` (app au premier plan) et `dumpsys media_session` (titre/artiste/état lecture/position de la session active) — parsing best effort, `None`/message générique plutôt qu'une valeur inventée si le format ne matche pas. | ▲ |
 | **T4** | **Ni allumage ni extinction** | `_KEYCODES` n'expose pas `WAKEUP`/`SLEEP`/`POWER`. Sur un stick Android TV, `KEYCODE_WAKEUP` réveille le stick et allume généralement la télé par HDMI-CEC, `KEYCODE_SLEEP` fait l'inverse — deux lignes dans la liste blanche. Sans ça, « allume la télé » ne peut pas marcher, ce qui est la première chose qu'on demande. | ▲ |
 | **T5** | **Aucune carte / aucune télécommande visuelle** | Pas de type de carte `tv` dans `web/src/components/cards/renderers.jsx` : seule la capture d'écran s'affiche (via la carte `screenshot` générique). Or une télécommande à boutons sur le téléphone est *plus rapide* que la voix pour naviguer, et la mécanique existe déjà (`/api/tools/execute`, utilisé par les boutons de la carte `music`). | ▲▲ |
 

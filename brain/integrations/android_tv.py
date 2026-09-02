@@ -299,6 +299,109 @@ def type_text(text: str) -> dict:
     return {"ok": True, "text": text}
 
 
+_PLAYBACK_STATES = {
+    # Codes PlaybackStateCompat (AOSP) — https://developer.android.com/reference/androidx/media3/session/PlaybackStateCompat
+    "1": "arrêtée",
+    "2": "en pause",
+    "3": "en lecture",
+    "4": "avance rapide",
+    "5": "retour rapide",
+    "6": "en chargement",
+    "7": "en erreur",
+    "8": "en connexion",
+    "9": "en lecture",
+    "10": "en lecture",
+    "11": "en lecture",
+}
+
+
+def _screen_on(raw: str) -> bool | None:
+    """`dumpsys power` → écran allumé/éteint. Deux formats vus selon la
+    version d'Android : `mWakefulness=Awake|Asleep|Dozing` (le plus fiable,
+    reflète l'état réel du CPU/écran) ou `Display Power: state=ON|OFF` en
+    repli. None si aucun des deux ne matche (format inattendu)."""
+    m = re.search(r"mWakefulness=(\w+)", raw)
+    if m:
+        return m.group(1) == "Awake"
+    m = re.search(r"Display Power:\s*state=(\w+)", raw)
+    if m:
+        return m.group(1) == "ON"
+    return None
+
+
+def _foreground_app(raw: str) -> str | None:
+    """`dumpsys activity activities` → nom de package au premier plan.
+    `mResumedActivity` est le champ présent sur toutes les versions
+    Android testées ; `mFocusedApp` en repli (certaines versions TV)."""
+    m = re.search(r"mResumedActivity.*?\s([\w.]+)/[\w.$]+[\s}]", raw)
+    if m:
+        return m.group(1)
+    m = re.search(r"mFocusedApp=.*?\s([\w.]+)/[\w.$]+[\s}]", raw)
+    if m:
+        return m.group(1)
+    return None
+
+
+def _parse_media_session(raw: str) -> dict | None:
+    """`dumpsys media_session` → titre/artiste/état/position de la session
+    la plus prioritaire (la première listée). Best effort : le format
+    exact de la ligne `description=` varie selon la version d'Android et
+    l'appli (objet `MediaDescription{mTitle=..., mSubtitle=...}` sur les
+    versions récentes, triplet `Titre, null, Artiste` séparé par virgules
+    sur les plus anciennes) — on tente les deux, None si rien n'est
+    exploitable plutôt qu'un titre inventé."""
+    if not raw.strip() or "no sessions" in raw.lower():
+        return None
+
+    package_m = re.search(r"package=(\S+)", raw)
+    state_m = re.search(r"state=PlaybackState\s*\{state=(\d+)[^,]*,\s*position=(-?\d+)", raw)
+
+    title = artist = None
+    desc_m = re.search(r"description=(.+)", raw)
+    if desc_m:
+        desc = desc_m.group(1).strip()
+        obj_m = re.search(r"mTitle=([^,}]*),\s*mSubtitle=([^,}]*)", desc)
+        if obj_m:
+            title = obj_m.group(1).strip() or None
+            artist = obj_m.group(2).strip() or None
+        else:
+            parts = [p.strip() for p in desc.split(",")]
+            if parts and parts[0] and parts[0].lower() != "null":
+                title = parts[0]
+            if len(parts) > 2 and parts[2] and parts[2].lower() != "null":
+                artist = parts[2]
+
+    if not package_m and not title:
+        return None
+
+    position = int(state_m.group(2)) if state_m and int(state_m.group(2)) >= 0 else None
+    return {
+        "package": package_m.group(1) if package_m else None,
+        "title": title,
+        "artist": artist,
+        "state": _PLAYBACK_STATES.get(state_m.group(1)) if state_m else None,
+        "position_ms": position,
+    }
+
+
+def status() -> dict:
+    """État réel de la télé (T3) : écran allumé/éteint, appli au premier
+    plan, session multimédia active — sans ça Jarvis pilote la télé à
+    l'aveugle et ne peut pas répondre à « qu'est-ce qui joue ? », « la
+    télé est allumée ? » ou « on en est où dans l'épisode ? »."""
+    try:
+        power_raw = _shell("dumpsys power")
+        activity_raw = _shell("dumpsys activity activities")
+        media_raw = _shell("dumpsys media_session")
+    except RuntimeError as exc:
+        return {"error": str(exc)}
+    return {
+        "screen_on": _screen_on(power_raw),
+        "foreground_app": _foreground_app(activity_raw),
+        "media": _parse_media_session(media_raw),
+    }
+
+
 def screenshot() -> dict:
     """Couche 3, dernier recours — capture l'écran en image. Écrit sur la
     carte SD de l'appareil puis rapatrie le fichier (device.pull, transfert

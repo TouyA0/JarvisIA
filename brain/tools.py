@@ -491,6 +491,17 @@ BRAIN_TOOLS = [
         },
     },
     {
+        "name": "tv_status",
+        "description": (
+            "Donne l'état réel de la télé du salon : écran allumé/éteint, application au "
+            "premier plan, et ce qui joue actuellement (titre, artiste/chaîne, lecture/pause, "
+            "position). Utilise pour « qu'est-ce qui joue ? », « la télé est allumée ? », "
+            "« on en est où dans l'épisode/la vidéo ? » — avant ça, aucun moyen de répondre "
+            "sans deviner."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
         "name": "tv_volume",
         "description": "Monte, baisse ou coupe le son de la télé du salon (stick Android TV). Utilise pour « monte/baisse le son de la télé », « coupe le son ».",
         "input_schema": {
@@ -1117,6 +1128,34 @@ def execute(name: str, args: dict):
         if result["truncated"]:
             text += "\n\n[… contenu tronqué, la page est plus longue que ce qui a été lu ici]"
         return text
+
+    if name == "tv_status":
+        if not android_tv.configured():
+            return "La télé du salon n'est pas configurée, Monsieur — ANDROID_TV_HOST manquant dans .env."
+        result = android_tv.status()
+        if "error" in result:
+            return result["error"]
+        if result["screen_on"] is False:
+            return "L'écran de la télé est éteint, Monsieur."
+        parts = []
+        parts.append("écran allumé" if result["screen_on"] else "état de l'écran inconnu")
+        if result["foreground_app"]:
+            parts.append(f"application au premier plan : {result['foreground_app']}")
+        media = result["media"]
+        if media and (media.get("title") or media.get("package")):
+            title = media.get("title") or media.get("package")
+            media_desc = title
+            if media.get("artist"):
+                media_desc += f" — {media['artist']}"
+            if media.get("state"):
+                media_desc += f" ({media['state']})"
+            if media.get("position_ms") is not None:
+                secs = media["position_ms"] // 1000
+                media_desc += f", à {secs // 60}:{secs % 60:02d}"
+            parts.append(media_desc)
+        else:
+            parts.append("aucune lecture en cours détectée")
+        return ", ".join(parts) + ", Monsieur."
 
     if name == "tv_volume":
         if not android_tv.configured():
