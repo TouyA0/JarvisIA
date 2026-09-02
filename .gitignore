@@ -22,6 +22,7 @@ data/integrations.json
 data/integrations.key
 data/android_tv_adbkey
 data/android_tv_adbkey.pub
+data/android_tv_host_cache.json
 data/integrations_settings.json
 data/proactive_state.json
 data/preferences.json

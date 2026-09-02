@@ -137,6 +137,10 @@ ANDROID_TV_PORT = int(os.getenv("ANDROID_TV_PORT", "5555"))
 # réutilisée ensuite — évite de redemander l'autorisation "Autoriser le
 # débogage USB ?" sur l'écran de la télé à chaque redémarrage du brain.
 ANDROID_TV_ADB_KEY_PATH = DATA_DIR / "android_tv_adbkey"
+# Dernière IP qui a fonctionné (config fixe + bail DHCP qui a bougé, ou
+# découverte mDNS — voir android_tv.py T13), pour ne pas resonder le réseau
+# entier à chaque redémarrage du brain si le stick n'a pas bougé.
+ANDROID_TV_HOST_CACHE_FILE = DATA_DIR / "android_tv_host_cache.json"
 
 # Météo (carte "weather", voir brain/weather.py) — mêmes valeurs par défaut
 # que agents/desktop/config.py, dupliquées ici volontairement : le brain ne

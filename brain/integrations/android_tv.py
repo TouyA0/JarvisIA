@@ -35,6 +35,7 @@ l'appareil, plus rien à refaire.
 from __future__ import annotations
 
 import base64
+import json
 import re
 import threading
 import time
@@ -43,6 +44,21 @@ from brain import config
 
 _lock = threading.Lock()
 _device = None  # AdbDeviceTcp connecté, mis en cache — une seule connexion réutilisée.
+
+# IP effectivement utilisée pour la dernière connexion réussie — peut
+# diverger de config.ANDROID_TV_HOST (bail DHCP qui a bougé, voir
+# _discover_host() / T13). Chargée paresseusement depuis le cache disque
+# dans _connect() pour survivre à un redémarrage du brain.
+_resolved_host: str | None = None
+
+# mDNS/DNS-SD : la plupart des Android TV / Google TV annoncent le service
+# ADB réseau ("Débogage réseau" dans Options développeur) sous l'un de ces
+# deux noms selon le fabricant/la version — on essaie les deux, best effort,
+# et on abandonne silencieusement si rien ne répond (réseau qui filtre le
+# multicast, appareil qui n'annonce rien : l'IP fixe en .env reste la voie
+# normale, ceci n'est qu'un filet de secours).
+_MDNS_SERVICE_TYPES = ("_adb-tls-connect._tcp.local.", "_adb._tcp.local.")
+_MDNS_DISCOVERY_TIMEOUT_S = 4.0
 
 # Schémas de lien profond connus (Couche 1) — testés/confirmés fonctionnels
 # pour ce stick pendant la mise en place (YouTube, Spotify). Les autres sont
@@ -104,6 +120,62 @@ def configured() -> bool:
     return bool(config.ANDROID_TV_HOST)
 
 
+def _load_cached_host() -> str | None:
+    try:
+        data = json.loads(config.ANDROID_TV_HOST_CACHE_FILE.read_text(encoding="utf-8"))
+        host = data.get("host")
+        return host or None
+    except (FileNotFoundError, ValueError, OSError):
+        return None
+
+
+def _save_cached_host(host: str) -> None:
+    try:
+        config.ensure_dirs()
+        config.ANDROID_TV_HOST_CACHE_FILE.write_text(json.dumps({"host": host}), encoding="utf-8")
+    except OSError:
+        pass  # best effort — une IP non persistée force juste une redécouverte au prochain redémarrage.
+
+
+def _discover_host() -> str | None:
+    """Sonde mDNS du réseau local (T13) : quand l'IP fixe en .env ne répond
+    plus (bail DHCP qui a bougé), cherche un appareil qui annonce le service
+    ADB réseau plutôt que de laisser Monsieur aller chercher la nouvelle IP
+    à la main sur l'appareil. Un seul stick attendu sur le réseau — le
+    premier répondant est pris tel quel, aucune tentative de désambiguïser
+    entre plusieurs appareils Android."""
+    try:
+        from zeroconf import ServiceBrowser, Zeroconf
+    except ImportError:
+        return None
+
+    found: list[str] = []
+
+    class _Listener:
+        def add_service(self, zc, service_type, name):
+            info = zc.get_service_info(service_type, name, timeout=2000)
+            if info and info.parsed_addresses():
+                found.append(info.parsed_addresses()[0])
+
+        def update_service(self, zc, service_type, name):
+            pass
+
+        def remove_service(self, zc, service_type, name):
+            pass
+
+    zc = Zeroconf()
+    try:
+        ServiceBrowser(zc, list(_MDNS_SERVICE_TYPES), _Listener())
+        deadline = time.monotonic() + _MDNS_DISCOVERY_TIMEOUT_S
+        while time.monotonic() < deadline and not found:
+            time.sleep(0.1)
+    except Exception:
+        return None
+    finally:
+        zc.close()
+    return found[0] if found else None
+
+
 def _signer():
     """Génère la paire de clés RSA au premier lancement, la réutilise
     ensuite — évite de redemander l'autorisation à l'écran à chaque
@@ -122,13 +194,37 @@ def _signer():
     return PythonRSASigner(pub, priv)
 
 
+def _connect_to(host: str):
+    """Une tentative de connexion ADB à `host`, sans repli. Laisse remonter
+    les exceptions brutes (ConnectionRefusedError, TimeoutError,
+    DeviceAuthError…) — c'est `_connect()` qui les interprète pour choisir
+    entre repli mDNS et message d'erreur (T13)."""
+    from adb_shell.adb_device import AdbDeviceTcp
+
+    device = AdbDeviceTcp(host, config.ANDROID_TV_PORT, default_transport_timeout_s=9.0)
+    device.connect(rsa_keys=[_signer()], auth_timeout_s=10.0)
+    return device
+
+
 def _connect():
     """Connexion ADB TCP, mise en cache. Lève RuntimeError (jamais
     d'exception ADB brute) si l'appareil est injoignable ou refuse
-    l'autorisation — message actionnable (vérifier IP / accepter la popup
-    à l'écran) plutôt qu'une trace Python illisible pour Claude."""
-    global _device
-    from adb_shell.adb_device import AdbDeviceTcp
+    l'autorisation — message actionnable plutôt qu'une trace Python
+    illisible pour Claude.
+
+    T13 — deux pannes fréquentes sur ce genre de stick, distinguées ici pour
+    ne pas les confondre dans un message générique "injoignable" :
+      - port 5555 fermé (ConnectionRefusedError, hôte joignable mais rien
+        n'écoute) : le débogage ADB réseau se désactive au redémarrage du
+        stick sur beaucoup d'appareils — message qui dit explicitement de
+        le réactiver, plutôt que de laisser croire à un problème réseau.
+      - hôte injoignable (timeout) : l'IP a pu changer (bail DHCP) — avant
+        d'abandonner, on tente une découverte mDNS sur le réseau local, et
+        si elle trouve l'appareil on met à jour l'IP utilisée (mémoire +
+        cache disque) pour que les appels suivants n'aient plus à la
+        redécouvrir.
+    """
+    global _device, _resolved_host
     from adb_shell.exceptions import DeviceAuthError
 
     with _lock:
@@ -141,19 +237,68 @@ def _connect():
             except Exception:
                 _device = None
 
-        device = AdbDeviceTcp(config.ANDROID_TV_HOST, config.ANDROID_TV_PORT, default_transport_timeout_s=9.0)
-        try:
-            device.connect(rsa_keys=[_signer()], auth_timeout_s=10.0)
-        except DeviceAuthError as exc:
+        if _resolved_host is None:
+            _resolved_host = _load_cached_host()
+
+        # Hôte fixe en .env d'abord (voie normale) ; si un autre hôte a
+        # fonctionné précédemment (IP redécouverte), on le tente ensuite
+        # sans repasser par une sonde mDNS à chaque appel.
+        candidates = [config.ANDROID_TV_HOST]
+        if _resolved_host and _resolved_host != config.ANDROID_TV_HOST:
+            candidates.append(_resolved_host)
+
+        last_exc: Exception | None = None
+        auth_failed = False
+        for host in candidates:
+            try:
+                device = _connect_to(host)
+            except DeviceAuthError as exc:
+                auth_failed = True
+                last_exc = exc
+                continue
+            except Exception as exc:
+                last_exc = exc
+                continue
+            _device = device
+            _resolved_host = host
+            _save_cached_host(host)
+            return device
+
+        if auth_failed:
             raise RuntimeError(
                 "Autorisation ADB refusée par le stick — accepte la popup "
                 "« Autoriser le débogage USB ? » sur l'écran de la télé, "
-                f"puis réessaie ({exc})."
-            ) from exc
-        except Exception as exc:
-            raise RuntimeError(f"Stick TV injoignable à {config.ANDROID_TV_HOST}:{config.ANDROID_TV_PORT} ({exc}).") from exc
-        _device = device
-        return device
+                f"puis réessaie ({last_exc})."
+            ) from last_exc
+
+        if isinstance(last_exc, ConnectionRefusedError):
+            raise RuntimeError(
+                f"Le stick TV refuse la connexion sur le port {config.ANDROID_TV_PORT} à "
+                f"{candidates[-1]} — le débogage ADB réseau s'est probablement désactivé "
+                "au redémarrage du stick (fréquent sur ce genre d'appareil) : réactive "
+                "« Débogage réseau » dans Options développeur puis réessaie."
+            ) from last_exc
+
+        # Timeout/hôte injoignable : l'IP a peut-être changé (DHCP) — tente
+        # une découverte mDNS avant d'abandonner complètement.
+        discovered = _discover_host()
+        if discovered and discovered not in candidates:
+            try:
+                device = _connect_to(discovered)
+            except Exception as exc:
+                last_exc = exc
+            else:
+                _device = device
+                _resolved_host = discovered
+                _save_cached_host(discovered)
+                return device
+
+        raise RuntimeError(
+            f"Stick TV injoignable à {config.ANDROID_TV_HOST}:{config.ANDROID_TV_PORT} "
+            f"({last_exc}) — l'IP a peut-être changé (DHCP) et aucun appareil n'a répondu "
+            "à la découverte réseau (mDNS) ; vérifie l'IP actuelle du stick et mets à "
+            "jour ANDROID_TV_HOST si besoin."
+        ) from last_exc
 
 
 def _shell(cmd: str) -> str:
@@ -179,6 +324,39 @@ def probe() -> None:
     marche, avant que ça ne ressemble à un bug côté Console (T2). Lève
     RuntimeError (message actionnable, voir _connect()) sinon rien."""
     _shell("echo ok")
+
+
+_RECONNECT_INTERVAL_S = 120  # T13 — reconnexion planifiée, pas seulement "à la volée"
+# au prochain outil tv_* : détecte/répare une IP qui a bougé (DHCP) ou un port 5555
+# qui s'est refermé (redémarrage du stick) en tâche de fond, pour que la première
+# commande de Monsieur après un tel incident ne paie pas le coût de la découverte.
+
+
+def _reconnect_loop() -> None:
+    while True:
+        time.sleep(_RECONNECT_INTERVAL_S)
+        if not configured():
+            continue
+        try:
+            probe()
+        except RuntimeError as exc:
+            print(f"[brain][android_tv] reconnexion planifiée en échec : {exc}")
+
+
+_reconnect_started = False
+
+
+def start_reconnect_loop() -> None:
+    """Démarre le thread de reconnexion planifiée (T13, voir
+    _reconnect_loop()) — tourne même si l'intégration n'est pas configurée
+    au démarrage : `configured()` est relu à chaque tour, pour qu'un
+    ANDROID_TV_HOST ajouté après coup soit pris en compte sans redémarrer
+    le brain."""
+    global _reconnect_started
+    if _reconnect_started:
+        return
+    _reconnect_started = True
+    threading.Thread(target=_reconnect_loop, daemon=True).start()
 
 
 _STREAM_MUSIC = 3  # AudioManager.STREAM_MUSIC — flux utilisé par la quasi-totalité des apps média sur Android TV.

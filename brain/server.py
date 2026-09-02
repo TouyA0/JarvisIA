@@ -74,6 +74,7 @@ _ZOHO_SERVICES = {
 config.ensure_dirs()
 timers.start()
 proactive.start()
+android_tv.start_reconnect_loop()
 
 app = FastAPI(title="Jarvis Brain")
 
