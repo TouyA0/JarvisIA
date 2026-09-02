@@ -157,7 +157,7 @@ export default function CardView({ card, onDismiss, readOnly = false }) {
       {!readOnly && card.type === "screenshot" && <ScreenshotActions data={card.data} toast={toast} />}
       {!readOnly && card.actions && card.actions.length > 0 && <CardActions actions={card.actions} toast={toast} />}
 
-      {(card.type === "screenshot" || card.type === "vision") && (
+      {(card.type === "screenshot" || card.type === "vision" || (card.type === "tv" && card.data.image_b64)) && (
         <Modal open={zoomed} onClose={() => setZoomed(false)} title={card.title} wide>
           <img
             src={`data:${card.data.media_type || "image/jpeg"};base64,${card.data.image_b64}`}

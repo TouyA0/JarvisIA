@@ -50,6 +50,13 @@ const PATHS = {
     "M3 6h4M11 6h10M7 6A2 2 0 1 0 11 6A2 2 0 1 0 7 6" +
     "M3 12h10M17 12h4M13 12A2 2 0 1 0 17 12A2 2 0 1 0 13 12" +
     "M3 18h6M13 18h8M9 18A2 2 0 1 0 13 18A2 2 0 1 0 9 18",
+  "chevron-up": "M5 15l7-7 7 7",
+  "chevron-down": "M5 9l7 7 7-7",
+  "chevron-left": "M15 5l-7 7 7 7",
+  "chevron-right": "M9 5l7 7-7 7",
+  home: "M4 11 12 4l8 7M6 10v9h4v-5h4v5h4v-9",
+  back: "M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11",
+  tv: "M3 4h18v13H3zM9 20h6M12 17v3",
 };
 
 export default function Icon({ name, size = 18, strokeWidth = 1.6, className = "" }) {

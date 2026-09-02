@@ -178,6 +178,35 @@ function Vision({ data, onZoom }) {
   );
 }
 
+/** Télécommande télé (T5) : la capture d'écran ou le statut quand
+ * disponibles (selon l'outil tv_* qui a émis la carte, voir brain/tools.py),
+ * et en dessous les boutons de card.actions (D-pad, volume, retour/accueil,
+ * lecture) rendus par CardActions dans CardView.jsx — même mécanique que la
+ * carte music, pour naviguer sans repasser par la voix. */
+function Tv({ data, onZoom }) {
+  const media = data.media;
+  const statusLine = data.screen_on === false
+    ? "Écran éteint"
+    : [
+        data.foreground_app,
+        media && (media.title || media.package)
+          ? `${media.title || media.package}${media.artist ? ` — ${media.artist}` : ""}${media.state ? ` (${media.state})` : ""}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+  return (
+    <div className="stack stack--tight">
+      {data.image_b64 && (
+        <button type="button" className="card-shot" onClick={onZoom} aria-label="Agrandir l'écran de la télé">
+          <img src={`data:${data.media_type || "image/png"};base64,${data.image_b64}`} alt="Écran de la télé" />
+        </button>
+      )}
+      {statusLine && <p className="card-row-sub">{statusLine}</p>}
+    </div>
+  );
+}
+
 function Transport({ data }) {
   return (
     <Rows items={data.departures} empty="Aucun passage annoncé.">
@@ -340,6 +369,7 @@ export const CARD_META = {
   music: { icon: "play", source: "Spotify" },
   media: { icon: "play", source: "Jellyfin" },
   screenshot: { icon: "camera", source: "Écran" },
+  tv: { icon: "tv", source: "Télé du salon" },
   transport: { icon: "clock", source: "Transports" },
   route: { icon: "link", source: "Itinéraire" },
   contacts: { icon: "devices", source: "Contacts" },
@@ -362,6 +392,7 @@ export const RENDERERS = {
   music: Music,
   media: Media,
   screenshot: Screenshot,
+  tv: Tv,
   transport: Transport,
   route: Route,
   contacts: Contacts,

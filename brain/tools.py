@@ -633,6 +633,27 @@ def _music_actions(playing: bool) -> list[dict]:
     ]
 
 
+def _tv_actions() -> list[dict]:
+    """Boutons de la carte "tv" (T5) — même mécanique que _music_actions
+    ci-dessus : chaque bouton appelle /api/tools/execute, donc directement
+    tv_key/tv_volume sans repasser par la voix. Rendus par CardActions
+    (CardView.jsx), pas par Tv (renderers.jsx) qui ne fait qu'afficher la
+    capture/le statut."""
+    return [
+        {"label": "Accueil", "icon": "home", "tool": "tv_key", "args": {"command": "HOME"}},
+        {"label": "Retour", "icon": "back", "tool": "tv_key", "args": {"command": "BACK"}},
+        {"label": "Haut", "icon": "chevron-up", "tool": "tv_key", "args": {"command": "DPAD_UP"}},
+        {"label": "Bas", "icon": "chevron-down", "tool": "tv_key", "args": {"command": "DPAD_DOWN"}},
+        {"label": "Gauche", "icon": "chevron-left", "tool": "tv_key", "args": {"command": "DPAD_LEFT"}},
+        {"label": "Droite", "icon": "chevron-right", "tool": "tv_key", "args": {"command": "DPAD_RIGHT"}},
+        {"label": "OK", "icon": "check", "tool": "tv_key", "args": {"command": "DPAD_CENTER"}},
+        {"label": "Lecture", "icon": "play", "tool": "tv_key", "args": {"command": "PLAY_PAUSE"}},
+        {"label": "Vol -", "icon": "chevron-down", "tool": "tv_volume", "args": {"direction": "down"}},
+        {"label": "Vol +", "icon": "chevron-up", "tool": "tv_volume", "args": {"direction": "up"}},
+        {"label": "Muet", "icon": "x", "tool": "tv_volume", "args": {"direction": "mute"}},
+    ]
+
+
 def _format_events(events: list[dict]) -> str:
     if not events:
         return "Aucun événement sur cette période, Monsieur."
@@ -1135,6 +1156,7 @@ def execute(name: str, args: dict):
         result = android_tv.status()
         if "error" in result:
             return result["error"]
+        cards.emit("tv", "Télé du salon", result, subtitle="Statut", actions=_tv_actions())
         if result["screen_on"] is False:
             return "L'écran de la télé est éteint, Monsieur."
         parts = []
@@ -1179,6 +1201,7 @@ def execute(name: str, args: dict):
         result = android_tv.launch_app(args.get("target", ""))
         if "error" in result:
             return result["error"]
+        cards.emit("tv", result["target"], {}, subtitle="Lancé sur la télé", actions=_tv_actions())
         return f"Lancé sur la télé : {result['target']}."
 
     if name == "tv_apps_list":
@@ -1217,9 +1240,9 @@ def execute(name: str, args: dict):
         result = android_tv.screenshot()
         if "error" in result:
             return result["error"]
-        cards.emit("screenshot", "Télé du salon",
+        cards.emit("tv", "Télé du salon",
                    {"image_b64": result["image_b64"], "media_type": result["media_type"]},
-                   subtitle="Capture à distance")
+                   subtitle="Capture à distance", actions=_tv_actions())
         return result
 
     return f"Outil brain inconnu : {name}"
