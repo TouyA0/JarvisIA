@@ -20,6 +20,8 @@ data/devices.json
 data/cross_device_routines.json
 data/integrations.json
 data/integrations.key
+data/android_tv_adbkey
+data/android_tv_adbkey.pub
 data/integrations_settings.json
 data/proactive_state.json
 data/preferences.json

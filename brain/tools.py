@@ -11,7 +11,7 @@ deux listes de schémas, et route chaque tool_use vers le bon exécuteur
 from __future__ import annotations
 
 from brain import cards, config, diagnostics, preferences, weather
-from brain.integrations import brave_search, google_calendar, google_contacts, google_drive, google_gmail, home_assistant, jellyfin, ors, spotify, store, tisseo, zoho_mail
+from brain.integrations import android_tv, brave_search, google_calendar, google_contacts, google_drive, google_gmail, home_assistant, jellyfin, ors, spotify, store, tisseo, zoho_mail
 
 # Chaque outil qui rapporte de la donnée structurée émet, en plus du texte
 # destiné à la voix, une **carte** que la Console affiche (voir brain/cards.py
@@ -489,6 +489,109 @@ BRAIN_TOOLS = [
             },
             "required": ["url"],
         },
+    },
+    {
+        "name": "tv_volume",
+        "description": "Monte, baisse ou coupe le son de la télé du salon (stick Android TV). Utilise pour « monte/baisse le son de la télé », « coupe le son ».",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "direction": {"type": "string", "enum": ["up", "down", "mute"], "description": "Sens du réglage."},
+            },
+            "required": ["direction"],
+        },
+    },
+    {
+        "name": "tv_key",
+        "description": "Envoie une touche de navigation à la télé (haut/bas/gauche/droite/valider/retour/accueil/lecture-pause). Utilise pour naviguer dans un menu à la voix, ou après tv_screen_dump pour te déplacer vers un élément plutôt que d'y taper directement.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "enum": ["DPAD_UP", "DPAD_DOWN", "DPAD_LEFT", "DPAD_RIGHT", "DPAD_CENTER", "BACK", "HOME", "ENTER", "PLAY_PAUSE"],
+                    "description": "Touche à envoyer. DPAD_CENTER = valider/OK.",
+                },
+            },
+            "required": ["command"],
+        },
+    },
+    {
+        "name": "tv_launch_app",
+        "description": (
+            "Lance une application ou un contenu précis sur la télé du salon via lien profond. "
+            "Pour une app seule : nom en texte libre ('youtube', 'spotify', 'netflix', 'disney+') "
+            "ou nom de package Android. Pour un contenu précis DÉJÀ IDENTIFIÉ (ex. une vidéo "
+            "YouTube trouvée via web_search, un titre Netflix dont tu connais l'id) : passe l'URI "
+            "complète directement, ex. 'vnd.youtube://ID_VIDEO' ou "
+            "'https://www.netflix.com/title/ID'. Best effort — certaines apps (Disney+ notamment) "
+            "ignorent le lien profond et n'ouvrent que leur écran d'accueil : vérifie le résultat "
+            "avec tv_screen_dump et bascule sur tv_key/tv_tap si besoin plutôt que de répéter "
+            "le même lancement.\n"
+            "IMPORTANT — appli multi-comptes (YouTube, Netflix…) : si un fait mémorisé précise "
+            "quel compte/profil Monsieur veut sur cette appli, NE considère PAS la tâche terminée "
+            "juste après le lancement. Appelle tv_screen_dump pour voir quel compte est affiché "
+            "(nom/avatar visible parmi les éléments) ; si ce n'est pas celui attendu, cherche "
+            "l'élément de sélection/changement de compte dans la liste (souvent l'avatar ou 'Compte') "
+            "et tape dessus avec tv_tap, puis re-dump pour confirmer avant de répondre à Monsieur."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "target": {"type": "string", "description": "Nom d'app, URI de lien profond, ou nom de package."},
+            },
+            "required": ["target"],
+        },
+    },
+    {
+        "name": "tv_apps_list",
+        "description": "Liste les applications installées sur la télé du salon. Utilise avant tv_launch_app si tu n'es pas sûr qu'une app précise soit installée.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "tv_screen_dump",
+        "description": (
+            "Lit ce qui est affiché à l'écran de la télé sous forme de liste d'éléments "
+            "(texte + position exacte, sans image) — utilise ça pour trouver un bouton, un champ "
+            "de recherche, ou un résultat à sélectionner quand tv_launch_app n'a pas mené "
+            "directement au bon endroit. Enchaîne avec tv_tap sur les coordonnées d'un élément, "
+            "ou tv_type_text pour écrire dans un champ. Si ça échoue ('aucun élément exploitable'), "
+            "utilise tv_screenshot en dernier recours."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "tv_tap",
+        "description": "Appuie à un endroit précis de l'écran de la télé (coordonnées obtenues via tv_screen_dump ou tv_screenshot).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "x": {"type": "integer", "description": "Coordonnée horizontale en pixels."},
+                "y": {"type": "integer", "description": "Coordonnée verticale en pixels."},
+            },
+            "required": ["x", "y"],
+        },
+    },
+    {
+        "name": "tv_type_text",
+        "description": "Écrit du texte dans le champ actuellement sélectionné/focus sur la télé (ex. une barre de recherche ouverte via tv_tap). Appelle tv_tap sur le champ avant si besoin.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string", "description": "Texte à taper."},
+            },
+            "required": ["text"],
+        },
+    },
+    {
+        "name": "tv_screenshot",
+        "description": (
+            "Prend une capture d'écran de la télé du salon — dernier recours uniquement, quand "
+            "tv_screen_dump ne renvoie rien d'exploitable (interface non standard). Plus lent : "
+            "regarde l'image, décide où taper (tv_tap), n'utilise pas ça en boucle plus de "
+            "quelques fois de suite."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
     },
 ]
 
@@ -1014,5 +1117,70 @@ def execute(name: str, args: dict):
         if result["truncated"]:
             text += "\n\n[… contenu tronqué, la page est plus longue que ce qui a été lu ici]"
         return text
+
+    if name == "tv_volume":
+        if not android_tv.configured():
+            return "La télé du salon n'est pas configurée, Monsieur — ANDROID_TV_HOST manquant dans .env."
+        result = android_tv.volume(args.get("direction", ""))
+        if "error" in result:
+            return result["error"]
+        return f"Volume : {result['direction']}."
+
+    if name == "tv_key":
+        if not android_tv.configured():
+            return "La télé du salon n'est pas configurée, Monsieur — ANDROID_TV_HOST manquant dans .env."
+        result = android_tv.send_key(args.get("command", ""))
+        if "error" in result:
+            return result["error"]
+        return f"Touche envoyée : {result['command']}."
+
+    if name == "tv_launch_app":
+        if not android_tv.configured():
+            return "La télé du salon n'est pas configurée, Monsieur — ANDROID_TV_HOST manquant dans .env."
+        result = android_tv.launch_app(args.get("target", ""))
+        if "error" in result:
+            return result["error"]
+        return f"Lancé sur la télé : {result['target']}."
+
+    if name == "tv_apps_list":
+        if not android_tv.configured():
+            return "La télé du salon n'est pas configurée, Monsieur — ANDROID_TV_HOST manquant dans .env."
+        result = android_tv.list_apps()
+        if "error" in result:
+            return result["error"]
+        return "Applications installées :\n" + "\n".join(f"- {p}" for p in result["packages"])
+
+    if name == "tv_screen_dump":
+        if not android_tv.configured():
+            return "La télé du salon n'est pas configurée, Monsieur — ANDROID_TV_HOST manquant dans .env."
+        result = android_tv.ui_dump()
+        return result.get("error") or result["text"]
+
+    if name == "tv_tap":
+        if not android_tv.configured():
+            return "La télé du salon n'est pas configurée, Monsieur — ANDROID_TV_HOST manquant dans .env."
+        result = android_tv.tap(args.get("x", 0), args.get("y", 0))
+        if "error" in result:
+            return result["error"]
+        return f"Appui effectué à ({result['x']},{result['y']})."
+
+    if name == "tv_type_text":
+        if not android_tv.configured():
+            return "La télé du salon n'est pas configurée, Monsieur — ANDROID_TV_HOST manquant dans .env."
+        result = android_tv.type_text(args.get("text", ""))
+        if "error" in result:
+            return result["error"]
+        return f"Texte tapé : {result['text']}."
+
+    if name == "tv_screenshot":
+        if not android_tv.configured():
+            return "La télé du salon n'est pas configurée, Monsieur — ANDROID_TV_HOST manquant dans .env."
+        result = android_tv.screenshot()
+        if "error" in result:
+            return result["error"]
+        cards.emit("screenshot", "Télé du salon",
+                   {"image_b64": result["image_b64"], "media_type": result["media_type"]},
+                   subtitle="Capture à distance")
+        return result
 
     return f"Outil brain inconnu : {name}"

@@ -127,6 +127,17 @@ SPOTIFY_REDIRECT_URI = os.getenv(
 # bordure de journée.
 TIMEZONE = os.getenv("TIMEZONE", "Europe/Paris")
 
+# Android TV / Google TV (stick salon) — connexion ADB réseau directe, pas
+# d'OAuth ni de compte : juste une IP sur le réseau local (débogage ADB déjà
+# activé sur l'appareil, voir brain/integrations/android_tv.py). Vide =
+# intégration désactivée, les outils tv_* répondent "non configuré".
+ANDROID_TV_HOST = os.getenv("ANDROID_TV_HOST", "")
+ANDROID_TV_PORT = int(os.getenv("ANDROID_TV_PORT", "5555"))
+# Paire de clés RSA générée au premier lancement (adb_shell.auth.keygen) et
+# réutilisée ensuite — évite de redemander l'autorisation "Autoriser le
+# débogage USB ?" sur l'écran de la télé à chaque redémarrage du brain.
+ANDROID_TV_ADB_KEY_PATH = DATA_DIR / "android_tv_adbkey"
+
 # Météo (carte "weather", voir brain/weather.py) — mêmes valeurs par défaut
 # que agents/desktop/config.py, dupliquées ici volontairement : le brain ne
 # doit pas dépendre du package agent desktop (Windows-only par endroits)

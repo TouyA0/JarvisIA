@@ -194,6 +194,34 @@
         "cmd": "Start-Process 'https://youtube.com/watch?v=5xWSbltj-fQ'"
       },
       "response": "C'est lancé, Monsieur."
+    },
+    {
+      "id": "learned_1788342699",
+      "triggers": [
+        "ouvre youtube sur la télé",
+        "lance youtube à la télé",
+        "youtube sur la télé du salon",
+        "mets youtube"
+      ],
+      "action": {
+        "type": "powershell",
+        "cmd": "Start-Process \"com.google.android.youtube.tv:///\""
+      },
+      "response": "YouTube est lancé sur la télé, Monsieur."
+    },
+    {
+      "id": "learned_1788342815",
+      "triggers": [
+        "ouvre youtube sur la télé",
+        "lance youtube sur la télé",
+        "youtube sur la télé",
+        "mets youtube"
+      ],
+      "action": {
+        "type": "powershell",
+        "cmd": "tv_launch_app -target youtube"
+      },
+      "response": "C'est fait, Monsieur. YouTube est lancé sur la télé."
     }
   ]
 }
