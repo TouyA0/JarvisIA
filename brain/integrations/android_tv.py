@@ -602,6 +602,84 @@ def launch_app(target: str) -> dict:
     }
 
 
+_YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be", "music.youtube.com"}
+_YOUTUBE_ID_RE = re.compile(r"^[\w-]{11}$")
+_YOUTUBE_TIMESTAMP_RE = re.compile(r"^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$")
+
+
+def _parse_youtube_timestamp(raw: str) -> int | None:
+    """Le paramètre `t=`/`start=` d'une URL YouTube prend deux formes selon
+    comment le lien a été copié : un entier brut de secondes ("90") ou un
+    format "1h2m3s" (parties optionnelles) — les deux vus en usage réel."""
+    raw = raw.strip()
+    if raw.isdigit():
+        return int(raw)
+    m = _YOUTUBE_TIMESTAMP_RE.match(raw)
+    if not m or not any(m.groups()):
+        return None
+    h, mnt, s = (int(g) if g else 0 for g in m.groups())
+    return h * 3600 + mnt * 60 + s
+
+
+def _extract_youtube(url: str) -> tuple[str, int | None] | None:
+    """URL de page YouTube (youtube.com/watch?v=ID, youtu.be/ID, /shorts/ID,
+    /live/ID, /embed/ID) → (id_vidéo, horodatage en secondes ou None). None
+    si `url` n'est pas reconnaissable comme une page YouTube — send_to_tv()
+    passe alors l'URL telle quelle en lien profond générique (C1)."""
+    from urllib.parse import urlparse, parse_qs
+
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return None
+    if parsed.hostname not in _YOUTUBE_HOSTS:
+        return None
+
+    qs = parse_qs(parsed.query)
+    video_id = None
+    if parsed.hostname == "youtu.be":
+        video_id = parsed.path.strip("/").split("/")[0] or None
+    elif "v" in qs:
+        video_id = qs["v"][0]
+    else:
+        for prefix in ("/shorts/", "/live/", "/embed/"):
+            if parsed.path.startswith(prefix):
+                video_id = parsed.path[len(prefix):].split("/")[0]
+                break
+
+    if not video_id or not _YOUTUBE_ID_RE.match(video_id):
+        return None
+
+    t_raw = (qs.get("t") or qs.get("start") or [None])[0]
+    seconds = _parse_youtube_timestamp(t_raw) if t_raw else None
+    return video_id, seconds
+
+
+def send_to_tv(url: str) -> dict:
+    """C1 — transfère l'URL de l'onglet actif du PC (voir outil PC
+    get_browser_url) vers la télé du salon. YouTube : extrait l'ID de la
+    vidéo et l'horodatage éventuel (&t=) pour lancer directement le lien
+    profond natif 'vnd.youtube://ID?t=SECONDS' — reprend exactement où
+    Monsieur en était, sans passer par un navigateur (qui n'existe pas sur
+    ce stick). Tout le reste (Netflix, Prime Video, une page quelconque) :
+    transmet l'URL telle quelle à launch_app(), qui l'envoie en intent VIEW
+    — Android résout lui-même vers l'appli installée compatible (App Links),
+    même mécanique que pour un lien profond ou un nom de package inconnu."""
+    if not url or not url.strip():
+        return {"error": "Aucune URL à envoyer sur la télé, Monsieur."}
+    url = url.strip()
+
+    youtube = _extract_youtube(url)
+    if youtube:
+        video_id, seconds = youtube
+        target = f"vnd.youtube://{video_id}"
+        if seconds:
+            target += f"?t={seconds}"
+        return launch_app(target)
+
+    return launch_app(url)
+
+
 def list_apps() -> dict:
     """Liste les applis tierces installées (pas les composants système) —
     pour que Claude sache ce qui existe réellement sur ce stick avant de

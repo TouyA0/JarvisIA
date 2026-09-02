@@ -598,6 +598,26 @@ BRAIN_TOOLS = [
         },
     },
     {
+        "name": "send_to_tv",
+        "description": (
+            "Transfère une vidéo ou une page vers la télé du salon à partir d'une URL — pour "
+            "« envoie cette vidéo sur la télé », « mets ça sur la télé », « bascule ça sur le "
+            "grand écran ». Appelle d'abord get_browser_url si Monsieur n'a pas donné l'URL "
+            "explicitement (« cette vidéo », « cette page »). Pour YouTube, extrait "
+            "automatiquement l'ID de la vidéo et l'horodatage (&t=) pour reprendre exactement "
+            "où Monsieur en était. Pour toute autre page (Netflix, Prime Video, un lien "
+            "quelconque), transmet l'URL directement à la télé, qui la résout vers "
+            "l'application installée compatible."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "URL de la page/vidéo à envoyer sur la télé (ex. celle renvoyée par get_browser_url)."},
+            },
+            "required": ["url"],
+        },
+    },
+    {
         "name": "tv_apps_list",
         "description": "Liste les applications installées sur la télé du salon. Utilise avant tv_launch_app si tu n'es pas sûr qu'une app précise soit installée.",
         "input_schema": {"type": "object", "properties": {}},
@@ -1270,6 +1290,15 @@ def execute(name: str, args: dict):
             return result["error"]
         cards.emit("tv", result["target"], {}, subtitle="Lancé sur la télé", actions=_tv_actions())
         return f"Lancé sur la télé : {result['target']}."
+
+    if name == "send_to_tv":
+        if not android_tv.configured():
+            return "La télé du salon n'est pas configurée, Monsieur — ANDROID_TV_HOST manquant dans .env."
+        result = android_tv.send_to_tv(args.get("url", ""))
+        if "error" in result:
+            return result["error"]
+        cards.emit("tv", result["target"], {}, subtitle="Envoyé depuis le PC", actions=_tv_actions())
+        return f"Envoyé sur la télé : {result['target']}."
 
     if name == "tv_apps_list":
         if not android_tv.configured():

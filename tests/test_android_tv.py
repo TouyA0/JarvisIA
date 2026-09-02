@@ -1,4 +1,12 @@
-from brain.integrations.android_tv import _parse_ui_dump, _resolve_app
+from unittest.mock import patch
+
+from brain.integrations import android_tv
+from brain.integrations.android_tv import (
+    _extract_youtube,
+    _parse_ui_dump,
+    _parse_youtube_timestamp,
+    _resolve_app,
+)
 
 
 def test_resolve_app_known_name_returns_deep_link_scheme():
@@ -59,3 +67,57 @@ def test_parse_ui_dump_skips_node_without_valid_bounds():
 
 def test_parse_ui_dump_returns_empty_list_on_malformed_xml():
     assert _parse_ui_dump("<not><valid") == []
+
+
+def test_parse_youtube_timestamp_plain_seconds():
+    assert _parse_youtube_timestamp("90") == 90
+
+
+def test_parse_youtube_timestamp_hms_format():
+    assert _parse_youtube_timestamp("1h2m3s") == 3723
+
+
+def test_parse_youtube_timestamp_partial_hms():
+    assert _parse_youtube_timestamp("5m") == 300
+
+
+def test_parse_youtube_timestamp_invalid_returns_none():
+    assert _parse_youtube_timestamp("abc") is None
+
+
+def test_extract_youtube_watch_url_with_timestamp():
+    assert _extract_youtube("https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42s") == ("dQw4w9WgXcQ", 42)
+
+
+def test_extract_youtube_short_url_without_timestamp():
+    assert _extract_youtube("https://youtu.be/dQw4w9WgXcQ") == ("dQw4w9WgXcQ", None)
+
+
+def test_extract_youtube_shorts_url():
+    assert _extract_youtube("https://www.youtube.com/shorts/dQw4w9WgXcQ") == ("dQw4w9WgXcQ", None)
+
+
+def test_extract_youtube_non_youtube_url_returns_none():
+    assert _extract_youtube("https://www.netflix.com/watch/12345") is None
+
+
+def test_extract_youtube_watch_url_without_video_id_returns_none():
+    assert _extract_youtube("https://www.youtube.com/watch?list=abc") is None
+
+
+def test_send_to_tv_youtube_url_builds_deep_link_with_timestamp():
+    with patch.object(android_tv, "launch_app") as mock_launch:
+        mock_launch.return_value = {"ok": True, "target": "vnd.youtube://dQw4w9WgXcQ?t=42"}
+        android_tv.send_to_tv("https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42s")
+        mock_launch.assert_called_once_with("vnd.youtube://dQw4w9WgXcQ?t=42")
+
+
+def test_send_to_tv_non_youtube_url_passed_through_unchanged():
+    with patch.object(android_tv, "launch_app") as mock_launch:
+        mock_launch.return_value = {"ok": True, "target": "https://www.netflix.com/watch/12345"}
+        android_tv.send_to_tv("https://www.netflix.com/watch/12345")
+        mock_launch.assert_called_once_with("https://www.netflix.com/watch/12345")
+
+
+def test_send_to_tv_empty_url_returns_error():
+    assert "error" in android_tv.send_to_tv("")
