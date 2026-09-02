@@ -34,7 +34,7 @@ from agents.protocol.messages import (
     RegisterAck,
     parse_message,
 )
-from brain import activity, cards, config, device_store, diagnostics, notes, pairing, preferences, proactive, routines, speech, timers, vision, weather
+from brain import activity, cards, config, device_store, diagnostics, notes, pairing, preferences, proactive, routines, session_tokens, speech, timers, vision, weather
 from brain import health as account_health
 from brain import tools as brain_tools
 from brain.core import agent as pc_agent
@@ -108,14 +108,42 @@ async def _require_console_auth(request: Request, call_next):
         "/api/integrations/google/callback",
         "/api/integrations/zoho/callback",
         "/api/integrations/spotify/callback",
+        "/api/session",
     ):
+        # /api/session est l'échange lui-même (mot de passe -> jeton) : par
+        # définition, ne peut pas exiger le jeton qu'il émet.
         return await call_next(request)
     if config.CONSOLE_PASSWORD and path.startswith("/api/") and path != "/api/health":
         auth = request.headers.get("authorization", "")
         token = auth[7:] if auth.lower().startswith("bearer ") else ""
-        if token != config.CONSOLE_PASSWORD:
+        if not session_tokens.verify(token):
             return JSONResponse({"detail": "authentification requise"}, status_code=401)
     return await call_next(request)
+
+
+@app.post("/api/session")
+async def create_session(request: Request, body: dict) -> dict:
+    """Échange CONSOLE_PASSWORD contre un jeton de session à courte durée
+    (voir brain/session_tokens.py) — le mot de passe lui-même ne transite
+    plus jamais ailleurs (ni en Bearer HTTP, ni dans l'URL du WebSocket) :
+    seul ce jeton voyage ensuite. Passé ici dans le corps JSON, jamais
+    journalisé en clair par uvicorn contrairement à un paramètre d'URL (P4).
+    """
+    if not config.CONSOLE_PASSWORD:
+        token, expires_at = session_tokens.issue()
+        return {"token": token, "expires_at": expires_at}
+
+    ip = request.client.host if request.client else "unknown"
+    if session_tokens.rate_limited(ip):
+        raise HTTPException(429, "trop de tentatives, réessaie plus tard")
+
+    password = body.get("password") or ""
+    if not session_tokens.check_password(password, config.CONSOLE_PASSWORD):
+        session_tokens.record_failure(ip)
+        raise HTTPException(401, "mot de passe incorrect")
+
+    token, expires_at = session_tokens.issue()
+    return {"token": token, "expires_at": expires_at}
 
 
 _SENTINEL = object()
@@ -1008,7 +1036,7 @@ async def ws_cards(websocket: WebSocket) -> None:
     diffusion. C'est ce qui permet de poser une question à voix haute au
     PC fixe et de voir l'écran d'à côté afficher la réponse."""
     await websocket.accept()
-    if config.CONSOLE_PASSWORD and websocket.query_params.get("token") != config.CONSOLE_PASSWORD:
+    if config.CONSOLE_PASSWORD and not session_tokens.verify(websocket.query_params.get("token") or ""):
         await websocket.close(code=4401)
         return
     queue = cards.subscribe()
@@ -1158,10 +1186,12 @@ async def ws_chat(websocket: WebSocket) -> None:
     PC dispatché sur le réseau (brain.core.agent) selon is_pc_command.
     """
     await websocket.accept()
-    if config.CONSOLE_PASSWORD and websocket.query_params.get("token") != config.CONSOLE_PASSWORD:
+    if config.CONSOLE_PASSWORD and not session_tokens.verify(websocket.query_params.get("token") or ""):
         # Pas de header custom possible au handshake WebSocket depuis un
-        # navigateur — le token passe donc en paramètre de requête, comme
-        # web/src/lib/useConsoleAuth.js le construit.
+        # navigateur — le jeton de session (jamais le mot de passe, voir
+        # POST /api/session et session_tokens.py) passe donc en paramètre
+        # de requête, comme web/src/lib/consoleAuth.js::wsAuthQuery le
+        # construit.
         await websocket.close(code=4401)
         return
     try:

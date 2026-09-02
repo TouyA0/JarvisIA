@@ -9,21 +9,27 @@ export function useConsoleAuth() {
 
   useEffect(() => onAuthRequired(() => setNeedsAuth(true)), []);
 
-  /** Valide le mot de passe contre une route authentifiée (/api/devices,
-   * pas /api/health qui reste ouvert sans jeton) avant de fermer l'écran —
-   * sinon un mauvais mot de passe et un brain injoignable produisaient tous
-   * les deux un écran vide sans message. Renvoie "ok", "rejected" (401,
-   * mauvais mot de passe) ou "unreachable" (brain injoignable). */
+  /** Échange le mot de passe contre un jeton de session via POST
+   * /api/session (P4) — seul ce jeton est ensuite gardé (voir
+   * consoleAuth.js) ; le mot de passe ne transite qu'une fois, dans ce
+   * corps JSON, jamais en Bearer ni dans une URL de WebSocket. Renvoie
+   * "ok", "rejected" (401, mauvais mot de passe), "locked" (429, trop de
+   * tentatives) ou "unreachable" (brain injoignable). */
   const login = useCallback(async (password) => {
-    const token = password.trim();
     let res;
     try {
-      res = await fetch("/api/devices", { headers: { Authorization: `Bearer ${token}` } });
+      res = await fetch("/api/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: password.trim() }),
+      });
     } catch {
       return "unreachable";
     }
     if (res.status === 401) return "rejected";
+    if (res.status === 429) return "locked";
     if (!res.ok) return "unreachable";
+    const { token } = await res.json();
     setConsoleToken(token);
     setNeedsAuth(false);
     return "ok";

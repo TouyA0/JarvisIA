@@ -7,6 +7,7 @@ import Reactor from "./ui/Reactor.jsx";
  * lui-même sert de token (CONSOLE_PASSWORD côté brain). */
 const ERROR_LABELS = {
   rejected: "Mot de passe refusé.",
+  locked: "Trop de tentatives, Monsieur — réessaie dans quelques minutes.",
   unreachable: "Le brain ne répond pas.",
 };
 
