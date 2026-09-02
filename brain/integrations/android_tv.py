@@ -284,6 +284,17 @@ def _resolve_app(target: str) -> str:
     return target.strip()
 
 
+_PACKAGE_NAME_RE = re.compile(r"^[a-zA-Z]\w*(\.[a-zA-Z]\w*)+$")
+
+
+def _looks_like_package(s: str) -> bool:
+    """Distingue un nom de package Android ("com.spotify.tv.android", ce
+    que renvoie list_apps()) d'une URI de lien profond ("vnd.youtube://",
+    "nflx://…") — les deux peuvent contenir un point, seule l'absence de
+    "://" et la forme package.name.style permettent de trancher (T12)."""
+    return "://" not in s and bool(_PACKAGE_NAME_RE.match(s))
+
+
 def launch_app(target: str) -> dict:
     """Lance une appli ou un contenu par lien profond — `target` : nom
     connu (voir _APP_SCHEMES), schéma d'URI complet ("vnd.youtube://ID"
@@ -291,21 +302,33 @@ def launch_app(target: str) -> dict:
     de garantie que l'appli respecte le lien profond (Disney+ notamment,
     voir conversation).
 
-    `am start` répond toujours "started" même quand l'appli ignore le lien
-    profond et reste sur son écran d'accueil, donc l'échec est silencieux
-    côté ADB — pour les apps connues (voir _APP_PACKAGES), on vérifie donc
-    après coup via `dumpsys activity activities` que l'appli attendue est
-    bien passée au premier plan. Si ce n'est pas le cas, le dict renvoyé
-    porte lui-même l'instruction de repli générique (recherche + tv_tap +
-    tv_type_text) dans "text", pour que Claude bascule sur la Couche 2 au
-    lieu de répéter le même lancement ou de considérer la tâche terminée."""
+    `am start -a VIEW -d "<uri>"` ne fonctionne que pour un vrai lien
+    profond (schéma "scheme://…") ; pour un nom de package brut (ex.
+    "com.spotify.tv.android", ce que renvoie list_apps()), `-d` attend une
+    donnée/URI et non un package — la commande "réussit" côté ADB sans rien
+    lancer. Dans ce cas on utilise `monkey -p <pkg> -c
+    android.intent.category.LAUNCHER 1`, qui résout et lance l'activité
+    principale du package (T12).
+
+    `am start`/`monkey` répondent toujours "started"/"injected" même quand
+    l'appli ignore le lien et reste sur son écran d'accueil, donc l'échec
+    est silencieux côté ADB — pour les apps connues (voir _APP_PACKAGES) ou
+    quand `target` est déjà un nom de package, on vérifie donc après coup
+    via `dumpsys activity activities` que l'appli attendue est bien passée
+    au premier plan. Si ce n'est pas le cas, le dict renvoyé porte lui-même
+    l'instruction de repli générique (recherche + tv_tap + tv_type_text)
+    dans "text", pour que Claude bascule sur la Couche 2 au lieu de
+    répéter le même lancement ou de considérer la tâche terminée."""
     if not target or not target.strip():
         return {"error": "Nom d'application ou lien manquant, Monsieur."}
     t = target.strip().lower()
     resolved = _resolve_app(target)
-    expected_package = _APP_PACKAGES.get(t)
+    expected_package = _APP_PACKAGES.get(t) or (resolved if _looks_like_package(resolved) else None)
     try:
-        _shell(f'am start -a android.intent.action.VIEW -d "{resolved}"')
+        if _looks_like_package(resolved):
+            _shell(f"monkey -p {resolved} -c android.intent.category.LAUNCHER 1")
+        else:
+            _shell(f'am start -a android.intent.action.VIEW -d "{resolved}"')
     except RuntimeError as exc:
         return {"error": str(exc)}
 
