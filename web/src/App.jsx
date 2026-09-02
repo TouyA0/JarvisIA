@@ -1,15 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import AppShell from "./components/AppShell.jsx";
 import AuthGate from "./components/AuthGate.jsx";
 import ConfirmationBanner from "./components/ConfirmationBanner.jsx";
-import Console from "./components/Console.jsx";
-import Devices from "./components/Devices.jsx";
 import Hud from "./components/Hud.jsx";
-import Integrations from "./components/Integrations.jsx";
-import Notes from "./components/Notes.jsx";
-import Routines from "./components/Routines.jsx";
-import Settings from "./components/Settings.jsx";
-import System from "./components/System.jsx";
 import { ConfirmProvider } from "./components/ui/Confirm.jsx";
 import ErrorBoundary from "./components/ui/ErrorBoundary.jsx";
 import { ToastProvider } from "./components/ui/Toast.jsx";
@@ -17,15 +10,19 @@ import { ChatProvider } from "./lib/ChatContext.jsx";
 import { useConsoleAuth } from "./lib/useConsoleAuth.js";
 import { VoiceProvider } from "./lib/VoiceContext.jsx";
 
+// Hud est chargé en dur (c'est l'écran affiché au premier rendu, inutile
+// d'attendre un aller-retour réseau pour lui). Les sept autres ne sont
+// demandés qu'au clic sur leur entrée de nav — pas de raison de les faire
+// payer à tout le monde dans le bundle initial (P6).
 const SCREENS = {
   hud: Hud,
-  console: Console,
-  devices: Devices,
-  notes: Notes,
-  routines: Routines,
-  integrations: Integrations,
-  system: System,
-  settings: Settings,
+  console: lazy(() => import("./components/Console.jsx")),
+  devices: lazy(() => import("./components/Devices.jsx")),
+  notes: lazy(() => import("./components/Notes.jsx")),
+  routines: lazy(() => import("./components/Routines.jsx")),
+  integrations: lazy(() => import("./components/Integrations.jsx")),
+  system: lazy(() => import("./components/System.jsx")),
+  settings: lazy(() => import("./components/Settings.jsx")),
 };
 
 // URL = état de navigation, pas juste un useState (P1) : sans ça, F5 ramène
@@ -93,7 +90,9 @@ export default function App() {
                   un crash sur Console ne doit pas laisser le Pupitre KO au
                   retour. */}
               <ErrorBoundary key={view} label={`screen:${view}`}>
-                <Screen />
+                <Suspense fallback={null}>
+                  <Screen />
+                </Suspense>
               </ErrorBoundary>
             </AppShell>
           </VoiceProvider>
