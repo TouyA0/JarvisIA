@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ViewHeader } from "./AppShell.jsx";
+import TvRemote from "./TvRemote.jsx";
 import { useConfirm } from "./ui/Confirm.jsx";
 import { useToast } from "./ui/Toast.jsx";
 import { useIntegrations } from "../lib/useIntegrations.js";
@@ -8,6 +9,12 @@ import { GROUPS } from "./integrations/groups/index.js";
 import FormModal from "./integrations/FormModal.jsx";
 import ProviderHeader from "./integrations/ProviderHeader.jsx";
 import ServiceCard from "./integrations/ServiceCard.jsx";
+
+// C9 — un service qui déclare `remote: true` (voir integrations/groups/
+// local.js) ouvre une vue plein écran dédiée plutôt qu'un formulaire ; un
+// seul type pour l'instant, mais la table évite un `if (service.type ===
+// "tv")` en dur si un futur service Cast/média veut le même bouton.
+const REMOTE_VIEWS = { tv: TvRemote };
 
 /**
  * Services tiers, rangés par fournisseur.
@@ -34,6 +41,9 @@ export default function Integrations() {
   const toast = useToast();
   const [dialog, setDialog] = useState(null); // { kind: "provider" | "service", … }
   const [connecting, setConnecting] = useState(null);
+  // Même principe que Devices.jsx::piloted — une vue de détail *dans*
+  // l'écran plutôt qu'une entrée de navigation de plus (voir AppShell.jsx).
+  const [remoteService, setRemoteService] = useState(null);
 
   async function handleConnect(service) {
     const group = GROUPS.find((g) => g.services.includes(service));
@@ -122,6 +132,11 @@ export default function Integrations() {
 
   const connectedCount = api.accounts.length;
 
+  if (remoteService) {
+    const Remote = REMOTE_VIEWS[remoteService.type];
+    return <Remote onBack={() => setRemoteService(null)} />;
+  }
+
   return (
     <>
       <ViewHeader
@@ -161,6 +176,7 @@ export default function Integrations() {
                         onConfigure={(s) => setDialog({ kind: "service", service: s })}
                         onDisconnect={handleDisconnect}
                         onCheckHealth={api.checkAccountHealth}
+                        onRemote={(s) => setRemoteService(s)}
                       />
                     ))}
                   </div>

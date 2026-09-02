@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import Icon from "../ui/Icon.jsx";
-import { authFetch } from "../../lib/consoleAuth.js";
+import { useTvLiveFrame } from "../../lib/useTvLiveFrame.js";
 
 /**
  * Corps des cartes, un rendu par type (voir brain/cards.py pour l'émission
@@ -179,67 +179,23 @@ function Vision({ data, onZoom }) {
   );
 }
 
-// Rythme du direct sur la carte "tv" (C6) : même compromis que
-// useFocusDevice.js côté PC — android_tv.screenshot() fait un screencap +
-// pull ADB (plus lourd qu'un JPEG pyautogui côté PC), 800 ms reste un bon
-// équilibre entre fluidité perçue et requêtes qui s'empilent.
-const TV_STREAM_INTERVAL_MS = 800;
-
 /** Télécommande télé (T5) : la capture d'écran ou le statut quand
  * disponibles (selon l'outil tv_* qui a émis la carte, voir brain/tools.py),
  * et en dessous les boutons de card.actions (D-pad, volume, retour/accueil,
  * lecture) rendus par CardActions dans CardView.jsx — même mécanique que la
  * carte music, pour naviguer sans repasser par la voix.
  *
- * C6 — bouton « Voir en direct » : bascule sur un polling de
- * POST /api/tv/stream/frame (brain/server.py, réutilise
- * android_tv.screenshot()) toutes les TV_STREAM_INTERVAL_MS, remplace
- * l'image affichée jusqu'à l'arrêt ou le démontage de la carte. */
+ * C6 — bouton « Voir en direct » : bascule sur le polling de
+ * useTvLiveFrame() (POST /api/tv/stream/frame, brain/server.py, réutilise
+ * android_tv.screenshot()), remplace l'image affichée jusqu'à l'arrêt ou le
+ * démontage de la carte. Pour une télécommande plein écran avec le même
+ * direct, voir TvRemote.jsx (C9). */
 function Tv({ data, onZoom }) {
   const media = data.media;
-  const [live, setLive] = useState(false);
-  const [liveFrame, setLiveFrame] = useState(null);
-  const [liveError, setLiveError] = useState(null);
-  const timerRef = useRef(null);
-  const inFlightRef = useRef(false);
-
-  const stopLive = useCallback(() => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    setLive(false);
-  }, []);
-
-  const startLive = useCallback(() => {
-    if (timerRef.current) return;
-    setLiveError(null);
-    setLive(true);
-
-    async function tick() {
-      if (inFlightRef.current) return; // une image encore en vol : on saute ce tour plutôt que d'empiler
-      inFlightRef.current = true;
-      try {
-        const res = await authFetch("/api/tv/stream/frame", { method: "POST" });
-        const body = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(body.detail || "échec de la capture");
-        if (body.image_b64) setLiveFrame(body);
-      } catch (e) {
-        setLiveError(e.message);
-        stopLive();
-      } finally {
-        inFlightRef.current = false;
-      }
-    }
-
-    tick();
-    timerRef.current = setInterval(tick, TV_STREAM_INTERVAL_MS);
-  }, [stopLive]);
-
-  // Quitter la carte (écartée, ou tour de conversation suivant qui la fait
-  // défiler hors du fil) ne doit jamais laisser un intervalle tourner en
-  // tâche de fond à réclamer des images à la télé.
-  useEffect(() => stopLive, [stopLive]);
+  // C9 — même hook que TvRemote.jsx (télécommande dédiée) : plus de
+  // duplication de la boucle de polling entre la carte et la vue pleine
+  // page.
+  const { live, frame: liveFrame, error: liveError, start: startLive, stop: stopLive } = useTvLiveFrame();
 
   const shown = live && liveFrame ? liveFrame : data;
   const statusLine = data.screen_on === false

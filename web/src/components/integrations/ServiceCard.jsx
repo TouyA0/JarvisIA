@@ -12,6 +12,7 @@ export default function ServiceCard({
   onConfigure,
   onDisconnect,
   onCheckHealth,
+  onRemote,
   connecting,
 }) {
   const connected = accounts.length > 0;
@@ -67,6 +68,12 @@ export default function ServiceCard({
           <button type="button" className="btn btn--sm" onClick={() => onConfigure(service)}>
             <Icon name="system" size={15} />
             Configurer
+          </button>
+        )}
+        {service.remote && (
+          <button type="button" className="btn btn--accent btn--sm" onClick={() => onRemote(service)}>
+            <Icon name="tv" size={15} />
+            Télécommande
           </button>
         )}
       </div>

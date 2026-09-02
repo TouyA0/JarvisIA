@@ -47,6 +47,9 @@ export default {
       summary: "Piloter le stick du salon : applis, navigation, capture d'écran.",
       settingsKey: "tvSettings",
       noAccounts: true,
+      // C9 — bouton « Télécommande » distinct de « Configurer » : ouvre une
+      // vue plein écran (TvRemote.jsx), pas le formulaire de connexion.
+      remote: true,
       settings: {
         title: "Télé (Android TV)",
         sections: [
