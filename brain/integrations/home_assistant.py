@@ -161,10 +161,21 @@ def network_status(account_hint: str | None = None) -> dict:
     return {"online": online, "offline": offline}
 
 
-def _call_service(account: dict, domain: str, service: str, entity_id: str) -> dict:
+def _call_service(account: dict, domain: str, service: str, entity_id: str | None = None, service_data: dict | None = None) -> dict:
+    """Point d'entrée bas niveau unique vers l'API `/api/services/<domain>/
+    <service>` (C8) — control()/set_temperature()/cast_media() passent tous
+    par ici plutôt que de dupliquer leur propre requests.post. `service_data`
+    optionnel : champs additionnels au-delà de `entity_id` (media_content_id,
+    temperature, message pour tts.speak…), fusionnés tels quels dans le
+    corps JSON — c'est l'absence de ce paramètre qui empêchait jusqu'ici
+    d'appeler un service qui a besoin d'autre chose qu'un simple entity_id
+    sans écrire une fonction dédiée par service."""
+    payload = dict(service_data or {})
+    if entity_id:
+        payload["entity_id"] = entity_id
     resp = requests.post(
         f"{_base_url(account)}/api/services/{domain}/{service}",
-        headers=_headers(account), json={"entity_id": entity_id}, timeout=10,
+        headers=_headers(account), json=payload, timeout=10,
     )
     if resp.status_code != 200:
         return {"error": f"Action refusée par Home Assistant ({resp.status_code}) : {resp.text[:200]}"}
@@ -233,15 +244,70 @@ def cast_media(entity_query: str, media_url: str, media_type: str = "video", acc
         return {"error": f"« {entity_query} » n'est pas un lecteur média (domaine {entity_id.split('.')[0]}), Monsieur — vérifie que l'intégration Google Cast de Home Assistant a bien découvert l'appareil."}
     name = entity.get("attributes", {}).get("friendly_name", entity_query)
 
-    resp = requests.post(
-        f"{_base_url(account)}/api/services/media_player/play_media",
-        headers=_headers(account),
-        json={"entity_id": entity_id, "media_content_id": media_url.strip(), "media_content_type": media_type},
-        timeout=10,
-    )
-    if resp.status_code != 200:
-        return {"error": f"Diffusion refusée par Home Assistant ({resp.status_code}) : {resp.text[:200]}"}
+    result = _call_service(account, "media_player", "play_media", entity_id, {
+        "media_content_id": media_url.strip(), "media_content_type": media_type,
+    })
+    if "error" in result:
+        return result
     return {"name": name, "media_url": media_url.strip(), "media_type": media_type}
+
+
+# Domaines exclus du passe-plat générique call_service() ci-dessous (C8) —
+# lock/alarm_control_panel passent obligatoirement par control(), qui pose
+# la confirmation à l'écran pour ouvrir/désarmer (voir _SENSITIVE_DOMAINS) ;
+# les laisser passer ici court-circuiterait cette confirmation pour
+# n'importe quel service de ces deux domaines, pas seulement unlock/disarm.
+_BLOCKED_SERVICE_DOMAINS = _SENSITIVE_DOMAINS
+
+
+def call_service(
+    domain: str,
+    service: str,
+    entity_query: str | None = None,
+    service_data: dict | None = None,
+    account_hint: str | None = None,
+) -> dict:
+    """C8 — passe-plat générique vers n'importe quel service Home Assistant,
+    maintenant que _call_service() accepte service_data. C'est ce qui donne
+    accès d'un coup, sans écrire une fonction dédiée par fonctionnalité, à :
+    media_player.play_media (caster une URL/vidéo/dashboard sur la télé ou
+    toute enceinte Cast — cast_media() ci-dessus n'en est qu'un raccourci
+    nommé pour le cas le plus fréquent), tts.speak (faire parler Jarvis
+    dans une autre pièce via le media_player de cette pièce),
+    media_player.media_play/pause/next_track/volume_set (contrôler la
+    lecture de n'importe quel lecteur média de la maison), et tout futur
+    service HA sans nouvelle intégration.
+
+    `entity_query` optionnel : certains services ne prennent pas d'entité
+    cible. Quand fourni, résolu par nom comme ailleurs dans ce module — et
+    refusé si le domaine résolu est sensible (lock/alarme, voir
+    _BLOCKED_SERVICE_DOMAINS) pour ne pas contourner la confirmation de
+    control()."""
+    if not domain or not service:
+        return {"error": "domain et service sont requis, Monsieur."}
+    account = _pick_account(account_hint)
+    if not account:
+        return {"error": "Aucune instance Home Assistant connectée, Monsieur."}
+
+    entity_id = None
+    name = None
+    if entity_query:
+        try:
+            entity = _find_entity(account, entity_query)
+        except RuntimeError as exc:
+            return {"error": str(exc)}
+        if not entity:
+            return {"error": f"Aucune entité trouvée pour « {entity_query} », Monsieur."}
+        entity_id = entity["entity_id"]
+        entity_domain = entity_id.split(".", 1)[0]
+        if entity_domain in _BLOCKED_SERVICE_DOMAINS:
+            return {"error": f"« {entity_query} » est une entité {entity_domain} — passe par ha_control pour celle-ci, Monsieur (confirmation à l'écran obligatoire)."}
+        name = entity.get("attributes", {}).get("friendly_name", entity_query)
+
+    result = _call_service(account, domain, service, entity_id, service_data)
+    if "error" in result:
+        return result
+    return {"name": name, "domain": domain, "service": service}
 
 
 def set_temperature(entity_query: str, temperature: float, account_hint: str | None = None) -> dict:
@@ -258,10 +324,7 @@ def set_temperature(entity_query: str, temperature: float, account_hint: str | N
     if not entity_id.startswith("climate."):
         return {"error": f"« {entity_query} » n'est pas un thermostat (domaine {entity_id.split('.')[0]}), Monsieur."}
 
-    resp = requests.post(
-        f"{_base_url(account)}/api/services/climate/set_temperature",
-        headers=_headers(account), json={"entity_id": entity_id, "temperature": temperature}, timeout=10,
-    )
-    if resp.status_code != 200:
-        return {"error": f"Réglage refusé par Home Assistant ({resp.status_code}) : {resp.text[:200]}"}
+    result = _call_service(account, "climate", "set_temperature", entity_id, {"temperature": temperature})
+    if "error" in result:
+        return result
     return {"name": entity.get("attributes", {}).get("friendly_name", entity_query), "temperature": temperature}

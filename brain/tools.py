@@ -506,6 +506,36 @@ BRAIN_TOOLS = [
         },
     },
     {
+        "name": "ha_call_service",
+        "description": (
+            "Appelle N'IMPORTE QUEL service Home Assistant (domain.service) — le passe-plat "
+            "générique pour tout ce que les outils ha_* nommés ne couvrent pas, sans qu'une "
+            "nouvelle intégration soit nécessaire. Exemples concrets :\n"
+            "- Faire parler Jarvis dans une autre pièce : domain='tts', service='speak' (ou le "
+            "service propre au moteur TTS configuré côté HA), entity='nom du lecteur cible', "
+            "service_data={'message': '...'}.\n"
+            "- Caster une URL/vidéo/dashboard sur un écran Cast (au-delà de ha_cast_media) : "
+            "domain='media_player', service='play_media', entity='nom du lecteur', "
+            "service_data={'media_content_id': 'URL', 'media_content_type': 'video'}.\n"
+            "- Contrôler la lecture d'un media_player quelconque : domain='media_player', "
+            "service='media_play'/'media_pause'/'media_next_track'/'media_previous_track', "
+            "entity='nom du lecteur' ; ou service='volume_set', "
+            "service_data={'volume_level': 0.3} (0.0 à 1.0).\n"
+            "Refusé si l'entité visée est une serrure ou une alarme (domaines sensibles) — "
+            "utilise ha_control pour celles-ci, qui pose la confirmation à l'écran requise."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "domain": {"type": "string", "description": "Domaine du service Home Assistant (ex. 'media_player', 'tts', 'script')."},
+                "service": {"type": "string", "description": "Nom du service (ex. 'play_media', 'speak', 'media_play', 'volume_set')."},
+                "entity": {"type": "string", "description": "Nom de l'entité cible, en texte libre. Omis pour un service qui n'a pas de cible."},
+                "service_data": {"type": "object", "description": "Champs additionnels attendus par ce service (ex. message, media_content_id, volume_level)."},
+            },
+            "required": ["domain", "service"],
+        },
+    },
+    {
         "name": "ha_network_status",
         "description": "Compte les appareils en ligne/hors ligne sur le réseau (entités device_tracker Home Assistant — routeur, UniFi, etc.). Utilise pour « combien d'appareils en ligne ? », « y a-t-il des appareils inconnus connectés ? ». Requête globale, pas de nom d'entité à donner (différent de ha_state).",
         "input_schema": {"type": "object", "properties": {}},
@@ -1301,6 +1331,17 @@ def execute(name: str, args: dict):
         if "error" in result:
             return result["error"]
         return f"Diffusion lancée sur {result['name']} : {result['media_url']}."
+
+    if name == "ha_call_service":
+        if not store.list_public("home_assistant"):
+            return "Aucune instance Home Assistant connectée — ajoute-en une depuis la Console (Intégrations), Monsieur."
+        result = home_assistant.call_service(
+            args.get("domain", ""), args.get("service", ""), args.get("entity"), args.get("service_data"),
+        )
+        if "error" in result:
+            return result["error"]
+        target = f" sur {result['name']}" if result.get("name") else ""
+        return f"Service {result['domain']}.{result['service']} appelé{target}."
 
     if name == "ha_network_status":
         if not store.list_public("home_assistant"):
