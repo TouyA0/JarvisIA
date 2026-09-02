@@ -29,8 +29,16 @@ import { useWakeWordDetector } from "./useWakeWordDetector.js";
  * entendu pendant que Jarvis parle coupe net la lecture en cours
  * (voir interruptSpeaking) et enchaîne directement sur la capture de la
  * nouvelle commande, comme au repos.
+ *
+ * Présence multi-appareils (`presence`, voir usePresence.js) : entendre
+ * « Jarvis » ici fait de CE navigateur l'appareil actif (dépasse le PC
+ * fixe ou une autre Console ouverte ailleurs, voir brain/presence.py).
+ * L'audio de synthèse n'est joué que si cette Console est toujours
+ * l'appareil actif au moment de le lire — sinon le texte s'affiche quand
+ * même, juste sans le son, pour ne pas faire parler deux appareils en
+ * même temps sur la même conversation.
  */
-export function useVoice({ onCommand }) {
+export function useVoice({ onCommand, presence }) {
   const [armed, setArmed] = useState(false);
   const [status, setStatus] = useState("idle"); // idle | listening | listening_command | transcribing | speaking
   const [error, setError] = useState(null);
@@ -40,6 +48,8 @@ export function useVoice({ onCommand }) {
 
   const onCommandRef = useRef(onCommand);
   onCommandRef.current = onCommand;
+  const presenceRef = useRef(presence);
+  presenceRef.current = presence;
 
   const mediaStreamRef = useRef(null);
   const armedRef = useRef(false);
@@ -68,6 +78,7 @@ export function useVoice({ onCommand }) {
     }
     setWakeWordHeard(true);
     setTimeout(() => setWakeWordHeard(false), 2000);
+    presenceRef.current?.activate?.();
 
     // captureCommand() met le détecteur en pause en interne dès qu'elle se
     // termine (pour ne pas se redéclencher tout seul juste après — bug réel
@@ -222,7 +233,11 @@ export function useVoice({ onCommand }) {
     if (armedRef.current) detector.resume();
     while (audioQueueRef.current.length) {
       const blob = await audioQueueRef.current.shift();
-      if (blob) {
+      // Un autre appareil a pris la main entre-temps (voir presence,
+      // usePresence.js) — le texte reste affiché normalement (Console.jsx
+      // le tient de chat.phrase, indépendant de cette file), mais cette
+      // Console ne double pas l'audio de synthèse par-dessus l'autre.
+      if (blob && presenceRef.current?.isActive?.() !== false) {
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
         audioRef.current = audio;

@@ -1,4 +1,6 @@
-import { createContext, useCallback, useContext, useRef } from "react";
+import { createContext, useCallback, useContext, useMemo, useRef } from "react";
+import { useIsMobile } from "./useIsMobile.js";
+import { getWebDeviceId, usePresence } from "./usePresence.js";
 import { useVoice } from "./useVoice.js";
 
 /**
@@ -28,13 +30,31 @@ export function VoiceProvider({ children }) {
     handlerRef.current?.(text);
   }, []);
 
-  const voice = useVoice({ onCommand });
+  // Identité de CE navigateur pour l'arbitrage de présence (voir
+  // usePresence.js / brain/presence.py) — stable pour la session, un
+  // libellé lisible plutôt qu'un id opaque dans le badge « réponse sur ».
+  const deviceIdRef = useRef(null);
+  if (!deviceIdRef.current) deviceIdRef.current = getWebDeviceId();
+  const deviceId = deviceIdRef.current;
+  const isMobile = useIsMobile();
+  const deviceLabel = isMobile ? "Téléphone" : "PC (navigateur)";
+
+  const { presence, isActive, activate } = usePresence();
+  const presenceApi = useMemo(
+    () => ({
+      isActive: () => isActive(deviceId),
+      activate: () => activate(deviceId, deviceLabel),
+    }),
+    [isActive, activate, deviceId, deviceLabel],
+  );
+
+  const voice = useVoice({ onCommand, presence: presenceApi });
 
   const setCommandHandler = useCallback((fn) => {
     handlerRef.current = fn;
   }, []);
 
-  const value = { ...voice, setCommandHandler };
+  const value = { ...voice, setCommandHandler, presence, deviceId };
 
   return <VoiceContext.Provider value={value}>{children}</VoiceContext.Provider>;
 }

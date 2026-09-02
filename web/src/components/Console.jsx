@@ -135,6 +135,10 @@ function Thread({ messages, activity }) {
 function VoiceBar({ voice }) {
   if (!voice.armed) return null;
   const heard = voice.wakeWordHeard;
+  // Un autre appareil (le PC fixe, ou une autre Console) a la main pour
+  // la réponse parlée en ce moment — voir usePresence.js / VoiceContext.jsx.
+  // Cette Console continue d'afficher le texte, juste pas le son.
+  const elsewhere = voice.presence?.device && voice.presence.device !== voice.deviceId;
   return (
     <div className="voicebar" role="status" aria-live="polite">
       <span className={`voicebar-state${heard ? " voicebar-state--heard" : ""}`}>
@@ -149,6 +153,12 @@ function VoiceBar({ voice }) {
           </span>
           <span className="voicebar-heard">niveau {voice.lastScore.toFixed(2)}</span>
         </>
+      )}
+
+      {elsewhere && (
+        <span className="voicebar-heard" title="Cette Console reste silencieuse pour ne pas parler en double">
+          🔊 réponse sur : {voice.presence.label}
+        </span>
       )}
 
       <span className="spacer" />

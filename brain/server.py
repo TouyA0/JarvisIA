@@ -34,7 +34,7 @@ from agents.protocol.messages import (
     RegisterAck,
     parse_message,
 )
-from brain import activity, cards, clipboard, config, device_store, diagnostics, files as file_store, notes, pairing, preferences, proactive, push, routines, session_tokens, speech, timers, vision, weather
+from brain import activity, cards, clipboard, config, device_store, diagnostics, files as file_store, notes, pairing, preferences, presence, proactive, push, routines, session_tokens, speech, timers, vision, weather
 from brain import health as account_health
 from brain import tools as brain_tools
 from brain.core import agent as pc_agent
@@ -121,6 +121,13 @@ async def _require_console_auth(request: Request, call_next):
         # lien lui-même (id opaque uuid4) fait office de secret, même
         # raisonnement que les callbacks OAuth ci-dessus.
         return await call_next(request)
+    if path.startswith("/api/presence"):
+        # L'agent desktop (agents/desktop/brain/presence_client.py) appelle
+        # ces routes en HTTP simple, sans jeton de session — il n'en détient
+        # pas (seul /ws/agent a son propre token d'appareil). Rien de
+        # sensible en jeu : juste un libellé d'appareil et un horodatage,
+        # jamais une action de pilotage.
+        return await call_next(request)
     if config.CONSOLE_PASSWORD and path.startswith("/api/") and path != "/api/health":
         auth = request.headers.get("authorization", "")
         token = auth[7:] if auth.lower().startswith("bearer ") else ""
@@ -185,6 +192,28 @@ async def _stream_sync_generator(gen_func: Callable[..., Any], *args, **kwargs):
 @app.get("/api/health")
 async def health() -> dict:
     return {"status": "ok", "devices": [d.device_id for d in registry.list()]}
+
+
+@app.get("/api/presence")
+async def get_presence() -> dict:
+    """Quel appareil a la main pour parler à voix haute, en ce moment —
+    voir brain/presence.py."""
+    return presence.get()
+
+
+@app.post("/api/presence/activate")
+async def activate_presence(body: dict) -> dict:
+    """Un appareil (PC ou Console web) signale qu'il vient d'entendre le
+    mot d'éveil ou de recevoir une commande — il devient celui qui joue la
+    synthèse vocale, les autres restent silencieux (texte affiché quand
+    même)."""
+    device = (body.get("device") or "").strip()
+    if not device:
+        raise HTTPException(400, "device manquant")
+    label = (body.get("label") or device).strip()
+    state = presence.activate(device, label)
+    cards.presence_changed(state)
+    return state
 
 
 @app.get("/api/devices")

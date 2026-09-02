@@ -216,6 +216,13 @@ def exchange(question: str, answer: str, source: str = "") -> None:
     })
 
 
+def presence_changed(state: dict) -> None:
+    """Diffuse un changement d'appareil actif (voix, voir brain/presence.py)
+    à toutes les Consoles ouvertes — c'est ce qui fait apparaître le badge
+    « réponse sur : … » côté appareils qui viennent de perdre la main."""
+    _publish({"kind": "presence", **state})
+
+
 def recent(limit: int = _MAX_CARDS) -> list[dict]:
     with _lock:
         return list(_recent)[-limit:]

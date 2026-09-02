@@ -27,6 +27,7 @@ _tray = None
 def say(text: str) -> None:
     """Parle avec écoute d'interruption pendant toute la durée."""
     from agents.desktop.audio import tts
+    from agents.desktop.brain import presence_client
 
     if not text:
         return
@@ -38,7 +39,8 @@ def say(text: str) -> None:
         return
     interrupt_thread = threading.Thread(target=tts.listen_for_interrupt, daemon=True)
     interrupt_thread.start()
-    tts.speak(text, on_level=overlay.set_level)
+    if presence_client.is_active():
+        tts.speak(text, on_level=overlay.set_level)
     state.stop_speaking.set()   # signal au listener pour qu'il s'arrête proprement
     interrupt_thread.join()
     overlay.set_state("idle")
@@ -53,6 +55,7 @@ def _speak_stream(phrase_iter, on_phrase=None) -> str | None:
     Retourne le texte complet prononcé, ou None si interrompu avant un mot.
     """
     from agents.desktop.audio import tts
+    from agents.desktop.brain import presence_client
 
     state.stop_agent.clear()
     state.stop_speaking.clear()
@@ -75,7 +78,7 @@ def _speak_stream(phrase_iter, on_phrase=None) -> str | None:
             print(f"Jarvis : {phrase}")
             overlay.set_response(" ".join(spoken_parts))
             overlay.set_state("speaking")
-            if not muted:
+            if not muted and presence_client.is_active():
                 tts.speak(phrase, on_level=overlay.set_level)
     finally:
         state.stop_speaking.set()
@@ -97,7 +100,7 @@ def _answer_with_brain(question: str) -> str | None:
     Retourne le texte prononcé, ou None si le tour a été interrompu avant
     toute parole.
     """
-    from agents.desktop.brain import agent, remote_chat, router
+    from agents.desktop.brain import agent, presence_client, remote_chat, router
 
     if router.is_pc_command(question):
         from agents.desktop.audio import tts
@@ -119,7 +122,7 @@ def _answer_with_brain(question: str) -> str | None:
                 print(f"Jarvis : {result}")
                 overlay.set_response(result)
                 overlay.set_state("speaking")
-                if not overlay.is_muted():
+                if not overlay.is_muted() and presence_client.is_active():
                     tts.speak(result, on_level=overlay.set_level)
         finally:
             agent.on_source = None
@@ -258,7 +261,10 @@ def _vision_flow_inner(pre_question, capture, stt, vision, snip) -> None:
 # ══ Routage d'une question ════════════════════════════════════════════════════
 def _handle_question(question: str) -> None:
     """Toute la cascade de routage pour une question déjà transcrite."""
+    from agents.desktop.brain import presence_client
+
     print(f"Quentin : {question}")
+    presence_client.activate()   # ce PC prend la main pour la réponse parlée
     overlay.set_transcript(question)
     overlay.set_state("processing")
     t0 = time.time()

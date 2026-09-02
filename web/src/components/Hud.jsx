@@ -437,6 +437,11 @@ export default function Hud() {
           <span className="meter" aria-hidden="true">
             <span className="meter-fill" style={{ width: `${Math.min(100, voice.lastScore * 100)}%` }} />
           </span>
+          {voice.presence?.device && voice.presence.device !== voice.deviceId && (
+            <span className="hud-heard" title="Le pupitre reste silencieux pour ne pas parler en double">
+              🔊 réponse sur : {voice.presence.label}
+            </span>
+          )}
           {voice.lastTranscript && <span className="hud-heard">entendu : « {voice.lastTranscript} »</span>}
         </div>
       )}
