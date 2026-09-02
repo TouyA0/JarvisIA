@@ -168,6 +168,66 @@ def control(action: str, account_hint: str | None = None) -> dict:
     return {"action": action}
 
 
+def list_devices(account_hint: str | None = None) -> dict:
+    """GET /me/player/devices — tous les appareils que Spotify voit
+    actuellement (app ouverte au moins une fois récemment quelque part :
+    téléphone, PC, enceinte Connect, TV…), pas seulement celui actif."""
+    account = _pick_account(account_hint)
+    if not account:
+        return {"error": "Aucun compte Spotify connecté, Monsieur."}
+    resp = requests.get(f"{API}/me/player/devices", headers=_headers(account), timeout=10)
+    if resp.status_code != 200:
+        return {"error": f"Spotify a refusé la requête ({resp.status_code}), Monsieur."}
+    devices = [
+        {
+            "id": d["id"],
+            "name": d.get("name", ""),
+            "type": d.get("type", ""),
+            "is_active": d.get("is_active", False),
+            "volume_percent": d.get("volume_percent"),
+        }
+        for d in resp.json().get("devices", [])
+    ]
+    return {"devices": devices}
+
+
+def transfer(device_name: str, account_hint: str | None = None) -> dict:
+    """C5 — PUT /me/player : bascule la lecture vers l'appareil Spotify dont
+    le nom contient `device_name` (substring insensible à la casse — « télé
+    », « salon », un nom d'enceinte…), plutôt qu'un identifiant technique
+    que Monsieur ne connaît pas. `play: true` : reprend/démarre sur le
+    nouvel appareil immédiatement, pas juste un changement d'appareil actif
+    silencieux — c'est tout l'intérêt de « passe la musique sur X ».
+    L'appareil cible doit avoir eu l'app Spotify ouverte récemment pour
+    apparaître dans /devices (limite Spotify, pas de cette intégration)."""
+    if not device_name or not device_name.strip():
+        return {"error": "Nom d'appareil manquant, Monsieur."}
+    account = _pick_account(account_hint)
+    if not account:
+        return {"error": "Aucun compte Spotify connecté, Monsieur."}
+
+    result = list_devices(account_hint)
+    if "error" in result:
+        return result
+    devices = result["devices"]
+    if not devices:
+        return {"error": "Aucun appareil Spotify visible, Monsieur — ouvre l'application sur l'appareil cible au moins une fois."}
+
+    needle = device_name.strip().lower()
+    match = next((d for d in devices if needle in d["name"].lower()), None)
+    if not match:
+        names = ", ".join(d["name"] for d in devices)
+        return {"error": f"Aucun appareil Spotify ne correspond à « {device_name} », Monsieur — appareils visibles : {names}."}
+
+    resp = requests.put(
+        f"{API}/me/player", headers=_headers(account),
+        json={"device_ids": [match["id"]], "play": True}, timeout=10,
+    )
+    if resp.status_code not in (200, 202, 204):
+        return {"error": f"Transfert refusé par Spotify ({resp.status_code}), Monsieur."}
+    return {"device": match["name"]}
+
+
 def set_volume(percent: int, account_hint: str | None = None) -> dict:
     account = _pick_account(account_hint)
     if not account:

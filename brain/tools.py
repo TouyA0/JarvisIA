@@ -300,6 +300,25 @@ BRAIN_TOOLS = [
         },
     },
     {
+        "name": "spotify_transfer",
+        "description": (
+            "Transfère la lecture Spotify en cours vers un autre appareil — pour « passe la "
+            "musique sur la télé », « mets ça sur l'enceinte du salon », « bascule sur mon "
+            "téléphone ». Cherche l'appareil par nom (substring, pas besoin du nom exact) "
+            "parmi ceux que Spotify voit actuellement, et reprend la lecture dessus "
+            "immédiatement. L'appareil cible doit avoir eu l'application Spotify ouverte "
+            "récemment pour être visible — si rien ne correspond, l'erreur liste les "
+            "appareils réellement disponibles, propose-les à Monsieur plutôt que de deviner."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "device": {"type": "string", "description": "Nom (ou fragment de nom) de l'appareil cible, ex. 'télé', 'salon', 'iPhone'."},
+            },
+            "required": ["device"],
+        },
+    },
+    {
         "name": "contacts_search",
         "description": (
             "Cherche un contact par nom dans les carnets d'adresses Google connectés "
@@ -1093,6 +1112,14 @@ def execute(name: str, args: dict):
         if "error" in result:
             return result["error"]
         return f"Fait : {result['action']}."
+
+    if name == "spotify_transfer":
+        if not store.list_public("spotify"):
+            return "Aucun compte Spotify connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
+        result = spotify.transfer(args.get("device", ""))
+        if "error" in result:
+            return result["error"]
+        return f"Musique transférée sur {result['device']}."
 
     if name == "spotify_volume":
         if not store.list_public("spotify"):
