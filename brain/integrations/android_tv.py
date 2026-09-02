@@ -37,6 +37,7 @@ from __future__ import annotations
 import base64
 import re
 import threading
+import time
 
 from brain import config
 
@@ -72,6 +73,11 @@ _KEYCODES = {
     "HOME": "KEYCODE_HOME",
     "ENTER": "KEYCODE_ENTER",
     "PLAY_PAUSE": "KEYCODE_MEDIA_PLAY_PAUSE",
+    "NEXT": "KEYCODE_MEDIA_NEXT",
+    "PREVIOUS": "KEYCODE_MEDIA_PREVIOUS",
+    "FAST_FORWARD": "KEYCODE_MEDIA_FAST_FORWARD",
+    "REWIND": "KEYCODE_MEDIA_REWIND",
+    "STOP": "KEYCODE_MEDIA_STOP",
 }
 
 
@@ -217,6 +223,36 @@ def send_key(command: str) -> dict:
     except RuntimeError as exc:
         return {"error": str(exc)}
     return {"ok": True, "command": command}
+
+
+_SEEK_STEP_SECONDS = 10  # pas de KEYCODE_MEDIA_SKIP_FORWARD/BACKWARD (AOSP) — la
+# plupart des apps média Android (YouTube, Netflix…) l'implémentent ainsi ; aucun
+# moyen générique via ADB de sauter à une durée arbitraire exacte.
+_SEEK_MAX_PRESSES = 12  # borne à 2 min pour éviter une rafale de commandes sur une durée mal comprise.
+_SEEK_KEYS = {"forward": "KEYCODE_MEDIA_SKIP_FORWARD", "backward": "KEYCODE_MEDIA_SKIP_BACKWARD"}
+
+
+def seek(direction: str, seconds: int | float = _SEEK_STEP_SECONDS) -> dict:
+    """Avance/recule dans la lecture en cours (« recule de 30 secondes ») par
+    appuis répétés de KEYCODE_MEDIA_SKIP_FORWARD/BACKWARD, chacun valant
+    ~10 s dans la plupart des apps média. Best effort comme launch_app() :
+    certaines apps ignorent ces touches ou utilisent un pas différent — pour
+    un bouton précis dans l'appli (« saute le générique »), passer par
+    ui_dump()+tap() plutôt que par ici."""
+    key = _SEEK_KEYS.get(direction)
+    if not key:
+        return {"error": f"Direction de seek inconnue : {direction!r}, Monsieur — 'forward' ou 'backward'."}
+    if not isinstance(seconds, (int, float)) or seconds <= 0:
+        return {"error": "La durée doit être un nombre de secondes positif, Monsieur."}
+    presses = min(max(round(seconds / _SEEK_STEP_SECONDS), 1), _SEEK_MAX_PRESSES)
+    try:
+        for i in range(presses):
+            _shell(f"input keyevent {key}")
+            if i + 1 < presses:
+                time.sleep(0.15)  # laisse l'appli enregistrer chaque appui séparément
+    except RuntimeError as exc:
+        return {"error": str(exc)}
+    return {"ok": True, "direction": direction, "seconds": presses * _SEEK_STEP_SECONDS}
 
 
 def _resolve_app(target: str) -> str:

@@ -519,17 +519,50 @@ BRAIN_TOOLS = [
     },
     {
         "name": "tv_key",
-        "description": "Envoie une touche de navigation à la télé (haut/bas/gauche/droite/valider/retour/accueil/lecture-pause). Utilise pour naviguer dans un menu à la voix, ou après tv_screen_dump pour te déplacer vers un élément plutôt que d'y taper directement.",
+        "description": (
+            "Envoie une touche de navigation ou de contrôle média à la télé (haut/bas/gauche/"
+            "droite/valider/retour/accueil/lecture-pause/suivant/précédent/avance rapide/retour "
+            "rapide/stop). Utilise pour naviguer dans un menu à la voix, contrôler la lecture "
+            "(« piste/épisode suivant », « stoppe la lecture »), ou après tv_screen_dump pour te "
+            "déplacer vers un élément plutôt que d'y taper directement."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "command": {
                     "type": "string",
-                    "enum": ["DPAD_UP", "DPAD_DOWN", "DPAD_LEFT", "DPAD_RIGHT", "DPAD_CENTER", "BACK", "HOME", "ENTER", "PLAY_PAUSE"],
-                    "description": "Touche à envoyer. DPAD_CENTER = valider/OK.",
+                    "enum": [
+                        "DPAD_UP", "DPAD_DOWN", "DPAD_LEFT", "DPAD_RIGHT", "DPAD_CENTER",
+                        "BACK", "HOME", "ENTER", "PLAY_PAUSE",
+                        "NEXT", "PREVIOUS", "FAST_FORWARD", "REWIND", "STOP",
+                    ],
+                    "description": (
+                        "Touche à envoyer. DPAD_CENTER = valider/OK. NEXT/PREVIOUS = piste ou "
+                        "épisode suivant/précédent. FAST_FORWARD/REWIND = avance/retour rapide. "
+                        "STOP = arrête la lecture."
+                    ),
                 },
             },
             "required": ["command"],
+        },
+    },
+    {
+        "name": "tv_seek",
+        "description": (
+            "Avance ou recule dans la lecture en cours sur la télé du salon, par un nombre de "
+            "secondes approximatif (« recule de 30 secondes », « avance d'une minute »). Best "
+            "effort — dépend du support de l'appli pour les touches de saut standard Android : si "
+            "rien ne se passe, essaie tv_key avec FAST_FORWARD/REWIND. Pour un bouton précis dans "
+            "l'appli (« saute le générique »), pas de raccourci générique : utilise tv_screen_dump "
+            "puis tv_tap sur l'élément voulu."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "direction": {"type": "string", "enum": ["forward", "backward"], "description": "Sens du saut."},
+                "seconds": {"type": "integer", "minimum": 1, "description": "Durée approximative à sauter, en secondes (défaut 10)."},
+            },
+            "required": ["direction"],
         },
     },
     {
@@ -652,7 +685,10 @@ def _tv_actions() -> list[dict]:
         {"label": "Gauche", "icon": "chevron-left", "tool": "tv_key", "args": {"command": "DPAD_LEFT"}},
         {"label": "Droite", "icon": "chevron-right", "tool": "tv_key", "args": {"command": "DPAD_RIGHT"}},
         {"label": "OK", "icon": "check", "tool": "tv_key", "args": {"command": "DPAD_CENTER"}},
+        {"label": "Précédent", "icon": "skip-prev", "tool": "tv_key", "args": {"command": "PREVIOUS"}},
         {"label": "Lecture", "icon": "play", "tool": "tv_key", "args": {"command": "PLAY_PAUSE"}},
+        {"label": "Suivant", "icon": "skip-next", "tool": "tv_key", "args": {"command": "NEXT"}},
+        {"label": "Stop", "icon": "stop", "tool": "tv_key", "args": {"command": "STOP"}},
         {"label": "Vol -", "icon": "chevron-down", "tool": "tv_volume", "args": {"direction": "down"}},
         {"label": "Vol +", "icon": "chevron-up", "tool": "tv_volume", "args": {"direction": "up"}},
         {"label": "Muet", "icon": "x", "tool": "tv_volume", "args": {"direction": "mute"}},
@@ -1201,6 +1237,15 @@ def execute(name: str, args: dict):
         if "error" in result:
             return result["error"]
         return f"Touche envoyée : {result['command']}."
+
+    if name == "tv_seek":
+        if not android_tv.configured():
+            return "La télé du salon n'est pas configurée, Monsieur — ANDROID_TV_HOST manquant dans .env."
+        result = android_tv.seek(args.get("direction", ""), args.get("seconds", 10))
+        if "error" in result:
+            return result["error"]
+        verb = "avancée" if result["direction"] == "forward" else "reculée"
+        return f"Lecture {verb} de {result['seconds']} secondes."
 
     if name == "tv_launch_app":
         if not android_tv.configured():

@@ -46,7 +46,7 @@ saisie de texte, capture d'écran (avec carte `screenshot` dans la Console).
 | # | Manque | Pourquoi ça compte | Effort |
 |---|---|---|---|
 | ~~T6~~ | ~~Volume absolu~~ **Résolu** | `tv_volume` accepte désormais `level` (0-100 %) — `android_tv._read_volume()` lit l'index/max réels via `media volume --stream 3 --get`, convertit le pourcentage en index et applique `--set` ; sans argument, l'outil renvoie juste le niveau actuel (lecture). | ▲ |
-| T7 | **Touches média complètes** | pas de suivant/précédent/avance rapide/retour/stop, pas de `seek` (« recule de 30 secondes », « saute le générique ») | ▲ |
+| ~~T7~~ | ~~Touches média complètes~~ **Résolu** | `tv_key` accepte désormais `NEXT`/`PREVIOUS`/`FAST_FORWARD`/`REWIND`/`STOP` (KEYCODE_MEDIA_*) ; nouvel outil `tv_seek(direction, seconds)` saute en avant/arrière par appuis répétés de KEYCODE_MEDIA_SKIP_FORWARD/BACKWARD (~10 s/appui, best effort selon l'appli). Pas de raccourci générique pour un bouton précis type « saute le générique » — reste `tv_screen_dump`+`tv_tap`. | ▲ |
 | T8 | **Sous-titres & piste audio** | « mets les sous-titres », « passe en VO » — pas de chemin générique, à faire app par app via `ui_dump` | ▲▲ |
 | T9 | **Source HDMI / CEC** | basculer sur la console, le lecteur Blu-ray, la TNT — hors périmètre ADB, passerait par HA (CEC) ou une télécommande IR | ▲▲ |
 | T10 | **Saisie de texte accentuée** | `type_text()` remplace les espaces par `%s` et supprime les guillemets, mais `input text` d'Android gère mal les caractères non-ASCII : « Amélie Poulain » risque de sortir déformé. À tester ; solution propre = passer par le presse-papier de l'appareil ou un IME dédié (ADBKeyboard) | ▲ |
