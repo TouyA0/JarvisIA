@@ -148,6 +148,14 @@ def _shell(cmd: str) -> str:
             raise RuntimeError(f"Commande ADB refusée ({exc2}).") from exc2
 
 
+def probe() -> None:
+    """Sonde active (C7, voir brain/health.py) — un aller-retour minimal
+    pour distinguer un stick injoignable/désautorisé d'un stick qui
+    marche, avant que ça ne ressemble à un bug côté Console (T2). Lève
+    RuntimeError (message actionnable, voir _connect()) sinon rien."""
+    _shell("echo ok")
+
+
 def volume(direction: str) -> dict:
     keys = {"up": "KEYCODE_VOLUME_UP", "down": "KEYCODE_VOLUME_DOWN", "mute": "KEYCODE_VOLUME_MUTE"}
     key = keys.get(direction)

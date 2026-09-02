@@ -40,5 +40,27 @@ export default {
         doc: "Token généré depuis votre profil Home Assistant, en bas de page : « Jetons d'accès de longue durée » → Créer un jeton.",
       },
     },
+    {
+      type: "tv",
+      label: "Télé (Android TV)",
+      icon: "play",
+      summary: "Piloter le stick du salon : applis, navigation, capture d'écran.",
+      settingsKey: "tvSettings",
+      noAccounts: true,
+      settings: {
+        title: "Télé (Android TV)",
+        sections: [
+          {
+            id: "test",
+            title: "Connexion",
+            fields: [],
+            submitLabel: "Tester la connexion",
+            submit: (api) => api.testTvConnection(),
+            successMessage: "Télé joignable.",
+          },
+        ],
+        doc: "IP fixe définie côté serveur (ANDROID_TV_HOST dans .env), volontairement pas un champ ici : ADB donne un accès quasi-shell à l'appareil, à ne jamais exposer depuis la Console. Pour changer d'appareil, modifiez .env puis redémarrez Jarvis.",
+      },
+    },
   ],
 };

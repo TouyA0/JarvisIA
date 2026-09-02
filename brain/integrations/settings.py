@@ -234,3 +234,13 @@ def clear_brave_api_key() -> None:
 
 def brave_status() -> dict:
     return {"configured": bool(get_brave_api_key())}
+
+
+# ── Android TV ───────────────────────────────────────────────────────────
+# Volontairement pas de clé à saisir ici : `ANDROID_TV_HOST` reste .env-only
+# (voir android_tv.py — ADB donne un accès quasi-shell à l'appareil, à ne
+# jamais exposer via un champ de Console). `tv_status` sert seulement à ce
+# que la carte Intégrations affiche un état réel (configuré ou non) au lieu
+# de rien du tout (T2).
+def tv_status() -> dict:
+    return {"configured": bool(config.ANDROID_TV_HOST), "host": config.ANDROID_TV_HOST or None}

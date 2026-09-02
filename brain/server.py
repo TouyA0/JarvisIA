@@ -44,6 +44,7 @@ from brain.core import modes as core_modes
 from brain.core import usage as core_usage
 from brain.core.chat import ask_stream
 from brain.devices import Device, registry
+from brain.integrations import android_tv
 from brain.integrations import confirm as integrations_confirm
 from brain.integrations import google_calendar, google_contacts, google_drive, google_gmail, google_oauth, settings as integrations_settings
 from brain.integrations import home_assistant
@@ -857,6 +858,22 @@ async def set_brave_settings(body: dict) -> dict:
 async def clear_brave_settings() -> dict:
     integrations_settings.clear_brave_api_key()
     return integrations_settings.brave_status()
+
+
+@app.get("/api/integrations/tv/settings")
+async def tv_settings() -> dict:
+    """Lecture seule — `ANDROID_TV_HOST` reste .env-only (voir
+    android_tv.py) ; sert juste à afficher un état réel dans Intégrations."""
+    return integrations_settings.tv_status()
+
+
+@app.post("/api/integrations/tv/health")
+async def check_tv_health() -> dict:
+    """Bouton « Tester la connexion » de la carte télé (T2) — sonde
+    forcée, sans passer par le cache 5 min du poll passif."""
+    if not android_tv.configured():
+        raise HTTPException(400, "ANDROID_TV_HOST non configuré (.env)")
+    return await asyncio.to_thread(account_health.check_tv, True)
 
 
 @app.get("/api/confirmations")

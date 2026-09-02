@@ -25,7 +25,7 @@ from __future__ import annotations
 import threading
 import time
 
-from brain.integrations import google_oauth, home_assistant, jellyfin, spotify_oauth, store, zoho_oauth
+from brain.integrations import android_tv, google_oauth, home_assistant, jellyfin, spotify_oauth, store, zoho_oauth
 
 _CACHE_TTL_S = 5 * 60
 _cache: dict[str, dict] = {}
@@ -73,5 +73,37 @@ def check(account_id: str, force: bool = False) -> dict:
     return result
 
 
+_TV_ID = "android_tv"
+
+
+def _probe_tv() -> dict:
+    try:
+        android_tv.probe()
+        return {"healthy": True, "error": None, "checked_at": time.time()}
+    except Exception as exc:
+        return {"healthy": False, "error": str(exc)[:200], "checked_at": time.time()}
+
+
+def check_tv(force: bool = False) -> dict:
+    """La télé (T2) n'est pas un compte de `store` — un seul appareil, IP
+    fixe en .env, pas de jeton (voir android_tv.py) — donc son état ne peut
+    pas passer par `check()`. Même cache 5 min, même contrat de retour."""
+    with _lock:
+        cached = _cache.get(_TV_ID)
+        if cached and not force and time.time() - cached["checked_at"] < _CACHE_TTL_S:
+            return cached
+
+    if not android_tv.configured():
+        return {"healthy": None, "error": None, "checked_at": time.time()}
+
+    result = _probe_tv()
+    with _lock:
+        _cache[_TV_ID] = result
+    return result
+
+
 def check_all(force: bool = False) -> dict[str, dict]:
-    return {a["id"]: check(a["id"], force) for a in store.list_public()}
+    result = {a["id"]: check(a["id"], force) for a in store.list_public()}
+    if android_tv.configured():
+        result[_TV_ID] = check_tv(force)
+    return result

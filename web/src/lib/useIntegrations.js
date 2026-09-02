@@ -17,10 +17,11 @@ export function useIntegrations() {
   const [tisseoSettings, setTisseoSettings] = useState({ configured: false });
   const [orsSettings, setOrsSettings] = useState({ configured: false });
   const [braveSettings, setBraveSettings] = useState({ configured: false });
+  const [tvSettings, setTvSettings] = useState({ configured: false, host: null });
 
   const refresh = useCallback(async () => {
     try {
-      const [accountsRes, googleRes, zohoRes, spotifyRes, tisseoRes, orsRes, braveRes] = await Promise.all([
+      const [accountsRes, googleRes, zohoRes, spotifyRes, tisseoRes, orsRes, braveRes, tvRes] = await Promise.all([
         authFetch("/api/integrations"),
         authFetch("/api/integrations/google/settings"),
         authFetch("/api/integrations/zoho/settings"),
@@ -28,6 +29,7 @@ export function useIntegrations() {
         authFetch("/api/integrations/tisseo/settings"),
         authFetch("/api/integrations/ors/settings"),
         authFetch("/api/integrations/brave/settings"),
+        authFetch("/api/integrations/tv/settings"),
       ]);
       if (accountsRes.ok) setAccounts(await accountsRes.json());
       if (googleRes.ok) setGoogleSettings(await googleRes.json());
@@ -36,6 +38,7 @@ export function useIntegrations() {
       if (tisseoRes.ok) setTisseoSettings(await tisseoRes.json());
       if (orsRes.ok) setOrsSettings(await orsRes.json());
       if (braveRes.ok) setBraveSettings(await braveRes.json());
+      if (tvRes.ok) setTvSettings(await tvRes.json());
     } catch {
       // brain injoignable — on garde la dernière liste connue
     }
@@ -320,6 +323,18 @@ export function useIntegrations() {
     await refresh();
   }, [refresh]);
 
+  // Télé (T2) : pas de "connexion" à proprement parler (ANDROID_TV_HOST
+  // reste .env-only, voir android_tv.py) — juste une sonde forcée pour que
+  // le bouton « Tester la connexion » réponde autre chose qu'un silence.
+  const testTvConnection = useCallback(async () => {
+    const res = await authFetch("/api/integrations/tv/health", { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || "échec du test");
+    setHealth((prev) => ({ ...prev, android_tv: data }));
+    if (data.healthy === false) throw new Error(data.error || "télé injoignable");
+    return data;
+  }, []);
+
   return {
     accounts, remove,
     health, refreshHealth, checkAccountHealth,
@@ -331,5 +346,6 @@ export function useIntegrations() {
     connectTisseo, tisseoSettings, saveTisseoSettings, clearTisseoSettings,
     orsSettings, saveOrsSettings, clearOrsSettings, saveHomeAddress, clearHomeAddress,
     braveSettings, saveBraveSettings, clearBraveSettings,
+    tvSettings, testTvConnection,
   };
 }
