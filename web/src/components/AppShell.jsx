@@ -47,6 +47,30 @@ function NavIcon({ name }) {
   return <Icon name={name} size={18} />;
 }
 
+/**
+ * P8 : sans brain, chaque écran se contentait de son propre message
+ * « Aucune note » / « Aucun appareil » — indiscernable d'un état
+ * réellement vide, puisque tous les hooks de `useSystem.js` &co avalent
+ * l'erreur réseau pour garder la dernière liste connue à l'écran (voir
+ * leurs commentaires « brain injoignable — on garde… »). `useBrainStatus`
+ * connaît pourtant déjà la vraie raison, jusqu'ici gardée pour la seule
+ * barre latérale : on la remonte ici, au-dessus de chaque vue, pour que
+ * l'explication apparaisse partout où un écran peut se retrouver vide
+ * sans lever d'erreur propre.
+ */
+function BrainOfflineBanner({ status }) {
+  if (status !== "offline") return null;
+  return (
+    <div className="alert alert--warn" role="status" style={{ margin: "var(--sp-4) var(--sp-6) 0" }}>
+      <Icon name="alert" size={16} />
+      <span>
+        Brain injoignable : les écrans peuvent s'afficher vides ou montrer des données obsolètes tant que la
+        connexion n'est pas rétablie.
+      </span>
+    </div>
+  );
+}
+
 export default function AppShell({ view, onNavigate, children }) {
   const isMobile = useIsMobile();
   const status = useBrainStatus();
@@ -110,6 +134,7 @@ export default function AppShell({ view, onNavigate, children }) {
           Aller au contenu
         </a>
         <main id="contenu" className="view" tabIndex={-1} ref={mainRef}>
+          <BrainOfflineBanner status={status} />
           {children}
         </main>
         <div className="sr-only" role="status" aria-live="polite" ref={announceRef} />
@@ -195,6 +220,7 @@ export default function AppShell({ view, onNavigate, children }) {
       )}
 
       <main id="contenu" className="view" tabIndex={-1} ref={mainRef}>
+        <BrainOfflineBanner status={status} />
         {children}
       </main>
       <div className="sr-only" role="status" aria-live="polite" ref={announceRef} />
