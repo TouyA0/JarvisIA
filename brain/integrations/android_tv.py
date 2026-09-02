@@ -59,6 +59,25 @@ _APP_SCHEMES = {
     "amazon prime": "com.amazon.amazonvideo.livingroom",
 }
 
+# Nom d'app → package Android, pour vérifier APRÈS coup que le lien profond a
+# vraiment amené la bonne appli au premier plan (voir launch_app()). Un lien
+# profond qui échoue ne lève aucune erreur ADB — `am start` répond toujours
+# "started" même quand l'appli ignore le lien et reste sur son écran d'accueil
+# (Disney+ notamment) ou que rien ne se passe : sans cette vérification,
+# launch_app() ne peut pas distinguer un lancement réussi d'un échec silencieux,
+# et rien n'imposait à Claude de basculer sur la recherche manuelle (Couche 2).
+_APP_PACKAGES = {
+    "youtube": "com.google.android.youtube.tv",
+    "spotify": "com.spotify.tv.android",
+    "netflix": "com.netflix.ninja",
+    "disney+": "com.disney.disneyplus",
+    "disney": "com.disney.disneyplus",
+    "prime video": "com.amazon.amazonvideo.livingroom",
+    "amazon prime": "com.amazon.amazonvideo.livingroom",
+}
+
+_LAUNCH_VERIFY_DELAY_SECONDS = 1.5  # laisse l'appli le temps de passer au premier plan avant de vérifier
+
 # Touches autorisées pour send_key — liste blanche volontaire (pas de passe-
 # plat vers n'importe quel KEYCODE_* Android) : c'est la même logique de
 # "outil borné" que le reste de brain/tools.py, aucune raison de laisser
@@ -270,16 +289,70 @@ def launch_app(target: str) -> dict:
     connu (voir _APP_SCHEMES), schéma d'URI complet ("vnd.youtube://ID"
     pour une vidéo précise), ou nom de package Android. Best effort : pas
     de garantie que l'appli respecte le lien profond (Disney+ notamment,
-    voir conversation) — si Claude n'observe pas le changement attendu via
-    un ui_dump ensuite, basculer sur la navigation manuelle (Couche 2/3)."""
+    voir conversation).
+
+    `am start` répond toujours "started" même quand l'appli ignore le lien
+    profond et reste sur son écran d'accueil, donc l'échec est silencieux
+    côté ADB — pour les apps connues (voir _APP_PACKAGES), on vérifie donc
+    après coup via `dumpsys activity activities` que l'appli attendue est
+    bien passée au premier plan. Si ce n'est pas le cas, le dict renvoyé
+    porte lui-même l'instruction de repli générique (recherche + tv_tap +
+    tv_type_text) dans "text", pour que Claude bascule sur la Couche 2 au
+    lieu de répéter le même lancement ou de considérer la tâche terminée."""
     if not target or not target.strip():
         return {"error": "Nom d'application ou lien manquant, Monsieur."}
+    t = target.strip().lower()
     resolved = _resolve_app(target)
+    expected_package = _APP_PACKAGES.get(t)
     try:
         _shell(f'am start -a android.intent.action.VIEW -d "{resolved}"')
     except RuntimeError as exc:
         return {"error": str(exc)}
-    return {"ok": True, "target": target, "resolved": resolved}
+
+    if not expected_package:
+        # Pas de package connu pour vérifier (URI de contenu précis, ou app
+        # inconnue de _APP_PACKAGES) : impossible de confirmer le succès
+        # automatiquement — même consigne de repli que l'échec vérifié, mais
+        # formulée comme "à vérifier toi-même" plutôt qu'affirmée.
+        return {
+            "ok": True,
+            "target": target,
+            "resolved": resolved,
+            "verified": None,
+            "text": (
+                f"Lien profond envoyé pour {target!r}, mais aucune vérification "
+                "automatique possible pour cette appli. Confirme via tv_screen_dump "
+                "que ça a bien mené au bon endroit ; si ce n'est pas le cas, bascule "
+                "sur la recherche manuelle : tv_screen_dump pour repérer l'icône ou "
+                "le champ de recherche, tv_tap dessus, puis tv_type_text avec le "
+                "titre recherché."
+            ),
+        }
+
+    time.sleep(_LAUNCH_VERIFY_DELAY_SECONDS)
+    try:
+        activity_raw = _shell("dumpsys activity activities")
+        foreground = _foreground_app(activity_raw)
+    except RuntimeError:
+        foreground = None
+
+    if foreground == expected_package:
+        return {"ok": True, "target": target, "resolved": resolved, "verified": True}
+
+    return {
+        "ok": True,
+        "target": target,
+        "resolved": resolved,
+        "verified": False,
+        "foreground_app": foreground,
+        "text": (
+            f"Le lien profond n'a pas amené {target} au premier plan (appli "
+            f"actuellement affichée : {foreground or 'inconnue'}) — ne réessaie pas "
+            "ce même lancement. Bascule immédiatement sur la recherche manuelle : "
+            "tv_screen_dump pour repérer l'icône ou le champ de recherche de "
+            f"l'appli, tv_tap dessus, puis tv_type_text avec le titre recherché."
+        ),
+    }
 
 
 def list_apps() -> dict:
