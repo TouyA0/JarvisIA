@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Icon from "../ui/Icon.jsx";
+import { authFetch } from "../../lib/consoleAuth.js";
 
 /**
  * Corps des cartes, un rendu par type (voir brain/cards.py pour l'émission
@@ -178,13 +179,69 @@ function Vision({ data, onZoom }) {
   );
 }
 
+// Rythme du direct sur la carte "tv" (C6) : même compromis que
+// useFocusDevice.js côté PC — android_tv.screenshot() fait un screencap +
+// pull ADB (plus lourd qu'un JPEG pyautogui côté PC), 800 ms reste un bon
+// équilibre entre fluidité perçue et requêtes qui s'empilent.
+const TV_STREAM_INTERVAL_MS = 800;
+
 /** Télécommande télé (T5) : la capture d'écran ou le statut quand
  * disponibles (selon l'outil tv_* qui a émis la carte, voir brain/tools.py),
  * et en dessous les boutons de card.actions (D-pad, volume, retour/accueil,
  * lecture) rendus par CardActions dans CardView.jsx — même mécanique que la
- * carte music, pour naviguer sans repasser par la voix. */
+ * carte music, pour naviguer sans repasser par la voix.
+ *
+ * C6 — bouton « Voir en direct » : bascule sur un polling de
+ * POST /api/tv/stream/frame (brain/server.py, réutilise
+ * android_tv.screenshot()) toutes les TV_STREAM_INTERVAL_MS, remplace
+ * l'image affichée jusqu'à l'arrêt ou le démontage de la carte. */
 function Tv({ data, onZoom }) {
   const media = data.media;
+  const [live, setLive] = useState(false);
+  const [liveFrame, setLiveFrame] = useState(null);
+  const [liveError, setLiveError] = useState(null);
+  const timerRef = useRef(null);
+  const inFlightRef = useRef(false);
+
+  const stopLive = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    setLive(false);
+  }, []);
+
+  const startLive = useCallback(() => {
+    if (timerRef.current) return;
+    setLiveError(null);
+    setLive(true);
+
+    async function tick() {
+      if (inFlightRef.current) return; // une image encore en vol : on saute ce tour plutôt que d'empiler
+      inFlightRef.current = true;
+      try {
+        const res = await authFetch("/api/tv/stream/frame", { method: "POST" });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.detail || "échec de la capture");
+        if (body.image_b64) setLiveFrame(body);
+      } catch (e) {
+        setLiveError(e.message);
+        stopLive();
+      } finally {
+        inFlightRef.current = false;
+      }
+    }
+
+    tick();
+    timerRef.current = setInterval(tick, TV_STREAM_INTERVAL_MS);
+  }, [stopLive]);
+
+  // Quitter la carte (écartée, ou tour de conversation suivant qui la fait
+  // défiler hors du fil) ne doit jamais laisser un intervalle tourner en
+  // tâche de fond à réclamer des images à la télé.
+  useEffect(() => stopLive, [stopLive]);
+
+  const shown = live && liveFrame ? liveFrame : data;
   const statusLine = data.screen_on === false
     ? "Écran éteint"
     : [
@@ -195,14 +252,52 @@ function Tv({ data, onZoom }) {
       ]
         .filter(Boolean)
         .join(" · ");
+
   return (
     <div className="stack stack--tight">
-      {data.image_b64 && (
-        <button type="button" className="card-shot" onClick={onZoom} aria-label="Agrandir l'écran de la télé">
-          <img src={`data:${data.media_type || "image/png"};base64,${data.image_b64}`} alt="Écran de la télé" />
-        </button>
+      {shown.image_b64 ? (
+        <figure style={{ margin: 0, position: "relative" }}>
+          {live ? (
+            // Pas de bouton d'agrandissement en direct : le zoom de
+            // CardView.jsx lit card.data (l'image figée à l'émission de la
+            // carte), pas l'état local liveFrame — l'agrandir montrerait une
+            // image périmée, mieux vaut ne pas le proposer ici.
+            <img
+              src={`data:${shown.media_type || "image/png"};base64,${shown.image_b64}`}
+              alt="Écran de la télé"
+              style={{ display: "block", width: "100%", borderRadius: "var(--r-md, 8px)" }}
+            />
+          ) : (
+            <button type="button" className="card-shot" onClick={onZoom} aria-label="Agrandir l'écran de la télé">
+              <img src={`data:${shown.media_type || "image/png"};base64,${shown.image_b64}`} alt="Écran de la télé" />
+            </button>
+          )}
+          {live && (
+            <span
+              className="row"
+              style={{
+                position: "absolute", top: "var(--sp-2)", left: "var(--sp-2)",
+                gap: "var(--sp-1)", alignItems: "center", padding: "3px 8px",
+                borderRadius: "var(--r-full, 999px)", background: "rgba(0,0,0,.55)",
+                color: "#fff", fontSize: "var(--text-xs)", fontFamily: "var(--font-mono)",
+              }}
+            >
+              <span className="dot dot--danger dot--pulse" aria-hidden="true" />
+              EN DIRECT
+            </span>
+          )}
+        </figure>
+      ) : (
+        !live && statusLine && <p className="card-row-sub">{statusLine}</p>
       )}
-      {statusLine && <p className="card-row-sub">{statusLine}</p>}
+      {live && statusLine && <p className="card-row-sub">{statusLine}</p>}
+      {liveError && <p className="card-row-sub" style={{ color: "var(--danger-text)" }}>Direct interrompu : {liveError}</p>}
+      <div className="card-actions">
+        <button type="button" className="btn btn--ghost btn--sm" onClick={live ? stopLive : startLive}>
+          <Icon name={live ? "x" : "eye"} size={15} />
+          {live ? "Arrêter le direct" : "Voir la télé en direct"}
+        </button>
+      </div>
     </div>
   );
 }

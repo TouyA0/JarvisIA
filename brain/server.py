@@ -283,6 +283,23 @@ async def stream_frame(device_id: str) -> dict:
     return result.result or {}
 
 
+@app.post("/api/tv/stream/frame")
+async def tv_stream_frame() -> dict:
+    """Équivalent télé de stream_frame ci-dessus (C6) : appelé en boucle par
+    la carte "tv" (voir Tv dans web/src/components/cards/renderers.jsx)
+    pendant que son mode direct est actif. Pas de registre d'agents ici — la
+    télé n'est pas un appareil appairé mais une intégration directe ADB
+    (brain/integrations/android_tv.py) — donc appel direct à
+    android_tv.screenshot() plutôt qu'un dispatch, dans un thread pour ne
+    pas bloquer la boucle asyncio le temps du screencap+pull ADB."""
+    if not android_tv.configured():
+        raise HTTPException(404, "télé non configurée (ANDROID_TV_HOST manquant)")
+    result = await asyncio.to_thread(android_tv.screenshot)
+    if "error" in result:
+        raise HTTPException(502, result["error"])
+    return result
+
+
 @app.get("/api/routines")
 async def list_routines() -> list[dict]:
     return routines.list_routines()
