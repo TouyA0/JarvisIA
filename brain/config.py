@@ -35,6 +35,11 @@ CROSS_DEVICE_ROUTINES_FILE = DATA_DIR / "cross_device_routines.json"
 # auto-générée à côté au premier lancement (data/integrations.key).
 INTEGRATIONS_FILE = DATA_DIR / "integrations.json"
 INTEGRATIONS_KEY_FILE = DATA_DIR / "integrations.key"
+# Web Push (C12) — paire de clés VAPID auto-générée au premier lancement
+# (data/vapid.json, jamais versionnée) et abonnements des navigateurs
+# (data/push_subscriptions.json). Voir brain/push.py.
+VAPID_FILE = DATA_DIR / "vapid.json"
+PUSH_SUBSCRIPTIONS_FILE = DATA_DIR / "push_subscriptions.json"
 
 
 def ensure_dirs() -> None:
@@ -98,6 +103,13 @@ PORT = int(os.getenv("BRAIN_PORT", "8420"))
 # "peut piloter le PC" — vide = auth désactivée (pratique en dev local),
 # à définir dans .env dès que le brain est exposé au-delà de 127.0.0.1.
 CONSOLE_PASSWORD = os.getenv("CONSOLE_PASSWORD", "")
+
+# ── Web Push (C12) ──────────────────────────────────────────────────────────
+# Contact requis par la spec VAPID (claim "sub") — certains services push
+# (dont ceux de Google/Mozilla) s'en servent pour joindre l'opérateur en cas
+# d'abus. Une adresse par défaut suffit tant que Jarvis reste un projet
+# personnel ; à définir dans .env si un jour ce n'est plus le cas.
+VAPID_CONTACT_EMAIL = os.getenv("VAPID_CONTACT_EMAIL", "jarvis@example.com")
 
 # ── Intégrations externes (Google Calendar…) ────────────────────────────────
 # Client OAuth "Application Web" créé dans Google Cloud Console (API

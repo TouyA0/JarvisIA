@@ -6,6 +6,7 @@ import StatusBadge from "./ui/StatusBadge.jsx";
 import { useConfirm } from "./ui/Confirm.jsx";
 import { useToast } from "./ui/Toast.jsx";
 import { reportAuthFailure } from "../lib/consoleAuth.js";
+import { subscribeToPush } from "../lib/usePush.js";
 import { useCardHistory, useConversationLog, useMemoryFacts, useModes, useUsage } from "../lib/useSystem.js";
 import { useTheme } from "../lib/useTheme.js";
 import { formatCountdown, useTimers } from "../lib/useTimers.js";
@@ -187,7 +188,12 @@ function TimersSection() {
     // Geste utilisateur explicite : le bon moment pour demander la
     // permission de notification, pas au chargement de la page.
     if (typeof Notification !== "undefined" && Notification.permission === "default") {
-      Notification.requestPermission();
+      const permission = await Notification.requestPermission();
+      // S'abonne aussi au Web Push (C12) : sans ça, un minuteur ne sonne
+      // que si l'onglet de la Console est resté ouvert au premier plan.
+      if (permission === "granted") subscribeToPush();
+    } else if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+      subscribeToPush();
     }
     setBusy(true);
     setError("");

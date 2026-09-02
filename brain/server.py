@@ -34,7 +34,7 @@ from agents.protocol.messages import (
     RegisterAck,
     parse_message,
 )
-from brain import activity, cards, clipboard, config, device_store, diagnostics, files as file_store, notes, pairing, preferences, proactive, routines, session_tokens, speech, timers, vision, weather
+from brain import activity, cards, clipboard, config, device_store, diagnostics, files as file_store, notes, pairing, preferences, proactive, push, routines, session_tokens, speech, timers, vision, weather
 from brain import health as account_health
 from brain import tools as brain_tools
 from brain.core import agent as pc_agent
@@ -1093,6 +1093,34 @@ async def search_cards(q: str = "", since: str = "", until: str = "", limit: int
 @app.delete("/api/cards")
 async def clear_cards() -> dict:
     cards.clear()
+    return {"ok": True}
+
+
+# ── Web Push (C12) ──────────────────────────────────────────────────────────
+# Complément de /ws/cards : atteint une Console dont l'onglet est fermé ou
+# en arrière-plan (voir brain/push.py pour le pourquoi). L'abonnement est
+# posé côté navigateur au même geste utilisateur que la permission de
+# notification (web/src/lib/usePush.js), jamais au chargement de la page.
+
+
+@app.get("/api/push/vapid-public-key")
+async def push_vapid_public_key() -> dict:
+    return {"key": push.public_key()}
+
+
+@app.post("/api/push/subscribe")
+async def push_subscribe(body: dict) -> dict:
+    if not body.get("endpoint"):
+        raise HTTPException(400, "abonnement invalide")
+    push.subscribe(body)
+    return {"ok": True}
+
+
+@app.post("/api/push/unsubscribe")
+async def push_unsubscribe(body: dict) -> dict:
+    endpoint = body.get("endpoint") or ""
+    if endpoint:
+        push.unsubscribe(endpoint)
     return {"ok": True}
 
 

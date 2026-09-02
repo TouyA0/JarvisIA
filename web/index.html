@@ -7,13 +7,15 @@
     <title>J.A.R.V.I.S.</title>
 
     <!-- Installation sur téléphone (C10) — l'interface mobile existait déjà
-         (useIsMobile.js, tabbar…), seule l'enveloppe manquait. Pas de
-         service worker : Chrome/Android n'en exige plus pour proposer
-         l'installation, et un mode hors-ligne n'aurait pas de sens ici —
-         Jarvis a besoin du brain en direct pour à peu près tout.
+         (useIsMobile.js, tabbar…), seule l'enveloppe manquait. Un service
+         worker existe désormais (public/sw.js, voir lib/usePush.js), mais
+         uniquement pour le Web Push (C12) — pas de cache d'assets, un mode
+         hors-ligne n'aurait pas de sens ici : Jarvis a besoin du brain en
+         direct pour à peu près tout.
          Note : Chrome sur Android n'affiche l'invite d'installation que sur
          une origine sécurisée (HTTPS ou "localhost") — une adresse LAN en
-         http:// brut n'y a pas droit tant qu'aucun HTTPS n'est en place. -->
+         http:// brut n'y a pas droit tant qu'aucun HTTPS n'est en place ;
+         Web Push a la même exigence, pour la même raison. -->
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#0a0e18" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />

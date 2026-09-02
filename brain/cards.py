@@ -36,7 +36,13 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Any
 
-from brain import config
+from brain import config, push
+
+# Types de carte qui déclenchaient déjà `new Notification(...)` côté
+# Hud.jsx (useCardFeed) tant que l'onglet restait ouvert — les seuls qui
+# justifient de réveiller un navigateur fermé via Web Push (C12, voir
+# brain/push.py).
+_PUSH_TYPES = {"timer", "proactive"}
 
 # Attributs qu'on sait volumineux et sans intérêt à relire plus tard —
 # retirés de la copie écrite sur disque, jamais de celle diffusée en direct.
@@ -109,6 +115,8 @@ def emit(card_type: str, title: str, data: dict[str, Any], subtitle: str = "",
         _recent.append(card)
     _publish({"kind": "card", "card": card})
     _persist(card)
+    if card_type in _PUSH_TYPES:
+        push.notify_all(title, subtitle, tag=card["id"])
     return card
 
 

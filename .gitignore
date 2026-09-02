@@ -27,6 +27,8 @@ data/integrations_settings.json
 data/proactive_state.json
 data/preferences.json
 data/uploads/
+data/vapid.json
+data/push_subscriptions.json
 
 # Audio d'entraînement wake word (volumineux)
 agents/desktop/wakeword/samples_jarvis/

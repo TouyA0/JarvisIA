@@ -43,3 +43,8 @@ scikit-learn==1.8.0
 # Utilisé par agents/desktop/agent_client.py pour se connecter au brain.
 pydantic==2.9.2
 websockets==13.1
+
+# --- Web Push (C12) ---
+# Notifications (minuteurs, proactivité) quand la Console est fermée ou en
+# arrière-plan — voir brain/push.py. Tire cryptography + py-vapid.
+pywebpush==2.5.0
