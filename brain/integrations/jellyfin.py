@@ -11,10 +11,11 @@ brain/integrations/store.py). Sans lui, on prend le premier utilisateur
 trouvé — imprécis si le serveur a plusieurs comptes, mais reste utilisable
 pour la recherche (non scopée par utilisateur).
 
-Lecture seule : recherche, lecture en cours, reprise, nouveautés. Pas de
-contrôle de lecture à distance (pause/lecture sur un appareil) — pas de
-demande identifiée pour l'instant, contrairement à Spotify.
-"""
+Recherche, lecture en cours, reprise, nouveautés — et, depuis C4, contrôle
+à distance minimal d'une session existante (`resume_on_session`, via
+`Sessions/{id}/Playing`) : reprendre sur la télé du salon un épisode en
+cours ailleurs, sans passer par un deep-link app par app (voir
+_find_tv_session)."""
 from __future__ import annotations
 
 import requests
@@ -146,7 +147,16 @@ def continue_watching(account_hint: str | None = None, limit: int = 10) -> list[
         return [{"error": f"Requête refusée par Jellyfin ({resp.status_code}), Monsieur."}]
     items = []
     for it in resp.json().get("Items", []):
-        items.append({"name": it.get("Name", ""), "series": it.get("SeriesName"), "type": it.get("Type", "")})
+        items.append({
+            "id": it.get("Id"),
+            "name": it.get("Name", ""),
+            "series": it.get("SeriesName"),
+            "type": it.get("Type", ""),
+            # C4 — position de reprise exacte (100 ns/tick, format Jellyfin) : sert à
+            # relancer la lecture au bon endroit via resume_on_session(), pas affiché
+            # à la voix (voir _format_jellyfin_items dans brain/tools.py).
+            "resume_position_ticks": it.get("UserData", {}).get("PlaybackPositionTicks", 0),
+        })
     return items
 
 
@@ -167,3 +177,75 @@ def recently_added(account_hint: str | None = None, limit: int = 10) -> list[dic
     for it in resp.json():
         items.append({"name": it.get("Name", ""), "type": it.get("Type", ""), "year": it.get("ProductionYear")})
     return items
+
+
+def find_resume_item(query: str, account_hint: str | None = None) -> dict | None:
+    """Cherche `query` (texte libre, « reprends mon épisode ») dans la liste
+    « reprendre la lecture » (continue_watching()) — substring insensible à
+    la casse sur le titre ET le nom de série, pour que « reprends breaking
+    bad » matche un épisode dont le titre affiché est juste « Felina ».
+    None si rien ne correspond ou si continue_watching() a échoué (compte
+    absent, serveur injoignable…) plutôt que de faire remonter l'erreur ici
+    — resume_on_tv (brain/tools.py) sait déjà distinguer les deux cas via
+    continue_watching() directement."""
+    query = query.strip().lower()
+    if not query:
+        return None
+    items = continue_watching(account_hint, limit=20)
+    if items and "error" in items[0]:
+        return None
+    for it in items:
+        haystack = f"{it.get('series') or ''} {it.get('name') or ''}".lower()
+        if query in haystack:
+            return it
+    return None
+
+
+def _find_tv_session(account: dict) -> dict | None:
+    """Session Jellyfin active correspondant à la télé du salon, parmi
+    `/Sessions` (tous appareils confondus, voir now_playing()). Best
+    effort : le client officiel Android TV se déclare "Jellyfin Android TV"
+    dans le champ Client — on matche là-dessus en priorité ; à défaut, la
+    première session qui accepte le contrôle à distance
+    (`SupportsMediaControl`), pour rester utilisable même si le nom du
+    client change un jour. None si l'appli Jellyfin n'est pas ouverte sur
+    la télé (aucune session active tant qu'elle ne l'est pas) — à
+    l'appelant de la lancer via android_tv.launch_app avant de réessayer."""
+    resp = requests.get(f"{_base_url(account)}/Sessions", headers=_headers(account), timeout=10)
+    if resp.status_code != 200:
+        return None
+    sessions = resp.json()
+    for s in sessions:
+        if "android tv" in (s.get("Client") or "").lower():
+            return s
+    for s in sessions:
+        if s.get("SupportsMediaControl"):
+            return s
+    return None
+
+
+def resume_on_session(item_id: str, position_ticks: int, account_hint: str | None = None) -> dict:
+    """C4 — contrôle à distance d'une session déjà ouverte (`Sessions/{id}/
+    Playing`), plutôt qu'un deep-link app par app : demande à la session
+    Jellyfin trouvée sur la télé de lancer `item_id` à `position_ticks`.
+    Ne fonctionne que si l'appli Jellyfin est déjà ouverte sur l'appareil
+    cible (une session existe côté serveur tant qu'elle tourne, y compris
+    en arrière-plan) — sinon renvoie {"error": "no_session"} (valeur
+    sentinelle, pas un message pour Monsieur) : à l'appelant de lancer
+    l'appli (android_tv.launch_app) puis de réessayer une fois, comme pour
+    launch_app()/send_to_tv() ailleurs dans ce module."""
+    account = _pick_account(account_hint)
+    if not account:
+        return {"error": "Aucun serveur Jellyfin connecté, Monsieur."}
+    session = _find_tv_session(account)
+    if not session:
+        return {"error": "no_session"}
+    resp = requests.post(
+        f"{_base_url(account)}/Sessions/{session['Id']}/Playing",
+        headers=_headers(account),
+        params={"ItemIds": item_id, "StartPositionTicks": int(position_ticks), "PlayCommand": "PlayNow"},
+        timeout=10,
+    )
+    if resp.status_code not in (200, 204):
+        return {"error": f"Jellyfin a refusé de lancer la lecture ({resp.status_code}), Monsieur."}
+    return {"ok": True, "device": session.get("DeviceName") or "l'appareil"}

@@ -10,6 +10,8 @@ deux listes de schémas, et route chaque tool_use vers le bon exécuteur
 """
 from __future__ import annotations
 
+import time
+
 from brain import cards, config, diagnostics, preferences, weather
 from brain.integrations import android_tv, brave_search, google_calendar, google_contacts, google_drive, google_gmail, home_assistant, jellyfin, ors, spotify, store, tisseo, zoho_mail
 
@@ -338,6 +340,28 @@ BRAIN_TOOLS = [
         "name": "jellyfin_recently_added",
         "description": "Derniers films/séries/épisodes ajoutés à la bibliothèque Jellyfin. Utilise pour « qu'est-ce qu'il y a de nouveau sur Jellyfin ? ».",
         "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "jellyfin_resume_on_tv",
+        "description": (
+            "Reprend sur la télé du salon un épisode/film que Monsieur a commencé sans finir "
+            "sur Jellyfin — pour « reprends mon épisode sur la télé », « continue la série là "
+            "où j'en étais, sur le grand écran ». Cherche le titre dans la liste "
+            "jellyfin_continue_watching (pas besoin d'appeler cet outil séparément avant), "
+            "puis demande à la session Jellyfin déjà ouverte sur la télé de lancer la lecture "
+            "à la bonne position (contrôle à distance, pas un simple lancement d'appli). Si "
+            "l'appli Jellyfin n'est pas encore ouverte sur la télé, la lance d'abord puis "
+            "réessaie une fois automatiquement — best effort, l'appli met parfois plus de "
+            "temps à s'enregistrer comme session active : si ça échoue encore, dis-le "
+            "simplement à Monsieur plutôt que de répéter la tentative."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Titre (ou fragment) de l'épisode/film/série à reprendre, tel que dans « reprendre la lecture »."},
+            },
+            "required": ["title"],
+        },
     },
     {
         "name": "tisseo_next",
@@ -717,6 +741,11 @@ def _music_actions(playing: bool) -> list[dict]:
         {"label": pause_label, "icon": pause_icon, "tool": "spotify_control", "args": pause_action},
         {"label": "Suivant", "icon": "skip-next", "tool": "spotify_control", "args": {"action": "next"}},
     ]
+
+
+_JELLYFIN_TV_LAUNCH_DELAY_SECONDS = 4  # C4 — laisse l'appli Jellyfin le temps de
+# s'enregistrer comme session active côté serveur avant de retenter resume_on_session()
+# (best effort : pas de moyen de sonder "session prête", voir jellyfin.py).
 
 
 def _tv_actions() -> list[dict]:
@@ -1118,6 +1147,36 @@ def execute(name: str, args: dict):
             cards.emit("media", "Ajouts récents", {"items": items},
                        subtitle="Jellyfin · " + _plural(len(items), "titre"))
         return error or _format_jellyfin_items(items)
+
+    if name == "jellyfin_resume_on_tv":
+        if not store.list_public("jellyfin"):
+            return "Aucun serveur Jellyfin connecté — ajoute-en un depuis la Console (Intégrations), Monsieur."
+        query = args.get("title", "")
+        item = jellyfin.find_resume_item(query)
+        if not item:
+            return (
+                f"Rien dans « reprendre la lecture » ne correspond à {query!r}, Monsieur — "
+                "vérifie avec jellyfin_continue_watching."
+            )
+
+        result = jellyfin.resume_on_session(item["id"], item.get("resume_position_ticks", 0))
+        if result.get("error") == "no_session":
+            if not android_tv.configured():
+                return (
+                    f"« {item['name']} » trouvé, mais aucune session Jellyfin active sur la télé "
+                    "et la télé du salon n'est pas configurée (ANDROID_TV_HOST manquant), Monsieur "
+                    "— ouvre l'appli Jellyfin sur la télé toi-même."
+                )
+            android_tv.launch_app("org.jellyfin.androidtv")
+            time.sleep(_JELLYFIN_TV_LAUNCH_DELAY_SECONDS)
+            result = jellyfin.resume_on_session(item["id"], item.get("resume_position_ticks", 0))
+
+        if result.get("error"):
+            return result["error"]
+
+        title = item["name"] if not item.get("series") else f"{item['series']} — {item['name']}"
+        cards.emit("tv", title, {}, subtitle=f"Repris sur {result['device']}", actions=_tv_actions())
+        return f"Reprise sur {result['device']} : {title}."
 
     if name == "tisseo_next":
         if not tisseo.configured():
