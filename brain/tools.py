@@ -13,6 +13,7 @@ from __future__ import annotations
 import time
 
 from brain import cards, config, diagnostics, preferences, weather
+from brain import files as file_store
 from brain.integrations import android_tv, brave_search, google_calendar, google_contacts, google_drive, google_gmail, home_assistant, jellyfin, ors, spotify, store, tisseo, zoho_mail
 
 # Chaque outil qui rapporte de la donnée structurée émet, en plus du texte
@@ -712,6 +713,43 @@ BRAIN_TOOLS = [
                 "url": {"type": "string", "description": "URL de la page/vidéo à envoyer sur la télé (ex. celle renvoyée par get_browser_url)."},
             },
             "required": ["url"],
+        },
+    },
+    {
+        "name": "send_file",
+        "description": (
+            "Dépose un fichier du PC (chemin local) dans le dépôt du brain et renvoie un lien "
+            "de téléchargement — pour « envoie ce fichier/cette photo/ce document sur mon "
+            "téléphone », « donne-moi un lien pour ce fichier ». Le lien est relatif "
+            "(/api/files/...) : il s'ouvre depuis n'importe quel appareil qui a déjà la Console "
+            "ouverte (le lien y apparaît en direct, voir la carte émise), ou en le collant dans "
+            "un navigateur pointant sur le brain. Pas d'envoi automatique vers un appareil "
+            "précis — aucun agent mobile à qui pousser quoi que ce soit aujourd'hui (voir C10 du "
+            "roadmap) : Monsieur ouvre lui-même le lien sur l'appareil visé. Pour la télé du "
+            "salon, utilise tv_push_file à la place (dépôt direct, pas de lien)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Chemin local du fichier sur le PC, ex. C:\\Users\\...\\photo.jpg."},
+            },
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "tv_push_file",
+        "description": (
+            "Dépose directement un fichier du PC (chemin local) sur la télé du salon, dans son "
+            "dossier Téléchargements — pour « envoie ce fichier/cette photo sur la télé ». "
+            "Contrairement à send_file, pas de lien : le fichier est physiquement copié sur "
+            "l'appareil, visible depuis son appli Fichiers."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Chemin local du fichier sur le PC."},
+            },
+            "required": ["path"],
         },
     },
     {
@@ -1473,6 +1511,28 @@ def execute(name: str, args: dict):
             return result["error"]
         cards.emit("tv", result["target"], {}, subtitle="Envoyé depuis le PC", actions=_tv_actions())
         return f"Envoyé sur la télé : {result['target']}."
+
+    if name == "send_file":
+        path = args.get("path", "")
+        try:
+            result = file_store.store_path(path)
+        except FileNotFoundError as exc:
+            return f"{exc}, Monsieur."
+        except ValueError as exc:
+            return f"Impossible d'envoyer ce fichier : {exc}."
+        link = f"/api/files/{result['id']}/{result['filename']}"
+        size_kb = result["size"] // 1024
+        cards.emit("files", "Fichier déposé", {"files": [{"name": result["filename"], "link": link}]},
+                   subtitle=f"{size_kb} Ko")
+        return f"Lien de téléchargement pour {result['filename']} ({size_kb} Ko) : {link}"
+
+    if name == "tv_push_file":
+        if not android_tv.configured():
+            return "La télé du salon n'est pas configurée, Monsieur — ANDROID_TV_HOST manquant dans .env."
+        result = android_tv.push_file(args.get("path", ""))
+        if "error" in result:
+            return result["error"]
+        return f"Envoyé sur la télé (Téléchargements) : {result['filename']}."
 
     if name == "tv_resume_on_pc":
         if not android_tv.configured():

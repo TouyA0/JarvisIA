@@ -21,7 +21,7 @@ import time
 from typing import Any, Callable
 
 from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
@@ -34,7 +34,7 @@ from agents.protocol.messages import (
     RegisterAck,
     parse_message,
 )
-from brain import activity, cards, config, device_store, diagnostics, notes, pairing, preferences, proactive, routines, session_tokens, speech, timers, vision, weather
+from brain import activity, cards, config, device_store, diagnostics, files as file_store, notes, pairing, preferences, proactive, routines, session_tokens, speech, timers, vision, weather
 from brain import health as account_health
 from brain import tools as brain_tools
 from brain.core import agent as pc_agent
@@ -114,6 +114,12 @@ async def _require_console_auth(request: Request, call_next):
     ):
         # /api/session est l'échange lui-même (mot de passe -> jeton) : par
         # définition, ne peut pas exiger le jeton qu'il émet.
+        return await call_next(request)
+    if path.startswith("/api/files/"):
+        # Lien de téléchargement (C10) : cliqué depuis un navigateur brut
+        # (SMS, autre appareil) qui ne peut pas poser d'en-tête Bearer — le
+        # lien lui-même (id opaque uuid4) fait office de secret, même
+        # raisonnement que les callbacks OAuth ci-dessus.
         return await call_next(request)
     if config.CONSOLE_PASSWORD and path.startswith("/api/") and path != "/api/health":
         auth = request.headers.get("authorization", "")
@@ -954,6 +960,19 @@ async def analyze_image(file: UploadFile, question: str = Form("")) -> dict:
     except RuntimeError as exc:
         raise HTTPException(502, str(exc))
     return {"text": text}
+
+
+@app.get("/api/files/{file_id}/{filename}")
+async def download_file(file_id: str, filename: str) -> FileResponse:
+    """Lien de téléchargement déposé par l'outil send_file (C10) — voir
+    brain/files.py pour le raisonnement (pas d'auth Bearer ici, le lien lui-
+    même fait office de secret). `filename` n'est là que pour un joli nom de
+    téléchargement dans le navigateur ; seul `file_id` sert à retrouver le
+    fichier réel."""
+    path = file_store.resolve(file_id)
+    if path is None:
+        raise HTTPException(404, "fichier introuvable ou expiré")
+    return FileResponse(path, filename=path.name)
 
 
 # ── Système : mémoire, modes, consommation, journal ──────────────────────────

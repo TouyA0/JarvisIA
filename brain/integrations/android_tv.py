@@ -958,3 +958,36 @@ def screenshot() -> dict:
         "image_b64": base64.b64encode(data).decode("ascii"),
         "media_type": "image/png",
     }
+
+
+# 500 Mo — généreux pour une photo/vidéo courte, sans laisser une commande
+# malheureuse saturer la carte SD du stick (souvent peu de stockage libre).
+_MAX_PUSH_BYTES = 500 * 1024 * 1024
+
+
+def push_file(local_path: str, filename: str | None = None) -> dict:
+    """C10 (moitié télé) — dépose un fichier du PC directement sur la télé
+    via device.push, symétrique de device.pull utilisé par screenshot() :
+    même transfert binaire propre, dans l'autre sens. Écrit dans
+    /sdcard/Download/ (dossier partagé standard, visible depuis l'appli
+    Fichiers de la télé) puis déclenche un scan média pour qu'il apparaisse
+    immédiatement sans redémarrage de l'appli — Android TV n'a pas de
+    notion de "destinataire"/compte comme un téléphone, donc pas d'autre
+    choix que ce dossier commun."""
+    import os
+
+    path = (local_path or "").strip().strip('"').strip("'")
+    if not path or not os.path.isfile(path):
+        return {"error": f"Fichier introuvable sur le PC : {local_path!r}, Monsieur."}
+    size = os.path.getsize(path)
+    if size > _MAX_PUSH_BYTES:
+        return {"error": f"Fichier trop volumineux ({size // (1024 * 1024)} Mo, max {_MAX_PUSH_BYTES // (1024 * 1024)} Mo)."}
+    name = (filename or os.path.basename(path)).strip() or os.path.basename(path)
+    remote_path = f"/sdcard/Download/{name}"
+    try:
+        device = _connect()
+        device.push(path, remote_path)
+        device.shell(f"am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://{remote_path}")
+    except Exception as exc:
+        return {"error": f"Envoi vers la télé refusé ({exc})."}
+    return {"filename": name, "remote_path": remote_path}
